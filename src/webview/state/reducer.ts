@@ -1,0 +1,91 @@
+import {
+  addAxis,
+  addPlot,
+  addTrace,
+  removeAxis,
+  removePlot,
+  removeTrace,
+  renamePlot,
+  reassignAxisTraces,
+  setActivePlot,
+  setPlotXSignal,
+  setTraceAxis,
+  setTraceVisible,
+  updateAxis,
+  type WorkspaceState
+} from "./workspaceState";
+
+export type WorkspaceAction =
+  | { type: "plot/add"; payload?: { xSignal?: string; name?: string } }
+  | { type: "plot/remove"; payload: { plotId: string } }
+  | { type: "plot/rename"; payload: { plotId: string; name: string } }
+  | { type: "plot/setActive"; payload: { plotId: string } }
+  | { type: "plot/setXSignal"; payload: { plotId?: string; xSignal: string } }
+  | { type: "axis/add"; payload?: { plotId?: string; side?: "left" | "right" } }
+  | {
+      type: "axis/remove";
+      payload: { plotId?: string; axisId: `y${number}`; reassignToAxisId?: `y${number}` };
+    }
+  | {
+      type: "axis/reassignTraces";
+      payload: { plotId?: string; fromAxisId: `y${number}`; toAxisId: `y${number}` };
+    }
+  | {
+      type: "axis/update";
+      payload: {
+        plotId?: string;
+        axisId: `y${number}`;
+        patch: Partial<{
+          side: "left" | "right";
+          title: string;
+          range: [number, number];
+          scale: "linear" | "log";
+        }>;
+      };
+    }
+  | {
+      type: "trace/add";
+      payload: { plotId?: string; signal: string; axisId?: `y${number}` };
+    }
+  | {
+      type: "trace/setAxis";
+      payload: { plotId?: string; traceId: string; axisId: `y${number}` };
+    }
+  | {
+      type: "trace/setVisible";
+      payload: { plotId?: string; traceId: string; visible: boolean };
+    }
+  | { type: "trace/remove"; payload: { plotId?: string; traceId: string } };
+
+export function reduceWorkspaceState(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
+  switch (action.type) {
+    case "plot/add":
+      return addPlot(state, action.payload ?? {});
+    case "plot/remove":
+      return removePlot(state, action.payload);
+    case "plot/rename":
+      return renamePlot(state, action.payload);
+    case "plot/setActive":
+      return setActivePlot(state, action.payload);
+    case "plot/setXSignal":
+      return setPlotXSignal(state, action.payload);
+    case "axis/add":
+      return addAxis(state, action.payload ?? {});
+    case "axis/remove":
+      return removeAxis(state, action.payload);
+    case "axis/reassignTraces":
+      return reassignAxisTraces(state, action.payload);
+    case "axis/update":
+      return updateAxis(state, action.payload);
+    case "trace/add":
+      return addTrace(state, action.payload);
+    case "trace/setAxis":
+      return setTraceAxis(state, action.payload);
+    case "trace/setVisible":
+      return setTraceVisible(state, action.payload);
+    case "trace/remove":
+      return removeTrace(state, action.payload);
+    default:
+      return state;
+  }
+}

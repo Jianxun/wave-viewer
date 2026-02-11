@@ -88,12 +88,17 @@ body {
 }
 
 .plot-tabs {
-  display: flex;
+  display: grid;
   gap: 8px;
-  flex-wrap: wrap;
+}
+
+.tab-item {
+  display: flex;
+  gap: 6px;
 }
 
 .plot-tab {
+  flex: 1;
   border: 1px solid #4864a5;
   border-radius: 999px;
   background: var(--tab-idle);
@@ -106,9 +111,73 @@ body {
   background: var(--tab-active);
 }
 
+.chip-button {
+  border: 1px solid #4963a0;
+  border-radius: 8px;
+  background: #202c44;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.chip-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.tab-add-button {
+  justify-self: start;
+}
+
 .placeholder-section {
   padding-top: 4px;
   border-top: 1px solid #2a3550;
+}
+
+.control-section {
+  padding-top: 4px;
+  border-top: 1px solid #2a3550;
+}
+
+.list-stack {
+  display: grid;
+  gap: 6px;
+}
+
+.list-row {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(80px, 1fr) auto auto;
+  align-items: center;
+}
+
+.axis-row {
+  grid-template-columns: minmax(50px, 80px) auto minmax(80px, 1fr) auto auto auto;
+}
+
+.signal-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-select,
+.inline-input {
+  border: 1px solid #415782;
+  border-radius: 6px;
+  background: #141d30;
+  color: var(--text);
+  min-height: 30px;
+  padding: 4px 8px;
+}
+
+.inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .muted {
@@ -121,5 +190,10 @@ body {
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
+  }
+
+  .list-row,
+  .axis-row {
+    grid-template-columns: 1fr;
   }
 }
