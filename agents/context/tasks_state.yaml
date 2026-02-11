@@ -16,7 +16,7 @@ T-015:
   pr: 19
   merged: true
 T-016:
-  status: ready_for_review
+  status: request_changes
   pr: 20
   merged: false
 T-017:
