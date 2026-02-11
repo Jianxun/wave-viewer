@@ -16,8 +16,8 @@ const columns: DatasetColumnData[] = [
 
 function createPlot(overrides?: Partial<PlotState>): PlotState {
   const axes: AxisState[] = [
-    { id: "y1", side: "left", title: "Input" },
-    { id: "y2", side: "right", title: "Output" }
+    { id: "y1", title: "Input" },
+    { id: "y2", title: "Output" }
   ];
 
   return {
@@ -63,8 +63,12 @@ describe("plotly adapter", () => {
       visible: false
     });
 
-    expect(figure.layout.yaxis).toMatchObject({ side: "left" });
-    expect(figure.layout.yaxis2).toMatchObject({ side: "right", overlaying: "y" });
+    expect(figure.layout.xaxis).toMatchObject({
+      title: { text: "time" },
+      rangeslider: { visible: true }
+    });
+    expect(figure.layout.yaxis).toMatchObject({ domain: [0.52, 1], anchor: "x" });
+    expect(figure.layout.yaxis2).toMatchObject({ domain: [0, 0.48], anchor: "x" });
   });
 
   it("restores persisted x/y ranges into plotly layout", () => {
@@ -72,8 +76,8 @@ describe("plotly adapter", () => {
       plot: createPlot({
         xRange: [0.2, 1.8],
         axes: [
-          { id: "y1", side: "left", range: [1, 4] },
-          { id: "y2", side: "right", range: [0, 5] }
+          { id: "y1", range: [1, 4] },
+          { id: "y2", range: [0, 5] }
         ]
       }),
       columns
@@ -84,10 +88,45 @@ describe("plotly adapter", () => {
     expect(figure.layout.yaxis2).toMatchObject({ range: [0, 5] });
   });
 
+  it("uses axis order as top-to-bottom lane order for domains", () => {
+    const figure = buildPlotlyFigure({
+      plot: createPlot({
+        axes: [{ id: "y3" }, { id: "y1" }, { id: "y2" }]
+      }),
+      columns
+    });
+
+    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
+      0.6933333333333334
+    );
+    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(1);
+    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
+      0.3466666666666667
+    );
+    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
+      0.6533333333333333
+    );
+    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(0);
+    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
+      0.30666666666666664
+    );
+  });
+
+  it("uses full domain when a plot has one lane", () => {
+    const figure = buildPlotlyFigure({
+      plot: createPlot({
+        axes: [{ id: "y1" }]
+      }),
+      columns
+    });
+
+    expect(figure.layout.yaxis).toMatchObject({ domain: [0, 1] });
+  });
+
   it("parses relayout updates for range capture and reset", () => {
     const axisIds: AxisState[] = [
-      { id: "y1", side: "left" },
-      { id: "y2", side: "right" }
+      { id: "y1" },
+      { id: "y2" }
     ];
 
     const zoomUpdate = parseRelayoutRanges(
