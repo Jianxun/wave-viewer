@@ -20,9 +20,9 @@ T-005:
   pr: 5
   merged: true
 T-006:
-  status: review_clean
+  status: done
   pr: 6
-  merged: false
+  merged: true
 T-007:
   status: ready
   pr: null
