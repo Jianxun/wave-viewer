@@ -13,7 +13,9 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:waveViewer.openViewer"
+    "onCommand:waveViewer.openViewer",
+    "onCommand:waveViewer.exportPlotSpec",
+    "onCommand:waveViewer.importPlotSpec"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -21,6 +23,14 @@
       {
         "command": "waveViewer.openViewer",
         "title": "Wave Viewer: Open Active CSV"
+      },
+      {
+        "command": "waveViewer.exportPlotSpec",
+        "title": "Wave Viewer: Export Plot Spec (YAML)"
+      },
+      {
+        "command": "waveViewer.importPlotSpec",
+        "title": "Wave Viewer: Import Plot Spec (YAML)"
       }
     ]
   },
@@ -38,5 +48,8 @@
     "plotly.js-dist-min": "^3.3.1",
     "typescript": "^5.7.3",
     "vitest": "^3.0.6"
+  },
+  "dependencies": {
+    "yaml": "^2.8.2"
   }
 }
