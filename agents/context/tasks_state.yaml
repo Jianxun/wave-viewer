@@ -20,7 +20,7 @@ T-005:
   pr: 5
   merged: true
 T-006:
-  status: ready_for_review
+  status: review_in_progress
   pr: 6
   merged: false
 T-007:
