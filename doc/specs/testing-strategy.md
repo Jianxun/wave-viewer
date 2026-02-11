@@ -5,7 +5,7 @@ This document defines how we validate Wave Viewer during MVP while implementatio
 
 ## Principles
 - Prefer fast feedback from local, deterministic tests.
-- Prioritize correctness of data parsing, state transitions, and replay determinism.
+- Prioritize correctness of data parsing, state transitions, protocol contracts, and replay determinism.
 - Allow temporary gaps during MVP, but every skipped check must be explicitly documented in task scratchpads.
 - No CI gating is required during current MVP phase.
 
@@ -29,21 +29,36 @@ This document defines how we validate Wave Viewer during MVP while implementatio
   - axis id mapping (`y1 -> yaxis`, `yN -> yaxisN`)
   - same signal on multiple axes as separate trace instances
   - stable ordering of axes/traces for deterministic replay
+  - lane domain hit-testing inputs used by canvas overlay drop path
 
-### 3. Spec Round-Trip Tests
+### 3. Protocol Contract Tests
+- Host/webview envelope validation (`version`, `type`, `payload`).
+- Message payload validation for:
+  - `host/datasetLoaded`
+  - `host/workspaceLoaded`
+  - `webview/workspaceChanged`
+  - `webview/dropSignal`
+- Deterministic convergence checks:
+  - side-panel command add path
+  - axis-row drop path
+  - canvas-overlay drop path
+
+### 4. Spec Round-Trip Tests
 - Export/import parity for deterministic rendering fields:
   - tabs, x-signal, axes, trace assignments/order, ranges, visibility
 - Import error coverage:
   - missing referenced signals
   - invalid axis ids/spec version errors
 
-### 4. Integration and Smoke Tests
+### 5. Integration and Smoke Tests
 - Host/webview message bridge sanity.
 - Load CSV and initialize first plot.
 - User-path smoke with `examples/simulations/ota.spice.csv`:
   - create at least two plot tabs
   - use different x signals per tab
   - place same signal on multiple axes
+  - add at least one trace from side panel command
+  - add at least one trace by drag/drop lane targeting
   - export and re-import spec
 
 ## MVP Partial-State Policy

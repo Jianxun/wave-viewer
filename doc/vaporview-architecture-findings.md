@@ -3,6 +3,11 @@
 Date: 2026-02-11  
 Inspected clone: `/tmp/vaporview` (cloned from `https://github.com/Lramseyer/vaporview`)
 
+## Usage guidance for executors
+- This document is a reference implementation guide, not the normative product contract.
+- Executors are encouraged to inspect the cloned VaporView codebase for implementation inspiration, message-bridge patterns, and UX interaction design.
+- Wave Viewer contract and behavior remain governed by `agents/context/contract.md` and `doc/specs/*`.
+
 ## What VaporView does architecturally
 
 ### 1) Split UX into two surfaces

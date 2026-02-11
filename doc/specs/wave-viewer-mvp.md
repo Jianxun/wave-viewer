@@ -8,9 +8,9 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 ### 1.2 In Scope (MVP)
 - CSV input only.
 - Launch viewer from a CSV file in VS Code.
-- Two-pane layout:
-  - Left pane: signal browser and trace/axis controls.
-  - Right pane: Plotly canvas.
+- Primary workflow is side-panel-first signal discovery and plotting actions.
+- Main viewer webview is focused on plotting, axis management, and lane-level interactions.
+- Transitional fallback keeps in-webview signal controls available until side-panel workflow is implemented and stabilized.
 - Multi-plot workspace via tabs (each tab is one plot).
 - Per-plot configurable X-axis signal.
 - Signal plotted multiple times across different Y-axes (trace instances).
@@ -23,6 +23,7 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 - Remote data sources.
 - Tiled/scrolling dashboard layout.
 - Collaboration/sync features.
+- Mandatory migration to custom editor architecture in MVP.
 
 ## 2. Input Data Contract
 
@@ -44,41 +45,29 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 
 ## 3. UI and Interaction Model
 
-## 3.1 Layout
-- Left pane sections:
-  - Plot tab selector (add/rename/remove tab).
+### 3.1 Surfaces
+- Side panel (primary discovery/action surface):
+  - Signal tree for numeric signals from active dataset.
+  - Command/context actions (`Add to Plot`, `Add to New Axis`, `Reveal in Plot`).
+  - Drag source for signal-to-lane drop workflows.
+- Main webview (primary manipulation/rendering surface):
+  - Plot tab selector.
   - X-signal selector for active plot.
-  - Signal list with search/filter.
   - Trace instance list for active plot.
   - Axis manager for active plot.
-- Right pane:
-  - Plotly chart for active plot.
-  - Chart is one Plotly figure with shared X-axis and domain-stacked Y-axes.
+  - Plotly chart with domain-stacked lanes.
 
-### 3.2 Signal Selection and Add-to-Axis
-- Signal list rows show:
-  - Signal name
-  - `+` action to add trace
-- `+` action opens an axis menu:
-  - Existing axes (`Y1`, `Y2`, `Y3`, ...)
-  - `Create new axis`
-- Selecting a menu entry appends a new trace instance for that signal on chosen axis.
-- Same signal may be appended multiple times to different axes (or same axis) as independent trace instances.
+Detailed behavior is specified in `doc/specs/side-panel-workflow.md`.
 
-### 3.3 Trace Instance Controls
-- Trace list row shows:
-  - Signal name
-  - Axis selector (`Y1`, `Y2`, ...)
-  - Visibility toggle
-  - Delete action
+### 3.2 Signal Add/Reassign Semantics
+- All user entry paths (side-panel command, side-panel drag/drop, fallback in-webview control) MUST converge to the same reducer action contract.
+- Adding a signal appends a trace instance for a concrete target axis (`yN`), creating a new axis only through explicit action.
+- Same signal may be appended multiple times to different axes (or the same axis) as independent trace instances.
+
+### 3.3 Trace and Axis Controls
+- Trace row shows signal name, axis selector, visibility toggle, and delete action.
 - Axis selector reassigns trace to target axis immediately.
-- Trace order is user-visible and should be deterministic for export.
-
-### 3.4 Axis Manager
-- Per active plot:
-  - Create axis (`YN`).
-  - Remove axis (blocked if in use unless user confirms reassignment/delete).
-  - Set title, optional range, and scale mode.
+- Axis manager supports create/remove/reorder and axis metadata updates.
 - Axis order controls top-to-bottom lane order.
 - Axis IDs are stable (`y1`, `y2`, ...), never reused within one plot after deletion in the same session.
 
@@ -131,7 +120,13 @@ type WorkspaceState = {
 };
 ```
 
-## 5. Plotly Mapping Rules
+## 5. Host-Webview Protocol Contract
+
+- Host/webview messaging MUST use explicit message types and schema-validated payloads.
+- Protocol changes MUST follow compatibility/versioning rules in `doc/specs/host-webview-protocol.md`.
+- Drag/drop signal operations MUST emit normalized `webview/dropSignal` events to the host.
+
+## 6. Plotly Mapping Rules
 
 - Each plot tab renders as a single figure with:
   - one shared `xaxis`
@@ -147,12 +142,12 @@ type WorkspaceState = {
 - This design intentionally avoids multi-canvas subplot synchronization mechanisms.
 - Detailed execution target: `doc/specs/domain-stacked-shared-x-implementation.md`.
 
-## 6. YAML Spec (Deterministic Replay)
+## 7. YAML Spec (Deterministic Replay)
 
-### 6.1 Purpose
+### 7.1 Purpose
 Capture enough state so importing the YAML reproduces the same plot workspace from the same dataset.
 
-### 6.2 Spec Requirements
+### 7.2 Spec Requirements
 - Include:
   - version
   - dataset path reference
@@ -160,7 +155,7 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
 - Exclude:
   - transient UI-only state not affecting rendered output.
 
-### 6.3 Determinism Guarantees
+### 7.3 Determinism Guarantees
 - Given identical CSV and YAML spec, reconstructed workspace must match:
   - plot/tab structure
   - axis definitions and assignment
@@ -168,7 +163,7 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
   - x/y ranges when provided
 - Missing referenced signals must produce explicit errors listing missing names and affected plots.
 
-## 7. Initial Quality Gates
+## 8. Initial Quality Gates
 
 - Parser unit tests for:
   - numeric detection
@@ -177,26 +172,31 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
 - State-to-Plotly adapter tests for:
   - N-axis mapping
   - same signal on multiple axes
+- Host/webview protocol tests for:
+  - message schema validation
+  - `webview/dropSignal` handling for axis-target and new-axis-target paths
+  - deterministic convergence from all signal-add entry points
 - Spec round-trip tests:
   - state -> YAML -> state equality for deterministic fields
 - Smoke scenario:
   - open `examples/simulations/ota.spice.csv`
-  - create at least 2 tabs with different X signals
-  - assign one signal to multiple axes
+  - add traces from side panel
+  - perform lane-targeted drag/drop
   - export/import YAML and verify visual/state parity
 - Execution policy during MVP:
   - CI gates are not required yet.
   - Follow `doc/specs/testing-strategy.md` and record skipped checks in task scratchpads.
 
-## 8. Known Limits (MVP)
+## 9. Known Limits (MVP)
 
 - Lane height/gap behavior is deterministic and fixed (`g=0.04`), not adaptive to axis count.
 - High lane counts can compress per-lane vertical space and reduce readability.
 - Very large CSV performance optimization (for example, downsampling/decimation) is out of scope for MVP.
 - Rendering assumes one shared Plotly figure per plot tab and does not provide alternate layout strategies.
 
-## 9. Open Follow-ups (Post-MVP Candidates)
+## 10. Open Follow-ups (Post-MVP Candidates)
 
-- Tiled/scrollable multi-canvas layout.
+- Evaluate custom editor migration (`viewType`) after side-panel workflow stabilizes.
+- Deprecate in-webview signal-add controls after side-panel workflow stabilization criteria are met.
 - Downsampling strategies for very large CSV files.
-- More axis types and richer styling presets.
+- Grouped/tree taxonomies for large signal sets.
