@@ -4,8 +4,8 @@ T-008:
   pr: 9
   merged: true
 T-009:
-  status: ready
-  pr: null
+  status: ready_for_review
+  pr: 10
   merged: false
 T-010:
   status: ready
