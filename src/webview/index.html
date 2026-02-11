@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src __CSP_SOURCE__ 'unsafe-inline'; script-src __CSP_SOURCE__;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wave Viewer</title>
+    <link rel="stylesheet" href="__STYLE_URI__" />
+  </head>
+  <body>
+    <div id="app" class="layout">
+      <aside id="control-pane" class="pane control-pane" aria-label="Control Pane">
+        <div class="tabs-shell">
+          <div class="section-title">Plots</div>
+          <div id="plot-tabs" class="plot-tabs" role="tablist" aria-label="Plot tabs"></div>
+        </div>
+
+        <div class="placeholder-section">
+          <div class="section-title">Controls</div>
+          <p class="muted">Signal, trace, and axis controls will be added in follow-up tasks.</p>
+        </div>
+
+        <div class="placeholder-section">
+          <div class="section-title">Bridge Status</div>
+          <p id="bridge-status" class="muted">Waiting for host init...</p>
+          <p id="dataset-status" class="muted">No dataset loaded.</p>
+        </div>
+      </aside>
+
+      <main id="plot-pane" class="pane plot-pane" aria-label="Plot Pane">
+        <div class="plot-header">
+          <h1 id="active-plot-title">Plot 1</h1>
+        </div>
+        <section id="plot-canvas" class="plot-canvas" aria-label="Plot Canvas Container">
+          <p class="canvas-placeholder">Plotly canvas mounts here.</p>
+        </section>
+      </main>
+    </div>
+
+    <script src="__SCRIPT_URI__"></script>
+  </body>
+</html>
