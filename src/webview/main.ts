@@ -171,9 +171,9 @@ function renderCanvasDropOverlay(axes: ReadonlyArray<{ id: AxisId }>): void {
 
 function setCanvasDropLaneActive(axisId: AxisId | undefined): void {
   const lanes = plotDropOverlayEl.querySelectorAll<HTMLElement>(".plot-drop-lane");
-  for (const lane of lanes) {
+  lanes.forEach((lane) => {
     lane.classList.toggle("drop-active", lane.dataset.axisId === axisId);
-  }
+  });
 }
 
 function resolveAxisIdFromCanvasEvent(event: DragEvent): AxisId | undefined {
