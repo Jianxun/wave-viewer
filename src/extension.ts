@@ -50,11 +50,21 @@ export type HostToWebviewMessage =
         defaultXSignal: string;
       }
     >
-  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>;
+  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
+  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>;
 
 export type WebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
-  | ProtocolEnvelope<"webview/workspaceChanged", { workspace: WorkspaceState }>;
+  | ProtocolEnvelope<"webview/workspaceChanged", { workspace: WorkspaceState; reason: string }>
+  | ProtocolEnvelope<
+      "webview/dropSignal",
+      {
+        signal: string;
+        plotId: string;
+        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
+        source: "axis-row" | "canvas-overlay";
+      }
+    >;
 
 export type ActiveDocumentLike = {
   fileName: string;
@@ -136,6 +146,42 @@ export function applySidePanelSignalAction(
   return revealed;
 }
 
+export function applyDropSignalAction(
+  workspace: WorkspaceState,
+  payload: Extract<WebviewToHostMessage, { type: "webview/dropSignal" }>["payload"]
+): WorkspaceState {
+  let nextWorkspace = reduceWorkspaceState(workspace, {
+    type: "plot/setActive",
+    payload: { plotId: payload.plotId }
+  });
+
+  if (payload.target.kind === "new-axis") {
+    nextWorkspace = reduceWorkspaceState(nextWorkspace, {
+      type: "axis/add",
+      payload: { plotId: payload.plotId }
+    });
+    const targetPlot = nextWorkspace.plots.find((plot) => plot.id === payload.plotId);
+    const newAxisId = targetPlot?.axes[targetPlot.axes.length - 1]?.id;
+    if (!newAxisId) {
+      return nextWorkspace;
+    }
+
+    return reduceWorkspaceState(nextWorkspace, {
+      type: "trace/add",
+      payload: { plotId: payload.plotId, signal: payload.signal, axisId: newAxisId }
+    });
+  }
+
+  if (!isAxisId(payload.target.axisId)) {
+    throw new Error(`Invalid dropSignal axis id: ${payload.target.axisId}`);
+  }
+
+  return reduceWorkspaceState(nextWorkspace, {
+    type: "trace/add",
+    payload: { plotId: payload.plotId, signal: payload.signal, axisId: payload.target.axisId }
+  });
+}
+
 export type ExportSpecCommandDeps = {
   getActiveDocument(): ActiveDocumentLike | undefined;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
@@ -196,6 +242,32 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         deps.setCachedWorkspace?.(
           activeDocument.uri.fsPath,
           message.payload.workspace as WorkspaceState
+        );
+        return;
+      }
+
+      if (message.type === "webview/dropSignal") {
+        const cachedWorkspace =
+          deps.getCachedWorkspace?.(activeDocument.uri.fsPath) ??
+          createWorkspaceState(normalizedDataset.defaultXSignal);
+
+        let nextWorkspace: WorkspaceState;
+        try {
+          nextWorkspace = applyDropSignalAction(cachedWorkspace, message.payload);
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview dropSignal message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+          return;
+        }
+
+        deps.setCachedWorkspace?.(activeDocument.uri.fsPath, nextWorkspace);
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/workspacePatched", {
+            workspace: nextWorkspace,
+            reason: `dropSignal:${message.payload.source}`
+          })
         );
         return;
       }
@@ -320,6 +392,10 @@ function getErrorMessage(error: unknown): string {
   return "Failed to load CSV dataset.";
 }
 
+function isAxisId(value: string): value is `y${number}` {
+  return /^y\d+$/.test(value);
+}
+
 function readWebviewTemplate(extensionUri: VSCode.Uri): string {
   const vscode = loadVscode();
   const templatePath = vscode.Uri.joinPath(extensionUri, "src", "webview", "index.html").fsPath;
@@ -407,7 +483,10 @@ export function activate(context: VSCode.ExtensionContext): void {
       }
 
       void panel.webview.postMessage(
-        createProtocolEnvelope("host/workspaceLoaded", { workspace: nextWorkspace })
+        createProtocolEnvelope("host/workspacePatched", {
+          workspace: nextWorkspace,
+          reason: `sidePanel:${actionType}`
+        })
       );
     };
   }

@@ -30,7 +30,8 @@ type HostMessage =
         defaultXSignal: string;
       }
     >
-  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>;
+  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
+  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>;
 
 const vscode = acquireVsCodeApi();
 
@@ -187,7 +188,12 @@ async function renderWorkspace(): Promise<void> {
   });
 
   await plotRenderer.render(activePlot, columns);
-  vscode.postMessage(createProtocolEnvelope("webview/workspaceChanged", { workspace }));
+  vscode.postMessage(
+    createProtocolEnvelope("webview/workspaceChanged", {
+      workspace,
+      reason: "reducer-dispatch"
+    })
+  );
 }
 
 function renderXSignalSelector(activeXSignal: string): void {
@@ -251,6 +257,13 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
 
   if (message.type === "host/workspaceLoaded") {
     workspace = message.payload.workspace;
+    void renderWorkspace();
+    return;
+  }
+
+  if (message.type === "host/workspacePatched") {
+    workspace = message.payload.workspace;
+    bridgeStatusEl.textContent = `Patched: ${message.payload.reason}`;
     void renderWorkspace();
   }
 });
