@@ -406,6 +406,29 @@ describe("T-018 normalized protocol handling", () => {
     expect(fromDropSignal).toEqual(fromSidePanel);
   });
 
+  it("keeps equivalent workspace outcomes across side-panel, axis-row drop, and canvas-overlay drop", () => {
+    const fromSidePanel = applySidePanelSignalAction(createWorkspaceFixture(), {
+      type: "add-to-plot",
+      signal: "vin"
+    });
+    const fromAxisRowDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "axis", axisId: "y1" },
+      source: "axis-row"
+    });
+    const fromCanvasOverlayDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "axis", axisId: "y1" },
+      source: "canvas-overlay"
+    });
+
+    expect(fromAxisRowDrop).toEqual(fromSidePanel);
+    expect(fromCanvasOverlayDrop).toEqual(fromSidePanel);
+    expect(fromCanvasOverlayDrop).toEqual(fromAxisRowDrop);
+  });
+
   it("handles dropSignal new-axis target by creating one axis and binding the dropped trace", () => {
     const next = applyDropSignalAction(createWorkspaceFixture(), {
       signal: "vin",
@@ -423,6 +446,29 @@ describe("T-018 normalized protocol handling", () => {
         visible: true
       }
     ]);
+  });
+
+  it("keeps equivalent new-axis workspace outcomes across side-panel and both drop sources", () => {
+    const fromSidePanel = applySidePanelSignalAction(createWorkspaceFixture(), {
+      type: "add-to-new-axis",
+      signal: "vin"
+    });
+    const fromAxisRowDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "new-axis" },
+      source: "axis-row"
+    });
+    const fromCanvasOverlayDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "new-axis" },
+      source: "canvas-overlay"
+    });
+
+    expect(fromAxisRowDrop).toEqual(fromSidePanel);
+    expect(fromCanvasOverlayDrop).toEqual(fromSidePanel);
+    expect(fromCanvasOverlayDrop).toEqual(fromAxisRowDrop);
   });
 
   it("handles canvas-overlay dropSignal source and records source-specific patch reason", async () => {
