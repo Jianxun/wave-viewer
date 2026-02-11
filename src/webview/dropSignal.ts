@@ -1,9 +1,18 @@
 export const SIGNAL_TREE_DRAG_MIME = "application/vnd.code.tree.waveViewer.signalBrowser";
 
+type DropDataTransferTypesLike = {
+  readonly types: readonly string[];
+};
+
 type DropDataTransferLike = {
   readonly types: readonly string[];
   getData(type: string): string;
 };
+
+export function hasSupportedDropSignalType(dataTransfer: DropDataTransferTypesLike): boolean {
+  const availableTypes = new Set(dataTransfer.types);
+  return availableTypes.has(SIGNAL_TREE_DRAG_MIME) || availableTypes.has("text/plain");
+}
 
 export function extractSignalFromDropData(dataTransfer: DropDataTransferLike): string | undefined {
   const preferredTypes = [SIGNAL_TREE_DRAG_MIME, "text/plain"];

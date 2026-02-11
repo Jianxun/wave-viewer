@@ -17,7 +17,7 @@ import {
   getActivePlot,
   type WorkspaceState
 } from "./state/workspaceState";
-import { extractSignalFromDropData } from "./dropSignal";
+import { extractSignalFromDropData, hasSupportedDropSignalType } from "./dropSignal";
 
 type HostMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
@@ -171,6 +171,12 @@ async function renderWorkspace(): Promise<void> {
   renderAxisManager({
     container: axisManagerEl,
     axes: activePlot.axes,
+    canDropSignal: (event) => {
+      if (!event.dataTransfer) {
+        return false;
+      }
+      return hasSupportedDropSignalType(event.dataTransfer);
+    },
     parseDroppedSignal: (event) => {
       if (!event.dataTransfer) {
         return undefined;

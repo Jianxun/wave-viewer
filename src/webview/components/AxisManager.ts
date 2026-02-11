@@ -5,6 +5,7 @@ export type AxisManagerProps = {
   container: HTMLElement;
   axes: AxisState[];
   onAddAxis(): void;
+  canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
   onDropSignal(payload: { signal: string; target: { kind: "axis"; axisId: AxisId } | { kind: "new-axis" } }): void;
   onReorderAxis(payload: { axisId: AxisId; toIndex: number }): void;
@@ -98,6 +99,7 @@ export function renderAxisManager(props: AxisManagerProps): void {
     );
     addDropHandlers({
       target: row,
+      canDropSignal: props.canDropSignal,
       parseDroppedSignal: props.parseDroppedSignal,
       onDropSignal: (signal) => props.onDropSignal({ signal, target: { kind: "axis", axisId: axis.id } })
     });
@@ -109,6 +111,7 @@ export function renderAxisManager(props: AxisManagerProps): void {
   dropToNewAxisRow.textContent = "Drop signal here to create a new axis";
   addDropHandlers({
     target: dropToNewAxisRow,
+    canDropSignal: props.canDropSignal,
     parseDroppedSignal: props.parseDroppedSignal,
     onDropSignal: (signal) => props.onDropSignal({ signal, target: { kind: "new-axis" } })
   });
@@ -124,6 +127,7 @@ export function renderAxisManager(props: AxisManagerProps): void {
 
 function addDropHandlers(options: {
   target: HTMLElement;
+  canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
   onDropSignal(signal: string): void;
 }): void {
@@ -132,7 +136,7 @@ function addDropHandlers(options: {
   };
 
   options.target.addEventListener("dragenter", (event) => {
-    if (!options.parseDroppedSignal(event)) {
+    if (!options.canDropSignal(event)) {
       return;
     }
     event.preventDefault();
@@ -140,7 +144,7 @@ function addDropHandlers(options: {
   });
 
   options.target.addEventListener("dragover", (event) => {
-    if (!options.parseDroppedSignal(event)) {
+    if (!options.canDropSignal(event)) {
       return;
     }
     event.preventDefault();
