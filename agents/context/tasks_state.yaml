@@ -16,7 +16,7 @@ T-004:
   pr: 4
   merged: true
 T-005:
-  status: review_in_progress
+  status: review_clean
   pr: 5
   merged: false
 T-006:
