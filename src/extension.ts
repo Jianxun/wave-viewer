@@ -18,12 +18,14 @@ import {
   createSignalTreeDataProvider,
   type SignalTreeDataProvider,
   LOAD_CSV_FILES_COMMAND,
+  REMOVE_LOADED_FILE_COMMAND,
   RELOAD_ALL_FILES_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_VIEW_ID,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  resolveDatasetPathFromCommandArgument,
   resolveSignalFromCommandArgument
 } from "./extension/signalTree";
 import { reduceWorkspaceState } from "./webview/state/reducer";
@@ -34,6 +36,7 @@ export const EXPORT_SPEC_COMMAND = "waveViewer.exportPlotSpec";
 export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
 export {
   LOAD_CSV_FILES_COMMAND,
+  REMOVE_LOADED_FILE_COMMAND,
   RELOAD_ALL_FILES_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
@@ -117,6 +120,8 @@ export type LoadCsvFilesCommandDeps = {
   showError(message: string): void;
 };
 
+export type LoadedDatasetRecord = { dataset: Dataset; defaultXSignal: string };
+
 export type ReloadAllLoadedFilesCommandDeps = {
   getLoadedDatasetPaths(): readonly string[];
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
@@ -125,6 +130,23 @@ export type ReloadAllLoadedFilesCommandDeps = {
     loaded: { dataset: Dataset; defaultXSignal: string }
   ): void;
   showError(message: string): void;
+};
+
+export type RemoveLoadedFileCommandDeps = {
+  removeLoadedDataset(documentPath: string): boolean;
+  hasOpenPanel(documentPath: string): boolean;
+  markDatasetAsRemoved(documentPath: string): void;
+  showError(message: string): void;
+  showWarning(message: string): void;
+};
+
+export type ResolveSidePanelSelectionDeps = {
+  selection: ReturnType<typeof resolveSignalFromCommandArgument>;
+  getLoadedDataset(documentPath: string): LoadedDatasetRecord | undefined;
+  getSingleLoadedDatasetPath(): string | undefined;
+  wasDatasetRemoved(documentPath: string): boolean;
+  showError(message: string): void;
+  showWarning(message: string): void;
 };
 
 export function applySidePanelSignalAction(
@@ -366,6 +388,74 @@ export function createReloadAllLoadedFilesCommand(
   };
 }
 
+export function createRemoveLoadedFileCommand(
+  deps: RemoveLoadedFileCommandDeps
+): (item?: unknown) => void {
+  return (item?: unknown) => {
+    const datasetPath = resolveDatasetPathFromCommandArgument(item);
+    if (!datasetPath) {
+      deps.showError("Select a loaded CSV file in the Wave Viewer side panel.");
+      return;
+    }
+
+    const removed = deps.removeLoadedDataset(datasetPath);
+    if (!removed) {
+      deps.showError(`Loaded dataset '${datasetPath}' is no longer available.`);
+      return;
+    }
+
+    deps.markDatasetAsRemoved(datasetPath);
+    if (deps.hasOpenPanel(datasetPath)) {
+      deps.showWarning(
+        `Removed '${path.basename(
+          datasetPath
+        )}' from loaded files. Its open viewer remains available, but side-panel signal adds are blocked until this file is loaded again.`
+      );
+    }
+  };
+}
+
+export function resolveSidePanelSelection(
+  deps: ResolveSidePanelSelectionDeps
+): { documentPath: string; loadedDataset: LoadedDatasetRecord; signal: string } | undefined {
+  const resolved = deps.selection;
+  if (!resolved) {
+    deps.showError("Select a numeric signal in the Wave Viewer side panel.");
+    return undefined;
+  }
+
+  const documentPath = resolved.datasetPath ?? deps.getSingleLoadedDatasetPath();
+  if (!documentPath) {
+    deps.showError("Select a signal under a loaded CSV file in the Wave Viewer side panel.");
+    return undefined;
+  }
+
+  const loadedDataset = deps.getLoadedDataset(documentPath);
+  if (!loadedDataset) {
+    if (deps.wasDatasetRemoved(documentPath)) {
+      deps.showWarning(
+        `CSV file '${path.basename(
+          documentPath
+        )}' was removed from loaded files. Load it again before using side-panel signal actions.`
+      );
+      return undefined;
+    }
+
+    deps.showError(`Loaded dataset '${documentPath}' is no longer available.`);
+    return undefined;
+  }
+
+  const signals = loadedDataset.dataset.columns.map((column) => column.name);
+  if (!signals.includes(resolved.signal)) {
+    deps.showError(
+      `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
+    );
+    return undefined;
+  }
+
+  return { documentPath, loadedDataset, signal: resolved.signal };
+}
+
 export function createExportSpecCommand(deps: ExportSpecCommandDeps): () => Promise<void> {
   return async () => {
     const activeDocument = deps.getActiveDocument();
@@ -490,7 +580,8 @@ export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
   const panelByDatasetPath = new Map<string, WebviewPanelLike>();
-  const loadedDatasetByPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
+  const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
+  const removedDatasetPathSet = new Set<string>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
   const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
 
@@ -505,60 +596,56 @@ export function activate(context: VSCode.ExtensionContext): void {
 
   function registerLoadedDataset(
     documentPath: string,
-    loaded: { dataset: Dataset; defaultXSignal: string }
+    loaded: LoadedDatasetRecord
   ): void {
     loadedDatasetByPath.set(documentPath, loaded);
+    removedDatasetPathSet.delete(documentPath);
     refreshSignalTree();
   }
 
-  function resolveLoadedDatasetPath(argumentPath: string | undefined): string | undefined {
-    if (argumentPath) {
-      return argumentPath;
-    }
-
+  function getSingleLoadedDatasetPath(): string | undefined {
     if (loadedDatasetByPath.size === 1) {
       return loadedDatasetByPath.keys().next().value as string | undefined;
     }
-
     return undefined;
+  }
+
+  function removeLoadedDataset(documentPath: string): boolean {
+    const existed = loadedDatasetByPath.delete(documentPath);
+    if (existed) {
+      refreshSignalTree();
+    }
+    return existed;
   }
 
   function runSidePanelSignalAction(actionType: SidePanelSignalAction["type"]): (item?: unknown) => void {
     return (item?: unknown) => {
-      const resolved = resolveSignalFromCommandArgument(item);
-      if (!resolved) {
-        void vscode.window.showErrorMessage("Select a numeric signal in the Wave Viewer side panel.");
-        return;
-      }
-
-      const documentPath = resolveLoadedDatasetPath(resolved.datasetPath);
-      if (!documentPath) {
-        void vscode.window.showErrorMessage(
-          "Select a signal under a loaded CSV file in the Wave Viewer side panel."
-        );
-        return;
-      }
-
-      const loadedDataset = loadedDatasetByPath.get(documentPath);
-      if (!loadedDataset) {
-        void vscode.window.showErrorMessage(`Loaded dataset '${documentPath}' is no longer available.`);
-        return;
-      }
-
-      const signals = loadedDataset.dataset.columns.map((column) => column.name);
-      if (!signals.includes(resolved.signal)) {
-        void vscode.window.showErrorMessage(
-          `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
-        );
+      const selection = resolveSidePanelSelection({
+        selection: resolveSignalFromCommandArgument(item),
+        getLoadedDataset: (documentPath) => loadedDatasetByPath.get(documentPath),
+        getSingleLoadedDatasetPath,
+        wasDatasetRemoved: (documentPath) => removedDatasetPathSet.has(documentPath),
+        showError: (message) => {
+          void vscode.window.showErrorMessage(message);
+        },
+        showWarning: (message) => {
+          void vscode.window.showWarningMessage(message);
+        }
+      });
+      if (!selection) {
         return;
       }
 
       const workspace =
-        workspaceByDatasetPath.get(documentPath) ?? createWorkspaceState(loadedDataset.defaultXSignal);
-      const nextWorkspace = applySidePanelSignalAction(workspace, { type: actionType, signal: resolved.signal });
-      workspaceByDatasetPath.set(documentPath, nextWorkspace);
+        workspaceByDatasetPath.get(selection.documentPath) ??
+        createWorkspaceState(selection.loadedDataset.defaultXSignal);
+      const nextWorkspace = applySidePanelSignalAction(workspace, {
+        type: actionType,
+        signal: selection.signal
+      });
+      workspaceByDatasetPath.set(selection.documentPath, nextWorkspace);
 
-      const panel = panelByDatasetPath.get(documentPath);
+      const panel = panelByDatasetPath.get(selection.documentPath);
       if (!panel) {
         return;
       }
@@ -574,51 +661,41 @@ export function activate(context: VSCode.ExtensionContext): void {
 
   const runSidePanelQuickAdd = (item?: unknown): void => {
     const resolved = resolveSignalFromCommandArgument(item);
-    if (!resolved) {
-      void vscode.window.showErrorMessage("Select a numeric signal in the Wave Viewer side panel.");
+    const selection = resolveSidePanelSelection({
+      selection: resolved,
+      getLoadedDataset: (documentPath) => loadedDatasetByPath.get(documentPath),
+      getSingleLoadedDatasetPath,
+      wasDatasetRemoved: (documentPath) => removedDatasetPathSet.has(documentPath),
+      showError: (message) => {
+        void vscode.window.showErrorMessage(message);
+      },
+      showWarning: (message) => {
+        void vscode.window.showWarningMessage(message);
+      }
+    });
+    if (!selection) {
       return;
     }
 
-    if (!resolveQuickAddDoubleClick(resolved)) {
+    if (!resolveQuickAddDoubleClick({ signal: selection.signal, datasetPath: selection.documentPath })) {
       return;
     }
 
-    const documentPath = resolveLoadedDatasetPath(resolved.datasetPath);
-    if (!documentPath) {
-      void vscode.window.showErrorMessage(
-        "Select a signal under a loaded CSV file in the Wave Viewer side panel."
-      );
-      return;
-    }
-
-    const loadedDataset = loadedDatasetByPath.get(documentPath);
-    if (!loadedDataset) {
-      void vscode.window.showErrorMessage(`Loaded dataset '${documentPath}' is no longer available.`);
-      return;
-    }
-
-    const signals = loadedDataset.dataset.columns.map((column) => column.name);
-    if (!signals.includes(resolved.signal)) {
-      void vscode.window.showErrorMessage(
-        `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
-      );
-      return;
-    }
-
-    const panel = panelByDatasetPath.get(documentPath);
+    const panel = panelByDatasetPath.get(selection.documentPath);
     if (!panel) {
       const workspace =
-        workspaceByDatasetPath.get(documentPath) ?? createWorkspaceState(loadedDataset.defaultXSignal);
+        workspaceByDatasetPath.get(selection.documentPath) ??
+        createWorkspaceState(selection.loadedDataset.defaultXSignal);
       const nextWorkspace = applySidePanelSignalAction(workspace, {
         type: "add-to-plot",
-        signal: resolved.signal
+        signal: selection.signal
       });
-      workspaceByDatasetPath.set(documentPath, nextWorkspace);
+      workspaceByDatasetPath.set(selection.documentPath, nextWorkspace);
       return;
     }
 
     void panel.webview.postMessage(
-      createProtocolEnvelope("host/sidePanelQuickAdd", { signal: resolved.signal })
+      createProtocolEnvelope("host/sidePanelQuickAdd", { signal: selection.signal })
     );
   };
 
@@ -752,6 +829,20 @@ export function activate(context: VSCode.ExtensionContext): void {
     }
   });
 
+  const removeLoadedFileCommand = createRemoveLoadedFileCommand({
+    removeLoadedDataset,
+    hasOpenPanel: (documentPath) => panelByDatasetPath.has(documentPath),
+    markDatasetAsRemoved: (documentPath) => {
+      removedDatasetPathSet.add(documentPath);
+    },
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    showWarning: (message) => {
+      void vscode.window.showWarningMessage(message);
+    }
+  });
+
   const signalTreeView = vscode.window.createTreeView(SIGNAL_BROWSER_VIEW_ID, {
     treeDataProvider: signalTreeProvider,
     dragAndDropController: createSignalTreeDragAndDropController(vscode)
@@ -784,6 +875,9 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(vscode.commands.registerCommand(LOAD_CSV_FILES_COMMAND, loadCsvFilesCommand));
   context.subscriptions.push(
     vscode.commands.registerCommand(RELOAD_ALL_FILES_COMMAND, reloadAllLoadedFilesCommand)
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(REMOVE_LOADED_FILE_COMMAND, removeLoadedFileCommand)
   );
 }
 

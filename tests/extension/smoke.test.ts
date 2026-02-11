@@ -6,15 +6,18 @@ import {
   applySidePanelSignalAction,
   createLoadCsvFilesCommand,
   createOpenViewerCommand,
+  createRemoveLoadedFileCommand,
   createReloadAllLoadedFilesCommand,
   isCsvFile,
   LOAD_CSV_FILES_COMMAND,
   OPEN_VIEWER_COMMAND,
+  REMOVE_LOADED_FILE_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
   RELOAD_ALL_FILES_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
+  resolveSidePanelSelection,
   type CommandDeps,
   type HostToWebviewMessage,
   type WebviewLike,
@@ -260,6 +263,7 @@ describe("T-013 side-panel signal actions", () => {
     expect(REVEAL_SIGNAL_IN_PLOT_COMMAND).toBe("waveViewer.signalBrowser.revealInPlot");
     expect(LOAD_CSV_FILES_COMMAND).toBe("waveViewer.signalBrowser.loadCsvFiles");
     expect(RELOAD_ALL_FILES_COMMAND).toBe("waveViewer.signalBrowser.reloadAllFiles");
+    expect(REMOVE_LOADED_FILE_COMMAND).toBe("waveViewer.signalBrowser.removeLoadedFile");
   });
 
   it("applies add-to-plot through reducer-compatible trace append", () => {
@@ -467,6 +471,97 @@ describe("T-021 explorer load/reload actions", () => {
     });
     expect(showError).toHaveBeenCalledWith(
       "Failed to reload '/workspace/examples/bad.csv': File missing."
+    );
+  });
+});
+
+describe("T-022 explorer remove loaded file action", () => {
+  it("removes exactly one loaded dataset and keeps unrelated datasets", () => {
+    const loadedPaths = new Set([
+      "/workspace/examples/a.csv",
+      "/workspace/examples/b.csv",
+      "/workspace/examples/c.csv"
+    ]);
+    const showError = vi.fn();
+    const showWarning = vi.fn();
+    const markDatasetAsRemoved = vi.fn();
+    const command = createRemoveLoadedFileCommand({
+      removeLoadedDataset: (documentPath) => loadedPaths.delete(documentPath),
+      hasOpenPanel: () => false,
+      markDatasetAsRemoved,
+      showError,
+      showWarning
+    });
+
+    command({ datasetPath: "/workspace/examples/b.csv" });
+
+    expect(Array.from(loadedPaths)).toEqual([
+      "/workspace/examples/a.csv",
+      "/workspace/examples/c.csv"
+    ]);
+    expect(markDatasetAsRemoved).toHaveBeenCalledWith("/workspace/examples/b.csv");
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).not.toHaveBeenCalled();
+  });
+
+  it("shows warning when removing a file that still has an open viewer panel", () => {
+    const showError = vi.fn();
+    const showWarning = vi.fn();
+    const command = createRemoveLoadedFileCommand({
+      removeLoadedDataset: () => true,
+      hasOpenPanel: () => true,
+      markDatasetAsRemoved: vi.fn(),
+      showError,
+      showWarning
+    });
+
+    command({ datasetPath: "/workspace/examples/b.csv" });
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Removed 'b.csv' from loaded files. Its open viewer remains available, but side-panel signal adds are blocked until this file is loaded again."
+    );
+  });
+
+  it("shows an error when removing a dataset that is no longer loaded", () => {
+    const showError = vi.fn();
+    const showWarning = vi.fn();
+    const markDatasetAsRemoved = vi.fn();
+    const command = createRemoveLoadedFileCommand({
+      removeLoadedDataset: () => false,
+      hasOpenPanel: () => false,
+      markDatasetAsRemoved,
+      showError,
+      showWarning
+    });
+
+    command({ datasetPath: "/workspace/examples/missing.csv" });
+
+    expect(markDatasetAsRemoved).not.toHaveBeenCalled();
+    expect(showWarning).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(
+      "Loaded dataset '/workspace/examples/missing.csv' is no longer available."
+    );
+  });
+});
+
+describe("T-022 follow-up signal actions after remove", () => {
+  it("blocks side-panel signal actions for removed datasets with warning", () => {
+    const showError = vi.fn();
+    const showWarning = vi.fn();
+    const selection = resolveSidePanelSelection({
+      selection: { signal: "vin", datasetPath: "/workspace/examples/removed.csv" },
+      getLoadedDataset: () => undefined,
+      getSingleLoadedDatasetPath: () => undefined,
+      wasDatasetRemoved: () => true,
+      showError,
+      showWarning
+    });
+
+    expect(selection).toBeUndefined();
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).toHaveBeenCalledWith(
+      "CSV file 'removed.csv' was removed from loaded files. Load it again before using side-panel signal actions."
     );
   });
 });
