@@ -2,7 +2,7 @@ export type AxisId = `y${number}`;
 
 export type AxisState = {
   id: AxisId;
-  side: "left" | "right";
+  side?: "left" | "right";
   title?: string;
   range?: [number, number];
   scale?: "linear" | "log";
@@ -132,7 +132,7 @@ export function setPlotXRange(
 
 export function addAxis(
   state: WorkspaceState,
-  payload: { plotId?: string; side?: AxisState["side"] }
+  payload: { plotId?: string } = {}
 ): WorkspaceState {
   const plotId = payload.plotId ?? state.activePlotId;
   return withUpdatedPlot(state, plotId, (plot) => {
@@ -140,7 +140,7 @@ export function addAxis(
 
     return {
       ...plot,
-      axes: [...plot.axes, { id: nextAxisId, side: payload.side ?? "right" }],
+      axes: [...plot.axes, { id: nextAxisId }],
       nextAxisNumber: plot.nextAxisNumber + 1
     };
   });
@@ -220,6 +220,43 @@ export function removeAxis(
       ...plot,
       axes: plot.axes.filter((axis) => axis.id !== payload.axisId),
       traces: nextTraces
+    };
+  });
+}
+
+export function reorderAxis(
+  state: WorkspaceState,
+  payload: { plotId?: string; axisId: AxisId; toIndex: number }
+): WorkspaceState {
+  const plotId = payload.plotId ?? state.activePlotId;
+
+  return withUpdatedPlot(state, plotId, (plot) => {
+    assertAxisExists(plot, payload.axisId);
+
+    if (
+      !Number.isInteger(payload.toIndex) ||
+      payload.toIndex < 0 ||
+      payload.toIndex >= plot.axes.length
+    ) {
+      throw new Error("Axis reorder index out of bounds.");
+    }
+
+    const fromIndex = plot.axes.findIndex((axis) => axis.id === payload.axisId);
+    if (fromIndex < 0) {
+      throw new Error(`Unknown axis id: ${payload.axisId}`);
+    }
+
+    if (fromIndex === payload.toIndex) {
+      return plot;
+    }
+
+    const nextAxes = plot.axes.slice();
+    const [movedAxis] = nextAxes.splice(fromIndex, 1);
+    nextAxes.splice(payload.toIndex, 0, movedAxis as AxisState);
+
+    return {
+      ...plot,
+      axes: nextAxes
     };
   });
 }
@@ -318,7 +355,7 @@ function createPlotState(payload: { id: string; name: string; xSignal: string })
     id: payload.id,
     name: payload.name,
     xSignal: payload.xSignal,
-    axes: [{ id: "y1", side: "left" }],
+    axes: [{ id: "y1" }],
     traces: [],
     nextAxisNumber: 2
   };

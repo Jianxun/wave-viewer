@@ -24,10 +24,12 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
           xSignal: plot.xSignal,
           axes: plot.axes.map((axis) => {
             const specAxis: PlotSpecAxisV1 = {
-              id: axis.id,
-              side: axis.side
+              id: axis.id
             };
 
+            if (axis.side !== undefined) {
+              specAxis.side = axis.side;
+            }
             if (axis.title !== undefined) {
               specAxis.title = axis.title;
             }

@@ -2,6 +2,7 @@ import {
   addAxis,
   addPlot,
   addTrace,
+  reorderAxis,
   removeAxis,
   removePlot,
   removeTrace,
@@ -23,7 +24,8 @@ export type WorkspaceAction =
   | { type: "plot/setActive"; payload: { plotId: string } }
   | { type: "plot/setXSignal"; payload: { plotId?: string; xSignal: string } }
   | { type: "plot/setXRange"; payload: { plotId?: string; xRange?: [number, number] } }
-  | { type: "axis/add"; payload?: { plotId?: string; side?: "left" | "right" } }
+  | { type: "axis/add"; payload?: { plotId?: string } }
+  | { type: "axis/reorder"; payload: { plotId?: string; axisId: `y${number}`; toIndex: number } }
   | {
       type: "axis/remove";
       payload: { plotId?: string; axisId: `y${number}`; reassignToAxisId?: `y${number}` };
@@ -38,7 +40,6 @@ export type WorkspaceAction =
         plotId?: string;
         axisId: `y${number}`;
         patch: Partial<{
-          side: "left" | "right";
           title: string;
           range: [number, number];
           scale: "linear" | "log";
@@ -75,6 +76,8 @@ export function reduceWorkspaceState(state: WorkspaceState, action: WorkspaceAct
       return setPlotXRange(state, action.payload);
     case "axis/add":
       return addAxis(state, action.payload ?? {});
+    case "axis/reorder":
+      return reorderAxis(state, action.payload);
     case "axis/remove":
       return removeAxis(state, action.payload);
     case "axis/reassignTraces":
