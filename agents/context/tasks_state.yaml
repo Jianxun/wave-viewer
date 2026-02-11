@@ -4,14 +4,26 @@ T-013:
   pr: null
   merged: false
 T-014:
-  status: backlog
+  status: ready
+  pr: null
+  merged: false
+T-018:
+  status: ready
   pr: null
   merged: false
 T-015:
-  status: backlog
+  status: ready
   pr: null
   merged: false
 T-016:
-  status: backlog
+  status: ready
+  pr: null
+  merged: false
+T-017:
+  status: ready
+  pr: null
+  merged: false
+T-019:
+  status: ready
   pr: null
   merged: false

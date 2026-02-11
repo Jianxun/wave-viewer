@@ -1,44 +1,93 @@
 schema_version: 2
 current_sprint:
   - id: T-013
-    title: Add side-panel signal browser and extension-webview signal actions
+    title: Build side-panel signal browser foundation and command wiring
     owner: Executor
     dod:
-      - Contribute a VS Code side-panel signal browser view for loaded numeric signals.
-      - Implement a `TreeDataProvider` for signal entries with add-to-plot command support.
-      - Wire extension-host actions so side-panel interactions add traces to the active plot deterministically.
-      - Keep current in-webview signal controls functional as fallback during migration.
+      - Contribute a VS Code side-panel signal tree for active dataset numeric signals with deterministic ordering.
+      - Implement side-panel actions (`Add to Plot`, `Add to New Axis`, `Reveal in Plot`) and route them through extension-host dispatch.
+      - Ensure side-panel actions mutate workspace through reducer-compatible flows (no direct webview-only mutation).
+      - Keep current in-webview signal controls functional as transitional fallback.
     verify:
       - npm run lint
-      - npm test -- tests/extension/smoke.test.ts
-      - npm test -- tests/unit/webview/workspaceState.test.ts
+      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
     links:
       scratchpad: agents/scratchpads/T-013.md
-      spec: doc/vaporview-architecture-findings.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
       - package.json
       - src/extension.ts
       - src/extension/signalTree.ts
-      - src/core/dataset/types.ts
+      - src/extension/viewerBridge.ts
       - src/webview/main.ts
       - tests/extension/smoke.test.ts
+      - tests/unit/webview/workspaceState.test.ts
       - agents/scratchpads/T-013.md
   - id: T-014
-    title: Implement drag and drop from signal browser to axis lanes
+    title: Introduce protocol envelope and runtime validators scaffold
     owner: Executor
     depends_on:
       - T-013
     dod:
-      - Enable dragging signal items from the side-panel browser.
-      - Add webview drop targets for axis lanes (axis rows) with visible hover feedback.
-      - On drop, add a trace bound to the target axis; support explicit drop target for creating a new axis.
-      - Keep reducer-driven updates deterministic and compatible with existing workspace replay flow.
+      - Introduce explicit protocol envelope (`version`, `type`, `payload`) for host/webview messages.
+      - Implement runtime validation utilities for inbound host and webview messages.
+      - Add safe unknown-message handling with debug logging hooks.
+      - Land protocol scaffolding without changing existing message behaviors beyond validation wrappers.
+    verify:
+      - npm run lint
+      - npm test -- tests/unit/webview/workspaceState.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-014.md
+      spec: doc/specs/host-webview-protocol.md
+      adr: agents/adr/ADR-0004-host-webview-protocol-versioning.md
+    files:
+      - src/extension.ts
+      - src/webview/main.ts
+      - src/core/dataset/types.ts
+      - tests/unit/webview/workspaceState.test.ts
+      - agents/scratchpads/T-014.md
+  - id: T-018
+    title: Migrate host-webview message flows to normalized protocol contracts
+    owner: Executor
+    depends_on:
+      - T-014
+    dod:
+      - Migrate required message contracts (`host/datasetLoaded`, `host/workspaceLoaded`, `host/workspacePatched`, `webview/workspaceChanged`, `webview/dropSignal`) to envelope-based handling.
+      - Ensure message handlers use runtime validators before dispatch/mutation.
+      - Verify compatibility behavior for invalid payloads and unknown message types.
+      - Keep reducer outcomes deterministic for equivalent message intents.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-018.md
+      spec: doc/specs/host-webview-protocol.md
+      adr: agents/adr/ADR-0004-host-webview-protocol-versioning.md
+    files:
+      - src/extension.ts
+      - src/webview/main.ts
+      - tests/extension/smoke.test.ts
+      - tests/unit/webview/workspaceState.test.ts
+      - agents/scratchpads/T-018.md
+backlog:
+  - id: T-015
+    title: Implement axis-row drag/drop signal targeting via normalized drop contract
+    owner: Executor
+    depends_on:
+      - T-018
+    dod:
+      - Enable dragging signal items from the side-panel browser to axis-row drop targets.
+      - Add visible row hover/drop affordances and support explicit new-axis target behavior.
+      - Emit only normalized `webview/dropSignal` payloads from webview drop handling.
+      - Keep reducer-driven updates deterministic and replay-compatible.
     verify:
       - npm run lint
       - npm test -- tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts
     links:
-      scratchpad: agents/scratchpads/T-014.md
-      spec: doc/vaporview-architecture-findings.md
+      scratchpad: agents/scratchpads/T-015.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
       - src/webview/components/AxisManager.ts
       - src/webview/main.ts
@@ -46,25 +95,26 @@ current_sprint:
       - src/webview/styles.css
       - src/extension.ts
       - tests/unit/webview/workspaceState.test.ts
+      - tests/unit/webview/plotly/adapter.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-014.md
-backlog:
-  - id: T-015
-    title: Add canvas-domain drop overlay and quick-add ergonomics
+      - agents/scratchpads/T-015.md
+  - id: T-016
+    title: Add canvas-domain drop overlay and quick-add convergence
     owner: Executor
     depends_on:
-      - T-014
+      - T-015
     dod:
-      - Add a plot-canvas drop overlay that maps pointer location to domain-stacked lanes.
+      - Add plot-canvas drop overlay that maps pointer location to domain-stacked lanes.
       - Implement drop-to-lane behavior matching lane domain boundaries from the Plotly adapter.
       - Add double-click quick-add from side panel to active/default target lane.
-      - Ensure overlay and row-target drop paths share one dispatch contract.
+      - Ensure overlay, row-target drop, and quick-add paths share one dispatch contract.
     verify:
       - npm run lint
       - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-015.md
-      spec: doc/vaporview-architecture-findings.md
+      scratchpad: agents/scratchpads/T-016.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
       - src/webview/plotly/adapter.ts
       - src/webview/main.ts
@@ -73,31 +123,51 @@ backlog:
       - src/webview/components/SignalList.ts
       - tests/unit/webview/plotly/adapter.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-015.md
-  - id: T-016
-    title: Keyboard and workflow polish for side-panel-driven plotting
+      - agents/scratchpads/T-016.md
+  - id: T-017
+    title: Add parity regression suite for side-panel workflow stabilization
     owner: Executor
     depends_on:
-      - T-015
+      - T-016
     dod:
-      - Add keybinding-backed actions for zoom-to-fit and cancel-active-gesture semantics in viewer scope.
-      - Add context actions for side-panel signal items (`Add to Plot`, `Add to New Axis`, `Reveal in Plot`).
-      - Update README usage workflow to document side-panel-first plotting interactions.
-      - Add regression checks for command wiring and key action message flow.
+      - Add regression coverage proving equivalent workspace outcomes for side-panel command, axis-row drop, and canvas-overlay drop paths.
+      - Verify fallback in-webview signal controls remain functional during stabilization window.
+      - Record stabilization test evidence and residual risks in task scratchpad.
     verify:
       - npm run lint
-      - npm test
+      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts
     links:
-      scratchpad: agents/scratchpads/T-016.md
-      spec: doc/vaporview-architecture-findings.md
+      scratchpad: agents/scratchpads/T-017.md
+      spec: doc/specs/wave-viewer-mvp.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
-      - package.json
       - src/extension.ts
       - src/webview/main.ts
       - tests/extension/smoke.test.ts
+      - tests/unit/webview/workspaceState.test.ts
+      - tests/unit/webview/plotly/adapter.test.ts
+      - agents/scratchpads/T-017.md
+  - id: T-019
+    title: Publish stabilization handoff and workflow documentation updates
+    owner: Executor
+    depends_on:
+      - T-017
+    dod:
+      - Update README workflow section to document side-panel-first usage and transitional fallback expectations.
+      - Document stabilization gate outcomes, known limits, and follow-up recommendations in task scratchpad.
+      - Ensure task artifacts clearly state that in-webview signal-add deprecation remains deferred.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-019.md
+      spec: doc/specs/wave-viewer-mvp.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+    files:
       - README.md
-      - agents/scratchpads/T-016.md
+      - agents/scratchpads/T-019.md
+      - tests/extension/smoke.test.ts
 exploration_candidates:
-  - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) for tighter VS Code integration.
+  - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after side-panel workflow stabilization criteria are met.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.
   - Evaluate decimation strategy for large CSV files under side-panel-driven multi-trace workflows.
