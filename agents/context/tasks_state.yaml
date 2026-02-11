@@ -16,6 +16,6 @@ T-023:
   pr: 27
   merged: true
 T-024:
-  status: ready_for_review
+  status: review_in_progress
   pr: 28
   merged: false
