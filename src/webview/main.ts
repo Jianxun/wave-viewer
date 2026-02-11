@@ -24,6 +24,10 @@ type HostMessage =
         columns: Array<{ name: string; values: number[] }>;
         defaultXSignal: string;
       };
+    }
+  | {
+      type: "host/workspaceLoaded";
+      payload: { workspace: WorkspaceState };
     };
 
 const vscode = acquireVsCodeApi();
@@ -179,6 +183,10 @@ async function renderWorkspace(): Promise<void> {
   });
 
   await plotRenderer.render(activePlot, columns);
+  vscode.postMessage({
+    type: "webview/workspaceChanged",
+    payload: { workspace }
+  });
 }
 
 function renderXSignalSelector(activeXSignal: string): void {
@@ -230,6 +238,12 @@ window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
 
     workspace = createWorkspaceState(initialXSignal);
     datasetStatusEl.textContent = `Loaded ${message.payload.fileName} (${message.payload.rowCount} rows)`;
+    void renderWorkspace();
+    return;
+  }
+
+  if (message.type === "host/workspaceLoaded") {
+    workspace = message.payload.workspace;
     void renderWorkspace();
   }
 });
