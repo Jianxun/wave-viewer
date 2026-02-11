@@ -8,8 +8,8 @@ T-002:
   pr: 2
   merged: true
 T-003:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 3
   merged: false
 T-004:
   status: ready
