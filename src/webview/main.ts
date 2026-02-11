@@ -4,11 +4,12 @@ import { renderAxisManager } from "./components/AxisManager";
 import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
 import { renderTraceList } from "./components/TraceList";
+import { parseRelayoutRanges, type DatasetColumnData } from "./plotly/adapter";
+import { createPlotRenderer } from "./plotly/renderPlot";
 import { reduceWorkspaceState, type WorkspaceAction } from "./state/reducer";
 import {
   createWorkspaceState,
   getActivePlot,
-  type AxisId,
   type WorkspaceState
 } from "./state/workspaceState";
 
@@ -20,7 +21,7 @@ type HostMessage =
         path: string;
         fileName: string;
         rowCount: number;
-        columns: Array<{ name: string }>;
+        columns: Array<{ name: string; values: number[] }>;
         defaultXSignal: string;
       };
     };
@@ -29,6 +30,7 @@ const vscode = acquireVsCodeApi();
 
 let workspace: WorkspaceState | undefined;
 let signalNames: string[] = [];
+let columns: DatasetColumnData[] = [];
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
@@ -38,6 +40,39 @@ const xSignalSelectEl = getRequiredElement<HTMLSelectElement>("x-signal-select")
 const signalListEl = getRequiredElement("signal-list");
 const traceListEl = getRequiredElement("trace-list");
 const axisManagerEl = getRequiredElement("axis-manager");
+const plotCanvasEl = getRequiredElement("plot-canvas");
+
+const plotRenderer = createPlotRenderer({
+  container: plotCanvasEl,
+  onRelayout: (eventData) => {
+    if (!workspace) {
+      return;
+    }
+
+    const activePlot = getActivePlot(workspace);
+    const updates = parseRelayoutRanges(eventData, activePlot.axes);
+    if (!updates.hasChanges) {
+      return;
+    }
+
+    if (updates.xRange !== undefined || "xaxis.autorange" in eventData) {
+      dispatch({
+        type: "plot/setXRange",
+        payload: { xRange: updates.xRange }
+      });
+    }
+
+    for (const axisUpdate of updates.axisRanges) {
+      dispatch({
+        type: "axis/update",
+        payload: {
+          axisId: axisUpdate.axisId,
+          patch: { range: axisUpdate.range }
+        }
+      });
+    }
+  }
+});
 
 function getRequiredElement<TElement extends HTMLElement = HTMLElement>(id: string): TElement {
   const element = document.getElementById(id);
@@ -55,13 +90,13 @@ function dispatch(action: WorkspaceAction): void {
 
   try {
     workspace = reduceWorkspaceState(workspace, action);
-    renderWorkspace();
+    void renderWorkspace();
   } catch (error) {
     bridgeStatusEl.textContent = `State error: ${getErrorMessage(error)}`;
   }
 }
 
-function renderWorkspace(): void {
+async function renderWorkspace(): Promise<void> {
   if (!workspace) {
     return;
   }
@@ -142,6 +177,8 @@ function renderWorkspace(): void {
         }
       })
   });
+
+  await plotRenderer.render(activePlot, columns);
 }
 
 function renderXSignalSelector(activeXSignal: string): void {
@@ -180,6 +217,7 @@ window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
   }
 
   if (message.type === "host/datasetLoaded") {
+    columns = message.payload.columns;
     signalNames = message.payload.columns.map((column) => column.name);
     const initialXSignal = signalNames.includes(message.payload.defaultXSignal)
       ? message.payload.defaultXSignal
@@ -192,7 +230,7 @@ window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
 
     workspace = createWorkspaceState(initialXSignal);
     datasetStatusEl.textContent = `Loaded ${message.payload.fileName} (${message.payload.rowCount} rows)`;
-    renderWorkspace();
+    void renderWorkspace();
   }
 });
 

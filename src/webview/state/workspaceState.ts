@@ -119,6 +119,17 @@ export function setPlotXSignal(
   }));
 }
 
+export function setPlotXRange(
+  state: WorkspaceState,
+  payload: { plotId?: string; xRange?: [number, number] }
+): WorkspaceState {
+  const plotId = payload.plotId ?? state.activePlotId;
+  return withUpdatedPlot(state, plotId, (plot) => ({
+    ...plot,
+    xRange: payload.xRange
+  }));
+}
+
 export function addAxis(
   state: WorkspaceState,
   payload: { plotId?: string; side?: AxisState["side"] }
