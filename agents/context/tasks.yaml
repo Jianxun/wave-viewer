@@ -1,159 +1,119 @@
 schema_version: 2
 current_sprint:
-  - id: T-001
-    title: Define MVP scope and discussion outcomes for wave-viewer
-    owner: Architect
-    dod:
-      - Document MVP goals, non-goals, and acceptance boundaries in context docs.
-      - Define CSV data contract details and initial UX flow decisions.
-      - Capture open questions and decision options for implementation tasks T-002+.
-      - Create kickoff scratchpad with discussion prompts and provisional answers.
-    verify:
-      - ./venv/bin/python scripts/lint_tasks_state.py
-    links:
-      scratchpad: agents/scratchpads/T-001.md
-      spec: doc/specs/wave-viewer-mvp.md
-    files:
-      - agents/context/contract.md
-      - agents/context/tasks.yaml
-      - agents/context/tasks_state.yaml
-      - agents/context/project_status.md
-      - agents/context/codebase_map.md
-      - agents/scratchpads/T-001.md
-  - id: T-002
-    title: Scaffold VS Code extension and split-pane webview shell
+  - id: T-008
+    title: Rebaseline workspace state for domain-stacked shared-x rendering
     owner: Executor
-    depends_on:
-      - T-001
     dod:
-      - Create extension scaffold with a command to open the viewer for active CSV file.
-      - Build webview shell with left control pane and right plot canvas container.
-      - Add plot-tab bar skeleton and active tab switching state in UI shell.
-      - Wire message bridge between extension host and webview for dataset load/init events.
+      - Align `WorkspaceState`/`PlotState`/`AxisState` types with ADR-0002 and remove overlay-specific assumptions.
+      - Ensure axis order in `plot.axes` is treated as top-to-bottom lane order.
+      - Update reducer actions and invariants for axis add/remove/reorder under the lane model.
+      - Preserve trace-instance semantics so a signal can appear in multiple lanes.
     verify:
       - npm run lint
-      - npm test
+      - npm test -- tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-002.md
-      spec: doc/specs/wave-viewer-mvp.md
-    files:
-      - package.json
-      - src/extension.ts
-      - src/webview/index.html
-      - src/webview/main.ts
-      - src/webview/styles.css
-      - tests/extension/smoke.test.ts
-  - id: T-003
-    title: Implement CSV ingestion and dataset normalization contract
-    owner: Executor
-    depends_on:
-      - T-002
-    dod:
-      - Parse CSV into `Dataset` with `path`, `rowCount`, and numeric `columns`.
-      - Enforce parser error reporting for malformed rows and no-numeric-column cases.
-      - Implement default X-signal selection rule (`time` if present else first numeric).
-      - Send normalized dataset metadata from extension host to webview.
-    verify:
-      - npm run lint
-      - npm test
-    links:
-      scratchpad: agents/scratchpads/T-003.md
-      spec: doc/specs/wave-viewer-mvp.md
-    files:
-      - src/core/csv/parseCsv.ts
-      - src/core/dataset/types.ts
-      - src/core/dataset/selectDefaultX.ts
-      - src/extension.ts
-      - tests/unit/csv/parseCsv.test.ts
-      - tests/unit/dataset/selectDefaultX.test.ts
-  - id: T-004
-    title: Build plot workspace state with tabs and N-axis model
-    owner: Executor
-    depends_on:
-      - T-003
-    dod:
-      - Implement `WorkspaceState`, `PlotState`, `AxisState`, and `TraceState` models per contract.
-      - Support create/remove/rename plot tabs and active tab switching.
-      - Support trace instance creation from signals with axis assignment (`y1..yN`).
-      - Implement axis manager state operations (add axis, remove axis with validation, axis reassignment).
-    verify:
-      - npm run lint
-      - npm test
-    links:
-      scratchpad: agents/scratchpads/T-004.md
-      spec: doc/specs/wave-viewer-mvp.md
+      scratchpad: agents/scratchpads/T-008.md
+      spec: doc/specs/domain-stacked-shared-x-implementation.md
+      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
     files:
       - src/webview/state/workspaceState.ts
       - src/webview/state/reducer.ts
-      - src/webview/components/Tabs.ts
-      - src/webview/components/SignalList.ts
-      - src/webview/components/TraceList.ts
-      - src/webview/components/AxisManager.ts
       - tests/unit/webview/workspaceState.test.ts
-backlog:
-  - id: T-005
-    title: Integrate Plotly adapter for multi-axis rendering and interactions
+      - agents/scratchpads/T-008.md
+  - id: T-009
+    title: Implement Plotly domain-stacked lanes with shared x-axis rangeslider
     owner: Executor
     depends_on:
-      - T-004
+      - T-008
     dod:
-      - Map `PlotState` to Plotly traces/layout including `y1..yN` axis mapping.
-      - Render right-pane canvas from active tab state and update on state changes.
-      - Capture/restore zoom and range updates in state for deterministic replay fields.
-      - Support visibility toggles and axis reassignment reflected live in chart.
+      - Replace overlay-axis rendering with non-overlapping domain-stacked `yaxis*` layout.
+      - Enforce one shared `xaxis` and one shared `xaxis.rangeslider` per plot tab.
+      - Implement deterministic domain calculation per spec (`g=0.04`, top-to-bottom from axis order).
+      - Update relayout parsing for shared x-range and per-lane y-range capture.
     verify:
       - npm run lint
-      - npm test
+      - npm test -- tests/unit/webview/plotly/adapter.test.ts
     links:
-      scratchpad: agents/scratchpads/T-005.md
-      spec: doc/specs/wave-viewer-mvp.md
+      scratchpad: agents/scratchpads/T-009.md
+      spec: doc/specs/domain-stacked-shared-x-implementation.md
+      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
     files:
       - src/webview/plotly/adapter.ts
       - src/webview/plotly/renderPlot.ts
       - src/webview/main.ts
       - tests/unit/webview/plotly/adapter.test.ts
-  - id: T-006
-    title: Add YAML workspace spec export/import with deterministic replay
+      - agents/scratchpads/T-009.md
+backlog:
+  - id: T-010
+    title: Update axis manager UI for lane ordering and assignment clarity
     owner: Executor
     depends_on:
-      - T-005
+      - T-009
     dod:
-      - Define `PlotSpec v1` YAML schema for workspace, plots, axes, traces, and ranges.
-      - Implement export of deterministic rendered state fields to YAML.
-      - Implement import path that reconstructs workspace and validates signal references.
-      - Display explicit errors for missing signals/plots during spec import.
+      - Update Axis Manager interactions to reflect lane semantics (top/bottom ordering, not overlay side controls).
+      - Add explicit reorder actions in UI and reducer integration.
+      - Keep signal-to-axis assignment workflow explicit and consistent with trace-instance model.
+      - Ensure axis deletion/reassignment UX remains deterministic and validation-safe.
     verify:
       - npm run lint
       - npm test
     links:
-      scratchpad: agents/scratchpads/T-006.md
-      spec: doc/specs/wave-viewer-mvp.md
+      scratchpad: agents/scratchpads/T-010.md
+      spec: doc/specs/domain-stacked-shared-x-implementation.md
+    files:
+      - src/webview/components/AxisManager.ts
+      - src/webview/components/SignalList.ts
+      - src/webview/components/TraceList.ts
+      - src/webview/main.ts
+      - tests/unit/webview/workspaceState.test.ts
+      - agents/scratchpads/T-010.md
+  - id: T-011
+    title: Revise plot spec schema and importer/exporter for ADR-0002 semantics
+    owner: Executor
+    depends_on:
+      - T-010
+    dod:
+      - Update spec schema/types to represent domain-stacked lane semantics.
+      - Keep deterministic ordering guarantees for plots, axes, and traces.
+      - Define explicit handling for legacy specs (clear error or controlled migration path, documented in code/tests).
+      - Update import/export validation for axis references and missing signals.
+    verify:
+      - npm run lint
+      - npm test -- tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-011.md
+      spec: doc/specs/domain-stacked-shared-x-implementation.md
+      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
     files:
       - src/core/spec/plotSpecV1.ts
       - src/core/spec/exportSpec.ts
       - src/core/spec/importSpec.ts
-      - src/extension.ts
       - tests/unit/spec/roundtrip.test.ts
       - tests/unit/spec/importErrors.test.ts
-  - id: T-007
-    title: End-to-end smoke coverage using ota.spice.csv and user docs
+      - agents/scratchpads/T-011.md
+  - id: T-012
+    title: End-to-end regression coverage and docs refresh for domain-stacked behavior
     owner: Executor
     depends_on:
-      - T-006
+      - T-011
     dod:
-      - Add smoke test flow that opens `examples/simulations/ota.spice.csv`, creates 2 tabs, and assigns signals to multiple axes.
-      - Validate export/import replay yields equivalent tab/trace/axis state.
-      - Document usage workflow for open -> explore -> export -> replay.
+      - Update e2e smoke scenario to verify stacked non-overlapping lanes and shared rangeslider behavior.
+      - Refresh README workflow language to match lane terminology and controls.
+      - Add regression assertions that prevent fallback to overlay-axis behavior.
+      - Record known limits and follow-up items in docs (without expanding MVP scope).
     verify:
       - npm run lint
       - npm test
       - npm run test:e2e
     links:
-      scratchpad: agents/scratchpads/T-007.md
-      spec: doc/specs/wave-viewer-mvp.md
+      scratchpad: agents/scratchpads/T-012.md
+      spec: doc/specs/domain-stacked-shared-x-implementation.md
     files:
       - tests/e2e/waveViewerReplay.test.ts
-      - examples/simulations/ota.spice.csv
+      - tests/extension/smoke.test.ts
       - README.md
+      - doc/specs/wave-viewer-mvp.md
+      - agents/scratchpads/T-012.md
 exploration_candidates:
-  - Evaluate streaming/decimation approach for very large CSV files (>1M rows).
+  - Evaluate dynamic lane heights and adaptive gaps for >8 axes.
+  - Evaluate decimation strategy for large CSV files under shared-x lane rendering.

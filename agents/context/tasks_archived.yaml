@@ -1,2 +1,9 @@
 schema_version: 1
-archive: []
+archive:
+  - { T-001: { completed_on: 2026-02-11, owner: Architect, scratchpad: agents/scratchpads/T-001.md, pr: 1 } }
+  - { T-002: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-002.md, pr: 2 } }
+  - { T-003: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-003.md, pr: 3 } }
+  - { T-004: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-004.md, pr: 4 } }
+  - { T-005: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-005.md, pr: 5 } }
+  - { T-006: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-006.md, pr: 6 } }
+  - { T-007: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-007.md, pr: 7 } }

@@ -1,29 +1,21 @@
 schema_version: 2
-T-001:
-  status: done
-  pr: 1
-  merged: true
-T-002:
-  status: done
-  pr: 2
-  merged: true
-T-003:
-  status: done
-  pr: 3
-  merged: true
-T-004:
-  status: done
-  pr: 4
-  merged: true
-T-005:
-  status: done
-  pr: 5
-  merged: true
-T-006:
-  status: done
-  pr: 6
-  merged: true
-T-007:
-  status: done
-  pr: 7
-  merged: true
+T-008:
+  status: ready
+  pr: null
+  merged: false
+T-009:
+  status: ready
+  pr: null
+  merged: false
+T-010:
+  status: ready
+  pr: null
+  merged: false
+T-011:
+  status: ready
+  pr: null
+  merged: false
+T-012:
+  status: ready
+  pr: null
+  merged: false

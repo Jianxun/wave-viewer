@@ -14,7 +14,8 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 - Multi-plot workspace via tabs (each tab is one plot).
 - Per-plot configurable X-axis signal.
 - Signal plotted multiple times across different Y-axes (trace instances).
-- N-axis-capable data model (`y1`, `y2`, `y3`, ...), with initial UI focused on core controls.
+- N-axis-capable data model (`y1`, `y2`, `y3`, ...) rendered as vertically stacked non-overlapping Y-axis domains in a single Plotly figure.
+- One shared X-axis and one rangeslider per plot tab.
 - Export/import deterministic YAML plot spec.
 
 ### 1.3 Out of Scope (MVP)
@@ -52,6 +53,7 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
   - Axis manager for active plot.
 - Right pane:
   - Plotly chart for active plot.
+  - Chart is one Plotly figure with shared X-axis and domain-stacked Y-axes.
 
 ### 3.2 Signal Selection and Add-to-Axis
 - Signal list rows show:
@@ -76,7 +78,8 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 - Per active plot:
   - Create axis (`YN`).
   - Remove axis (blocked if in use unless user confirms reassignment/delete).
-  - Set side (`left`/`right`), title, optional range, and scale mode.
+  - Set title, optional range, and scale mode.
+- Axis order controls top-to-bottom lane order.
 - Axis IDs are stable (`y1`, `y2`, ...), never reused within one plot after deletion in the same session.
 
 ## 4. Internal Data Model
@@ -99,7 +102,6 @@ type AxisId = `y${number}`;
 
 type AxisState = {
   id: AxisId;         // y1, y2, y3...
-  side: "left" | "right";
   title?: string;
   range?: [number, number];
   scale?: "linear" | "log";
@@ -131,6 +133,10 @@ type WorkspaceState = {
 
 ## 5. Plotly Mapping Rules
 
+- Each plot tab renders as a single figure with:
+  - one shared `xaxis`
+  - one shared `xaxis.rangeslider`
+  - `yaxis`, `yaxis2`, ... configured with non-overlapping `domain` values.
 - `axisId=y1` maps to Plotly `yaxis`.
 - `axisId=yN` maps to Plotly `yaxisN` for `N>=2`.
 - Trace mapping:
@@ -138,6 +144,8 @@ type WorkspaceState = {
   - `y = dataset.columns[trace.signal].values`
   - `yaxis = "y" | "y2" | ...`
 - Axis definitions derive from `axes[]` order and settings.
+- This design intentionally avoids multi-canvas subplot synchronization mechanisms.
+- Detailed execution target: `doc/specs/domain-stacked-shared-x-implementation.md`.
 
 ## 6. YAML Spec (Deterministic Replay)
 
