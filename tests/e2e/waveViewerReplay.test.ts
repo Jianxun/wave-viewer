@@ -13,8 +13,7 @@ function createExploredWorkspace(defaultXSignal: string): WorkspaceState {
   let workspace = createWorkspaceState(defaultXSignal);
 
   workspace = reduceWorkspaceState(workspace, {
-    type: "axis/add",
-    payload: { side: "right" }
+    type: "axis/add"
   });
   workspace = reduceWorkspaceState(workspace, {
     type: "trace/add",
@@ -34,8 +33,7 @@ function createExploredWorkspace(defaultXSignal: string): WorkspaceState {
     payload: { xSignal: "V(IN)", name: "Plot 2 - OTA internals" }
   });
   workspace = reduceWorkspaceState(workspace, {
-    type: "axis/add",
-    payload: { side: "right" }
+    type: "axis/add"
   });
   workspace = reduceWorkspaceState(workspace, {
     type: "trace/add",

@@ -25,7 +25,7 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
           axes: plot.axes.map((axis) => {
             const specAxis: PlotSpecAxisV1 = {
               id: axis.id,
-              side: axis.side
+              side: axis.side ?? "left"
             };
 
             if (axis.title !== undefined) {

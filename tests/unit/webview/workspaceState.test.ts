@@ -5,6 +5,7 @@ import {
   addPlot,
   addTrace,
   createWorkspaceState,
+  reorderAxis,
   removeAxis,
   removePlot,
   renamePlot,
@@ -23,7 +24,7 @@ describe("workspaceState", () => {
       name: "Plot 1",
       xSignal: "time"
     });
-    expect(workspace.plots[0]?.axes).toEqual([{ id: "y1", side: "left" }]);
+    expect(workspace.plots[0]?.axes).toEqual([{ id: "y1" }]);
     expect(workspace.plots[0]?.traces).toEqual([]);
   });
 
@@ -100,6 +101,39 @@ describe("workspaceState", () => {
 
     expect(workspace.plots[0]?.traces.map((trace) => trace.axisId)).toEqual(["y1", "y1"]);
   });
+
+  it("treats axes order as top-to-bottom lane order and supports explicit reorder", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addAxis(workspace, {});
+    expect(workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2", "y3"]);
+
+    workspace = reorderAxis(workspace, { axisId: "y3", toIndex: 0 });
+    expect(workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y3", "y1", "y2"]);
+  });
+
+  it("keeps trace assignments stable when lane order changes", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, { signal: "vin", axisId: "y3" });
+    workspace = addTrace(workspace, { signal: "vout", axisId: "y1" });
+
+    workspace = reorderAxis(workspace, { axisId: "y1", toIndex: 2 });
+    expect(workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y2", "y3", "y1"]);
+    expect(workspace.plots[0]?.traces.map((trace) => trace.axisId)).toEqual(["y3", "y1"]);
+  });
+
+  it("rejects invalid axis reorder requests", () => {
+    const workspace = createWorkspaceState("time");
+    expect(() => reorderAxis(workspace, { axisId: "y99", toIndex: 0 })).toThrow("Unknown axis id: y99");
+    expect(() => reorderAxis(workspace, { axisId: "y1", toIndex: -1 })).toThrow(
+      "Axis reorder index out of bounds."
+    );
+    expect(() => reorderAxis(workspace, { axisId: "y1", toIndex: 1 })).toThrow(
+      "Axis reorder index out of bounds."
+    );
+  });
 });
 
 describe("workspace reducer", () => {
@@ -107,6 +141,7 @@ describe("workspace reducer", () => {
     const actions: WorkspaceAction[] = [
       { type: "plot/add", payload: { xSignal: "vin" } },
       { type: "axis/add" },
+      { type: "axis/reorder", payload: { axisId: "y2", toIndex: 0 } },
       { type: "trace/add", payload: { signal: "vin", axisId: "y2" } }
     ];
 
@@ -117,7 +152,7 @@ describe("workspace reducer", () => {
 
     const activePlot = finalState.plots.find((plot) => plot.id === finalState.activePlotId);
     expect(activePlot?.xSignal).toBe("vin");
-    expect(activePlot?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(activePlot?.axes.map((axis) => axis.id)).toEqual(["y2", "y1"]);
     expect(activePlot?.traces).toHaveLength(1);
     expect(activePlot?.traces[0]).toMatchObject({ signal: "vin", axisId: "y2" });
   });
