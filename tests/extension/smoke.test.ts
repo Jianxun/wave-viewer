@@ -8,6 +8,7 @@ import {
   isCsvFile,
   OPEN_VIEWER_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   type CommandDeps,
@@ -226,6 +227,7 @@ describe("T-002 extension shell smoke", () => {
 
 describe("T-013 side-panel signal actions", () => {
   it("exports side-panel command ids", () => {
+    expect(SIGNAL_BROWSER_QUICK_ADD_COMMAND).toBe("waveViewer.signalBrowser.quickAdd");
     expect(SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND).toBe("waveViewer.signalBrowser.addToPlot");
     expect(SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND).toBe("waveViewer.signalBrowser.addToNewAxis");
     expect(REVEAL_SIGNAL_IN_PLOT_COMMAND).toBe("waveViewer.signalBrowser.revealInPlot");

@@ -38,7 +38,8 @@ type HostMessage =
       }
     >
   | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>;
+  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>
+  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>;
 
 const vscode = acquireVsCodeApi();
 
@@ -427,6 +428,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
     workspace = message.payload.workspace;
     bridgeStatusEl.textContent = `Patched: ${message.payload.reason}`;
     void renderWorkspace();
+    return;
+  }
+
+  if (message.type === "host/sidePanelQuickAdd") {
+    postDropSignal({
+      signal: message.payload.signal,
+      target: resolvePreferredDropTarget(),
+      source: "axis-row"
+    });
   }
 });
 

@@ -27,7 +27,8 @@ export type HostToWebviewMessageType =
   | "host/init"
   | "host/datasetLoaded"
   | "host/workspaceLoaded"
-  | "host/workspacePatched";
+  | "host/workspacePatched"
+  | "host/sidePanelQuickAdd";
 
 export type WebviewToHostMessageType =
   | "webview/ready"
@@ -48,7 +49,8 @@ export type ParsedHostToWebviewMessage =
       }
     >
   | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceStateLike }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceStateLike; reason: string }>;
+  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceStateLike; reason: string }>
+  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>;
 
 export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
@@ -155,7 +157,8 @@ function isHostMessageType(type: string): type is HostToWebviewMessageType {
     type === "host/init" ||
     type === "host/datasetLoaded" ||
     type === "host/workspaceLoaded" ||
-    type === "host/workspacePatched"
+    type === "host/workspacePatched" ||
+    type === "host/sidePanelQuickAdd"
   );
 }
 
@@ -197,6 +200,10 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
 
   if (type === "host/workspacePatched") {
     return isWorkspaceStateLike(payload.workspace) && typeof payload.reason === "string";
+  }
+
+  if (type === "host/sidePanelQuickAdd") {
+    return typeof payload.signal === "string" && payload.signal.trim().length > 0;
   }
 
   return isWorkspaceStateLike(payload.workspace);
