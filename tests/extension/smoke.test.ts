@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset/types";
 import {
   applySidePanelSignalAction,
   createOpenViewerCommand,
@@ -11,19 +12,18 @@ import {
   type CommandDeps,
   type HostToWebviewMessage,
   type WebviewLike,
-  type WebviewPanelLike,
-  type WebviewToHostMessage
+  type WebviewPanelLike
 } from "../../src/extension";
 import { toDeterministicSignalOrder } from "../../src/extension/signalTree";
 
 type PanelFixture = {
   panel: WebviewPanelLike;
   sentMessages: HostToWebviewMessage[];
-  emitMessage(message: WebviewToHostMessage): void;
+  emitMessage(message: unknown): void;
 };
 
 function createPanelFixture(): PanelFixture {
-  let listener: ((message: WebviewToHostMessage) => void) | undefined;
+  let listener: ((message: unknown) => void) | undefined;
   const sentMessages: HostToWebviewMessage[] = [];
 
   const webview: WebviewLike = {
@@ -149,14 +149,16 @@ describe("T-002 extension shell smoke", () => {
     expect(showError).not.toHaveBeenCalled();
     expect(panelFixture.panel.webview.html).toContain("<html>shell</html>");
 
-    panelFixture.emitMessage({ type: "webview/ready" });
+    panelFixture.emitMessage(createProtocolEnvelope("webview/ready", { ready: true }));
 
     expect(panelFixture.sentMessages).toEqual([
       {
+        version: PROTOCOL_VERSION,
         type: "host/init",
         payload: { title: "Wave Viewer" }
       },
       {
+        version: PROTOCOL_VERSION,
         type: "host/datasetLoaded",
         payload: {
           path: "/workspace/examples/simulations/ota.spice.csv",
@@ -175,6 +177,15 @@ describe("T-002 extension shell smoke", () => {
     expect(datasetMessage?.type).toBe("host/datasetLoaded");
     expect(datasetMessage?.payload).not.toHaveProperty("layout");
     expect(datasetMessage?.payload).not.toHaveProperty("axes");
+  });
+
+  it("ignores unknown inbound messages without posting responses", async () => {
+    const { deps, panelFixture } = createDeps();
+
+    await createOpenViewerCommand(deps)();
+    panelFixture.emitMessage(createProtocolEnvelope("webview/unknown", { whatever: true }));
+
+    expect(panelFixture.sentMessages).toEqual([]);
   });
 });
 

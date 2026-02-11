@@ -1,5 +1,10 @@
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
+import {
+  createProtocolEnvelope,
+  parseHostToWebviewMessage,
+  type ProtocolEnvelope
+} from "../core/dataset/types";
 import { renderAxisManager } from "./components/AxisManager";
 import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
@@ -14,21 +19,18 @@ import {
 } from "./state/workspaceState";
 
 type HostMessage =
-  | { type: "host/init"; payload: { title: string } }
-  | {
-      type: "host/datasetLoaded";
-      payload: {
+  | ProtocolEnvelope<"host/init", { title: string }>
+  | ProtocolEnvelope<
+      "host/datasetLoaded",
+      {
         path: string;
         fileName: string;
         rowCount: number;
         columns: Array<{ name: string; values: number[] }>;
         defaultXSignal: string;
-      };
-    }
-  | {
-      type: "host/workspaceLoaded";
-      payload: { workspace: WorkspaceState };
-    };
+      }
+    >
+  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>;
 
 const vscode = acquireVsCodeApi();
 
@@ -185,10 +187,7 @@ async function renderWorkspace(): Promise<void> {
   });
 
   await plotRenderer.render(activePlot, columns);
-  vscode.postMessage({
-    type: "webview/workspaceChanged",
-    payload: { workspace }
-  });
+  vscode.postMessage(createProtocolEnvelope("webview/workspaceChanged", { workspace }));
 }
 
 function renderXSignalSelector(activeXSignal: string): void {
@@ -218,8 +217,14 @@ xSignalSelectEl.addEventListener("change", () => {
   dispatch({ type: "plot/setXSignal", payload: { xSignal: xSignalSelectEl.value } });
 });
 
-window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
-  const message = event.data;
+window.addEventListener("message", (event: MessageEvent<unknown>) => {
+  const parsed = parseHostToWebviewMessage(event.data);
+  if (!parsed) {
+    console.debug("[wave-viewer] Ignored invalid or unknown host message.", event.data);
+    return;
+  }
+
+  const message = parsed as HostMessage;
 
   if (message.type === "host/init") {
     bridgeStatusEl.textContent = `Connected: ${message.payload.title}`;
@@ -250,4 +255,4 @@ window.addEventListener("message", (event: MessageEvent<HostMessage>) => {
   }
 });
 
-vscode.postMessage({ type: "webview/ready" });
+vscode.postMessage(createProtocolEnvelope("webview/ready", { ready: true }));
