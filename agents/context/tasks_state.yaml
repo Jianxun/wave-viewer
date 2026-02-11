@@ -12,8 +12,8 @@ T-010:
   pr: 11
   merged: true
 T-011:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 12
   merged: false
 T-012:
   status: ready
