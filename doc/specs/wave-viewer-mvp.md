@@ -188,7 +188,14 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
   - CI gates are not required yet.
   - Follow `doc/specs/testing-strategy.md` and record skipped checks in task scratchpads.
 
-## 8. Open Follow-ups (Post-MVP Candidates)
+## 8. Known Limits (MVP)
+
+- Lane height/gap behavior is deterministic and fixed (`g=0.04`), not adaptive to axis count.
+- High lane counts can compress per-lane vertical space and reduce readability.
+- Very large CSV performance optimization (for example, downsampling/decimation) is out of scope for MVP.
+- Rendering assumes one shared Plotly figure per plot tab and does not provide alternate layout strategies.
+
+## 9. Open Follow-ups (Post-MVP Candidates)
 
 - Tiled/scrollable multi-canvas layout.
 - Downsampling strategies for very large CSV files.
