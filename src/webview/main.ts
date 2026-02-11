@@ -168,6 +168,8 @@ async function renderWorkspace(): Promise<void> {
     container: axisManagerEl,
     axes: activePlot.axes,
     onAddAxis: () => dispatch({ type: "axis/add" }),
+    onReorderAxis: ({ axisId, toIndex }) =>
+      dispatch({ type: "axis/reorder", payload: { axisId, toIndex } }),
     onRemoveAxis: ({ axisId, reassignToAxisId }) =>
       dispatch({ type: "axis/remove", payload: { axisId, reassignToAxisId } }),
     onReassignTraces: ({ fromAxisId, toAxisId }) =>
