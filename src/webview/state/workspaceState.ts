@@ -23,6 +23,7 @@ export type PlotState = {
   xSignal: string;
   axes: AxisState[];
   traces: TraceState[];
+  nextAxisNumber: number;
   xRange?: [number, number];
 };
 
@@ -124,14 +125,12 @@ export function addAxis(
 ): WorkspaceState {
   const plotId = payload.plotId ?? state.activePlotId;
   return withUpdatedPlot(state, plotId, (plot) => {
-    const nextAxisId = `y${getNextIdNumber(
-      plot.axes.map((axis) => axis.id),
-      /^y(\d+)$/
-    )}` as AxisId;
+    const nextAxisId = `y${plot.nextAxisNumber}` as AxisId;
 
     return {
       ...plot,
-      axes: [...plot.axes, { id: nextAxisId, side: payload.side ?? "right" }]
+      axes: [...plot.axes, { id: nextAxisId, side: payload.side ?? "right" }],
+      nextAxisNumber: plot.nextAxisNumber + 1
     };
   });
 }
@@ -309,7 +308,8 @@ function createPlotState(payload: { id: string; name: string; xSignal: string })
     name: payload.name,
     xSignal: payload.xSignal,
     axes: [{ id: "y1", side: "left" }],
-    traces: []
+    traces: [],
+    nextAxisNumber: 2
   };
 }
 

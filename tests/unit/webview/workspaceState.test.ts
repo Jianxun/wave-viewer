@@ -80,6 +80,16 @@ describe("workspaceState", () => {
     expect(plot?.traces.map((trace) => trace.axisId)).toEqual(["y1"]);
   });
 
+  it("never reuses axis ids after axis deletion in the same plot session", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = removeAxis(workspace, { axisId: "y2" });
+    workspace = addAxis(workspace, {});
+
+    const axisIds = workspace.plots[0]?.axes.map((axis) => axis.id) ?? [];
+    expect(axisIds).toEqual(["y1", "y3"]);
+  });
+
   it("reassigns all traces between axes", () => {
     let workspace = createWorkspaceState("time");
     workspace = addAxis(workspace, {});
