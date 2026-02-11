@@ -1,0 +1,29 @@
+schema_version: 2
+T-001:
+  status: in_progress
+  pr: null
+  merged: false
+T-002:
+  status: ready
+  pr: null
+  merged: false
+T-003:
+  status: backlog
+  pr: null
+  merged: false
+T-004:
+  status: backlog
+  pr: null
+  merged: false
+T-005:
+  status: backlog
+  pr: null
+  merged: false
+T-006:
+  status: backlog
+  pr: null
+  merged: false
+T-007:
+  status: backlog
+  pr: null
+  merged: false
