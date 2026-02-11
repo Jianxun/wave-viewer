@@ -4,10 +4,14 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createLoadCsvFilesCommand,
   createOpenViewerCommand,
+  createReloadAllLoadedFilesCommand,
   isCsvFile,
+  LOAD_CSV_FILES_COMMAND,
   OPEN_VIEWER_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  RELOAD_ALL_FILES_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
@@ -254,6 +258,8 @@ describe("T-013 side-panel signal actions", () => {
     expect(SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND).toBe("waveViewer.signalBrowser.addToPlot");
     expect(SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND).toBe("waveViewer.signalBrowser.addToNewAxis");
     expect(REVEAL_SIGNAL_IN_PLOT_COMMAND).toBe("waveViewer.signalBrowser.revealInPlot");
+    expect(LOAD_CSV_FILES_COMMAND).toBe("waveViewer.signalBrowser.loadCsvFiles");
+    expect(RELOAD_ALL_FILES_COMMAND).toBe("waveViewer.signalBrowser.reloadAllFiles");
   });
 
   it("applies add-to-plot through reducer-compatible trace append", () => {
@@ -345,6 +351,123 @@ describe("T-013 side-panel signal actions", () => {
 
   it("keeps signal order deterministic by source column order", () => {
     expect(toDeterministicSignalOrder(["time", "vin", "vout"])).toEqual(["time", "vin", "vout"]);
+  });
+});
+
+describe("T-021 explorer load/reload actions", () => {
+  it("loads one or more csv files selected from picker into dataset registry", async () => {
+    const registerLoadedDataset = vi.fn();
+    const showError = vi.fn();
+    const command = createLoadCsvFilesCommand({
+      showOpenDialog: async () => ["/workspace/examples/a.csv", "/workspace/examples/b.csv"],
+      loadDataset: (documentPath) => ({
+        dataset: {
+          path: documentPath,
+          rowCount: 2,
+          columns: [{ name: "time", values: [0, 1] }]
+        },
+        defaultXSignal: "time"
+      }),
+      registerLoadedDataset,
+      showError
+    });
+
+    await command();
+
+    expect(registerLoadedDataset).toHaveBeenCalledTimes(2);
+    expect(registerLoadedDataset).toHaveBeenNthCalledWith(1, "/workspace/examples/a.csv", {
+      dataset: {
+        path: "/workspace/examples/a.csv",
+        rowCount: 2,
+        columns: [{ name: "time", values: [0, 1] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(registerLoadedDataset).toHaveBeenNthCalledWith(2, "/workspace/examples/b.csv", {
+      dataset: {
+        path: "/workspace/examples/b.csv",
+        rowCount: 2,
+        columns: [{ name: "time", values: [0, 1] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("surfaces actionable errors when selected csv fails parse while keeping valid loads", async () => {
+    const registerLoadedDataset = vi.fn();
+    const showError = vi.fn();
+    const command = createLoadCsvFilesCommand({
+      showOpenDialog: async () => ["/workspace/examples/a.csv", "/workspace/examples/bad.csv"],
+      loadDataset: (documentPath) => {
+        if (documentPath.endsWith("bad.csv")) {
+          throw new Error("Malformed CSV row 7.");
+        }
+        return {
+          dataset: {
+            path: documentPath,
+            rowCount: 2,
+            columns: [{ name: "time", values: [0, 1] }]
+          },
+          defaultXSignal: "time"
+        };
+      },
+      registerLoadedDataset,
+      showError
+    });
+
+    await command();
+
+    expect(registerLoadedDataset).toHaveBeenCalledTimes(1);
+    expect(registerLoadedDataset).toHaveBeenCalledWith("/workspace/examples/a.csv", {
+      dataset: {
+        path: "/workspace/examples/a.csv",
+        rowCount: 2,
+        columns: [{ name: "time", values: [0, 1] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to load '/workspace/examples/bad.csv': Malformed CSV row 7."
+    );
+  });
+
+  it("reloads all loaded files and preserves already-loaded datasets on parse failures", async () => {
+    const registerLoadedDataset = vi.fn();
+    const showError = vi.fn();
+    const command = createReloadAllLoadedFilesCommand({
+      getLoadedDatasetPaths: () => ["/workspace/examples/a.csv", "/workspace/examples/bad.csv"],
+      loadDataset: (documentPath) => {
+        if (documentPath.endsWith("bad.csv")) {
+          throw new Error("File missing.");
+        }
+        return {
+          dataset: {
+            path: documentPath,
+            rowCount: 5,
+            columns: [{ name: "time", values: [0, 1, 2, 3, 4] }]
+          },
+          defaultXSignal: "time"
+        };
+      },
+      registerLoadedDataset,
+      showError
+    });
+
+    await command();
+
+    expect(registerLoadedDataset).toHaveBeenCalledTimes(1);
+    expect(registerLoadedDataset).toHaveBeenCalledWith("/workspace/examples/a.csv", {
+      dataset: {
+        path: "/workspace/examples/a.csv",
+        rowCount: 5,
+        columns: [{ name: "time", values: [0, 1, 2, 3, 4] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to reload '/workspace/examples/bad.csv': File missing."
+    );
   });
 });
 

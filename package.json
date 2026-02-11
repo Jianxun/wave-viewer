@@ -19,6 +19,8 @@
     "onCommand:waveViewer.signalBrowser.addToPlot",
     "onCommand:waveViewer.signalBrowser.addToNewAxis",
     "onCommand:waveViewer.signalBrowser.revealInPlot",
+    "onCommand:waveViewer.signalBrowser.loadCsvFiles",
+    "onCommand:waveViewer.signalBrowser.reloadAllFiles",
     "onView:waveViewer.signalBrowser"
   ],
   "main": "./dist/extension.js",
@@ -47,6 +49,14 @@
       {
         "command": "waveViewer.signalBrowser.revealInPlot",
         "title": "Wave Viewer: Reveal Signal in Plot"
+      },
+      {
+        "command": "waveViewer.signalBrowser.loadCsvFiles",
+        "title": "Wave Viewer: Load CSV File..."
+      },
+      {
+        "command": "waveViewer.signalBrowser.reloadAllFiles",
+        "title": "Wave Viewer: Reload All Files"
       }
     ],
     "views": {
@@ -73,6 +83,18 @@
           "command": "waveViewer.signalBrowser.revealInPlot",
           "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
           "group": "navigation@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "waveViewer.signalBrowser.loadCsvFiles",
+          "when": "view == waveViewer.signalBrowser",
+          "group": "navigation"
+        },
+        {
+          "command": "waveViewer.signalBrowser.reloadAllFiles",
+          "when": "view == waveViewer.signalBrowser",
+          "group": "navigation@2"
         }
       ]
     }

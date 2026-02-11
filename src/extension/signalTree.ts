@@ -9,6 +9,8 @@ export const SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND = "waveViewer.signalBrowser.addT
 export const SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND = "waveViewer.signalBrowser.addToNewAxis";
 export const REVEAL_SIGNAL_IN_PLOT_COMMAND = "waveViewer.signalBrowser.revealInPlot";
 export const SIGNAL_BROWSER_QUICK_ADD_COMMAND = "waveViewer.signalBrowser.quickAdd";
+export const LOAD_CSV_FILES_COMMAND = "waveViewer.signalBrowser.loadCsvFiles";
+export const RELOAD_ALL_FILES_COMMAND = "waveViewer.signalBrowser.reloadAllFiles";
 
 export type SignalTreeDataset = {
   datasetPath: string;
