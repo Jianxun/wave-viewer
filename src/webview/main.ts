@@ -177,6 +177,14 @@ function setCanvasDropLaneActive(axisId: AxisId | undefined): void {
   });
 }
 
+function setCanvasDropOverlayActive(active: boolean): void {
+  plotDropOverlayEl.classList.toggle("drag-active", active);
+  plotDropOverlayEl.setAttribute("aria-hidden", active ? "false" : "true");
+  if (!active) {
+    setCanvasDropLaneActive(undefined);
+  }
+}
+
 function resolveAxisIdFromCanvasEvent(event: DragEvent): AxisId | undefined {
   if (!workspace) {
     return undefined;
@@ -345,6 +353,8 @@ plotCanvasEl.addEventListener("dragenter", (event) => {
     return;
   }
   event.preventDefault();
+  setCanvasDropOverlayActive(true);
+  setCanvasDropLaneActive(resolveAxisIdFromCanvasEvent(event));
 });
 
 plotCanvasEl.addEventListener("dragover", (event) => {
@@ -354,6 +364,7 @@ plotCanvasEl.addEventListener("dragover", (event) => {
 
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
+  setCanvasDropOverlayActive(true);
   setCanvasDropLaneActive(resolveAxisIdFromCanvasEvent(event));
 });
 
@@ -362,11 +373,11 @@ plotCanvasEl.addEventListener("dragleave", (event) => {
   if (nextTarget && plotCanvasEl.contains(nextTarget)) {
     return;
   }
-  setCanvasDropLaneActive(undefined);
+  setCanvasDropOverlayActive(false);
 });
 
 plotCanvasEl.addEventListener("drop", (event) => {
-  setCanvasDropLaneActive(undefined);
+  setCanvasDropOverlayActive(false);
 
   if (!event.dataTransfer) {
     return;
