@@ -20,7 +20,7 @@ T-016:
   pr: 20
   merged: true
 T-017:
-  status: ready_for_review
+  status: review_clean
   pr: 21
   merged: false
 T-019:
