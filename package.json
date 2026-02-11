@@ -21,6 +21,7 @@
     "onCommand:waveViewer.signalBrowser.revealInPlot",
     "onCommand:waveViewer.signalBrowser.loadCsvFiles",
     "onCommand:waveViewer.signalBrowser.reloadAllFiles",
+    "onCommand:waveViewer.signalBrowser.removeLoadedFile",
     "onView:waveViewer.signalBrowser"
   ],
   "main": "./dist/extension.js",
@@ -57,6 +58,10 @@
       {
         "command": "waveViewer.signalBrowser.reloadAllFiles",
         "title": "Wave Viewer: Reload All Files"
+      },
+      {
+        "command": "waveViewer.signalBrowser.removeLoadedFile",
+        "title": "Wave Viewer: Remove Loaded File"
       }
     ],
     "views": {
@@ -83,6 +88,11 @@
           "command": "waveViewer.signalBrowser.revealInPlot",
           "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
           "group": "navigation@3"
+        },
+        {
+          "command": "waveViewer.signalBrowser.removeLoadedFile",
+          "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.dataset",
+          "group": "navigation@4"
         }
       ],
       "view/title": [

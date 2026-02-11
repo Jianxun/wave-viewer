@@ -11,6 +11,7 @@ export const REVEAL_SIGNAL_IN_PLOT_COMMAND = "waveViewer.signalBrowser.revealInP
 export const SIGNAL_BROWSER_QUICK_ADD_COMMAND = "waveViewer.signalBrowser.quickAdd";
 export const LOAD_CSV_FILES_COMMAND = "waveViewer.signalBrowser.loadCsvFiles";
 export const RELOAD_ALL_FILES_COMMAND = "waveViewer.signalBrowser.reloadAllFiles";
+export const REMOVE_LOADED_FILE_COMMAND = "waveViewer.signalBrowser.removeLoadedFile";
 
 export type SignalTreeDataset = {
   datasetPath: string;
@@ -99,6 +100,23 @@ export function resolveSignalFromCommandArgument(
       : undefined;
 
   return { signal: signal.trim(), datasetPath };
+}
+
+export function resolveDatasetPathFromCommandArgument(argument: unknown): string | undefined {
+  if (typeof argument === "string" && argument.trim().length > 0) {
+    return argument.trim();
+  }
+
+  if (!argument || typeof argument !== "object") {
+    return undefined;
+  }
+
+  const datasetPathCandidate = Reflect.get(argument, "datasetPath");
+  if (typeof datasetPathCandidate !== "string" || datasetPathCandidate.trim().length === 0) {
+    return undefined;
+  }
+
+  return datasetPathCandidate.trim();
 }
 
 export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeDataProvider {
