@@ -77,7 +77,10 @@ function createDeps(overrides?: {
         dataset: {
           path: "/workspace/examples/simulations/ota.spice.csv",
           rowCount: 3,
-          columns: [{ name: "time" }, { name: "vin" }]
+          columns: [
+            { name: "time", values: [0, 1, 2] },
+            { name: "vin", values: [1, 2, 3] }
+          ]
         },
         defaultXSignal: "time"
       };
@@ -154,7 +157,10 @@ describe("T-002 extension shell smoke", () => {
           path: "/workspace/examples/simulations/ota.spice.csv",
           fileName: "ota.spice.csv",
           rowCount: 3,
-          columns: [{ name: "time" }, { name: "vin" }],
+          columns: [
+            { name: "time", values: [0, 1, 2] },
+            { name: "vin", values: [1, 2, 3] }
+          ],
           defaultXSignal: "time"
         }
       }

@@ -4,7 +4,7 @@ import type * as VSCode from "vscode";
 
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
-import type { Dataset, DatasetMetadata } from "./core/dataset/types";
+import type { Dataset } from "./core/dataset/types";
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
 
@@ -16,7 +16,7 @@ export type HostToWebviewMessage =
         path: string;
         fileName: string;
         rowCount: number;
-        columns: Array<{ name: string }>;
+        columns: Array<{ name: string; values: number[] }>;
         defaultXSignal: string;
       };
     };
@@ -43,7 +43,7 @@ export type WebviewPanelLike = {
 export type CommandDeps = {
   extensionUri: unknown;
   getActiveDocument(): ActiveDocumentLike | undefined;
-  loadDataset(documentPath: string): { dataset: DatasetMetadata; defaultXSignal: string };
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   createPanel(): WebviewPanelLike;
   showError(message: string): void;
   buildHtml(webview: WebviewLike, extensionUri: unknown): string;
@@ -66,7 +66,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       return;
     }
 
-    let normalizedDataset: { dataset: DatasetMetadata; defaultXSignal: string };
+    let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
     try {
       normalizedDataset = deps.loadDataset(activeDocument.uri.fsPath);
     } catch (error) {
@@ -93,7 +93,10 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           path: activeDocument.uri.fsPath,
           fileName: path.basename(activeDocument.fileName),
           rowCount: normalizedDataset.dataset.rowCount,
-          columns: normalizedDataset.dataset.columns,
+          columns: normalizedDataset.dataset.columns.map((column) => ({
+            name: column.name,
+            values: column.values
+          })),
           defaultXSignal: normalizedDataset.defaultXSignal
         }
       });
@@ -106,14 +109,6 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Failed to load CSV dataset.";
-}
-
-function toDatasetMetadata(dataset: Dataset): DatasetMetadata {
-  return {
-    path: dataset.path,
-    rowCount: dataset.rowCount,
-    columns: dataset.columns.map((column) => ({ name: column.name }))
-  };
 }
 
 function readWebviewTemplate(extensionUri: VSCode.Uri): string {
@@ -151,7 +146,7 @@ export function activate(context: VSCode.ExtensionContext): void {
       const csvText = fs.readFileSync(documentPath, "utf8");
       const dataset = parseCsv({ path: documentPath, csvText });
       const defaultXSignal = selectDefaultX(dataset);
-      return { dataset: toDatasetMetadata(dataset), defaultXSignal };
+      return { dataset, defaultXSignal };
     },
     createPanel: () =>
       vscode.window.createWebviewPanel("waveViewer.main", "Wave Viewer", vscode.ViewColumn.Beside, {
