@@ -10,15 +10,24 @@ Wave Viewer is a VS Code extension for plotting numeric signals from local CSV f
 2. Run `Wave Viewer: Open Active CSV` from the Command Palette.
 3. Wait for the dataset status to confirm rows/signals were loaded.
 
-### 2) Explore
+### 2) Explore (Side-Panel First)
 
-1. In the signal list, add traces to the active plot.
+1. Use the side-panel signal browser as the primary signal workflow:
+   - `Add to Plot` appends the signal to the active lane.
+   - `Add to New Axis` creates a new lane and binds the signal to it.
+   - `Reveal in Plot` activates the first plot containing that signal.
 2. Add a second plot tab from the tabs bar (`+`) to compare alternate signal groups.
 3. Add lanes (`y2`, `y3`, ...) from the axis manager and assign traces to each lane.
 4. Reorder lanes in the axis manager to change top-to-bottom render order.
 5. Use zoom/pan in the chart; one shared X-axis rangeslider controls all lanes, and captured ranges are persisted for replay.
 
-### 3) Export
+### 3) Transitional Fallback (Still Supported)
+
+1. In-webview signal-add controls remain available as a compatibility fallback during stabilization.
+2. Fallback actions are expected to produce reducer-equivalent workspace outcomes relative to side-panel actions.
+3. Deprecation of in-webview signal-add is deferred; no removal timeline is committed in the MVP window.
+
+### 4) Export
 
 1. Keep the target CSV active in the editor.
 2. Run `Wave Viewer: Export Plot Spec (YAML)`.
@@ -26,7 +35,7 @@ Wave Viewer is a VS Code extension for plotting numeric signals from local CSV f
 
 The export is deterministic for tab/axis/trace ordering and assignments.
 
-### 4) Replay
+### 5) Replay
 
 1. Keep the same CSV active in the editor.
 2. Run `Wave Viewer: Import Plot Spec (YAML)`.
