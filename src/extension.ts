@@ -13,6 +13,7 @@ import {
   type ProtocolEnvelope
 } from "./core/dataset/types";
 import {
+  createSignalTreeDragAndDropController,
   createSignalTreeDataProvider,
   type SignalTreeDataProvider,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
@@ -584,9 +585,11 @@ export function activate(context: VSCode.ExtensionContext): void {
 
   setSignalTreeFromActiveCsv();
 
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider(SIGNAL_BROWSER_VIEW_ID, signalTreeProvider)
-  );
+  const signalTreeView = vscode.window.createTreeView(SIGNAL_BROWSER_VIEW_ID, {
+    treeDataProvider: signalTreeProvider,
+    dragAndDropController: createSignalTreeDragAndDropController(vscode)
+  });
+  context.subscriptions.push(signalTreeView);
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(() => {
       setSignalTreeFromActiveCsv();
