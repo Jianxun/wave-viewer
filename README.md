@@ -14,8 +14,9 @@ Wave Viewer is a VS Code extension for plotting numeric signals from local CSV f
 
 1. In the signal list, add traces to the active plot.
 2. Add a second plot tab from the tabs bar (`+`) to compare alternate signal groups.
-3. Add axes (`y2`, `y3`, ...) from the axis manager and assign traces to different axes.
-4. Use zoom/pan in the chart; range state is captured for replay.
+3. Add lanes (`y2`, `y3`, ...) from the axis manager and assign traces to each lane.
+4. Reorder lanes in the axis manager to change top-to-bottom render order.
+5. Use zoom/pan in the chart; one shared X-axis rangeslider controls all lanes, and captured ranges are persisted for replay.
 
 ### 3) Export
 
@@ -31,7 +32,19 @@ The export is deterministic for tab/axis/trace ordering and assignments.
 2. Run `Wave Viewer: Import Plot Spec (YAML)`.
 3. Select the exported YAML file.
 
-Wave Viewer restores tab state, axis assignments, trace visibility, and persisted ranges. If the spec references signals missing from the current CSV, import fails with an explicit error.
+Wave Viewer restores tab state, lane assignments, trace visibility, and persisted ranges. If the spec references signals missing from the current CSV, import fails with an explicit error.
+
+## Known Limits (MVP)
+
+- Lane height and gap are fixed for deterministic rendering; dense lane counts may reduce readability.
+- Large CSV performance tuning (for very high sample counts) is not implemented yet.
+- The viewer only supports local CSV workflows in VS Code (no remote connectors).
+
+## Follow-ups (Post-MVP Candidates)
+
+- Adaptive lane heights/gaps for high axis counts.
+- Large-dataset decimation and related rendering performance work.
+- Additional axis styling presets and presentation controls.
 
 ## Verification
 

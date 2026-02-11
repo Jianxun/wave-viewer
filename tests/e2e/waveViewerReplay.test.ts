@@ -51,7 +51,7 @@ function createExploredWorkspace(defaultXSignal: string): WorkspaceState {
   });
 }
 
-describe("T-007 e2e replay smoke", () => {
+describe("T-012 e2e replay smoke", () => {
   it("replays ota.spice.csv workspace with two tabs, stacked lanes, and shared rangeslider", () => {
     const csvPath = path.resolve(process.cwd(), "examples/simulations/ota.spice.csv");
     const csvText = fs.readFileSync(csvPath, "utf8");
