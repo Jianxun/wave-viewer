@@ -93,6 +93,7 @@ export type CommandDeps = {
   extensionUri: unknown;
   getActiveDocument(): ActiveDocumentLike | undefined;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   createPanel(): WebviewPanelLike;
@@ -231,6 +232,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       deps.showError(getErrorMessage(error));
       return;
     }
+    deps.onDatasetLoaded?.(activeDocument.uri.fsPath, normalizedDataset);
 
     const panel = deps.createPanel();
     deps.onPanelCreated?.(activeDocument.uri.fsPath, panel);
@@ -431,59 +433,75 @@ export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
   const panelByDatasetPath = new Map<string, WebviewPanelLike>();
+  const loadedDatasetByPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
   const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
 
-  function setSignalTreeFromActiveCsv(): {
-    documentPath: string;
-    defaultXSignal: string;
-    signals: readonly string[];
-  } | null {
-    const activeDocument = vscode.window.activeTextEditor?.document;
-    if (!activeDocument || !isCsvFile(activeDocument.fileName)) {
-      signalTreeProvider.clear();
-      return null;
+  function refreshSignalTree(): void {
+    const loadedDatasets = Array.from(loadedDatasetByPath.entries()).map(([datasetPath, loaded]) => ({
+      datasetPath,
+      fileName: path.basename(datasetPath),
+      signals: loaded.dataset.columns.map((column) => column.name)
+    }));
+    signalTreeProvider.setLoadedDatasets(loadedDatasets);
+  }
+
+  function registerLoadedDataset(
+    documentPath: string,
+    loaded: { dataset: Dataset; defaultXSignal: string }
+  ): void {
+    loadedDatasetByPath.set(documentPath, loaded);
+    refreshSignalTree();
+  }
+
+  function resolveLoadedDatasetPath(argumentPath: string | undefined): string | undefined {
+    if (argumentPath) {
+      return argumentPath;
     }
 
-    try {
-      const csvText = fs.readFileSync(activeDocument.uri.fsPath, "utf8");
-      const dataset = parseCsv({ path: activeDocument.uri.fsPath, csvText });
-      const signals = dataset.columns.map((column) => column.name);
-      signalTreeProvider.setSignals(signals);
-      const defaultXSignal = selectDefaultX(dataset);
-      return { documentPath: activeDocument.uri.fsPath, defaultXSignal, signals };
-    } catch {
-      signalTreeProvider.clear();
-      return null;
+    if (loadedDatasetByPath.size === 1) {
+      return loadedDatasetByPath.keys().next().value as string | undefined;
     }
+
+    return undefined;
   }
 
   function runSidePanelSignalAction(actionType: SidePanelSignalAction["type"]): (item?: unknown) => void {
     return (item?: unknown) => {
-      const signal = resolveSignalFromCommandArgument(item);
-      if (!signal) {
+      const resolved = resolveSignalFromCommandArgument(item);
+      if (!resolved) {
         void vscode.window.showErrorMessage("Select a numeric signal in the Wave Viewer side panel.");
         return;
       }
 
-      const activeDatasetContext = setSignalTreeFromActiveCsv();
-      if (!activeDatasetContext) {
-        void vscode.window.showErrorMessage("Open an active .csv file before using Wave Viewer signals.");
+      const documentPath = resolveLoadedDatasetPath(resolved.datasetPath);
+      if (!documentPath) {
+        void vscode.window.showErrorMessage(
+          "Select a signal under a loaded CSV file in the Wave Viewer side panel."
+        );
         return;
       }
 
-      if (!activeDatasetContext.signals.includes(signal)) {
-        void vscode.window.showErrorMessage(`Signal '${signal}' is not available in the active dataset.`);
+      const loadedDataset = loadedDatasetByPath.get(documentPath);
+      if (!loadedDataset) {
+        void vscode.window.showErrorMessage(`Loaded dataset '${documentPath}' is no longer available.`);
+        return;
+      }
+
+      const signals = loadedDataset.dataset.columns.map((column) => column.name);
+      if (!signals.includes(resolved.signal)) {
+        void vscode.window.showErrorMessage(
+          `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
+        );
         return;
       }
 
       const workspace =
-        workspaceByDatasetPath.get(activeDatasetContext.documentPath) ??
-        createWorkspaceState(activeDatasetContext.defaultXSignal);
-      const nextWorkspace = applySidePanelSignalAction(workspace, { type: actionType, signal });
-      workspaceByDatasetPath.set(activeDatasetContext.documentPath, nextWorkspace);
+        workspaceByDatasetPath.get(documentPath) ?? createWorkspaceState(loadedDataset.defaultXSignal);
+      const nextWorkspace = applySidePanelSignalAction(workspace, { type: actionType, signal: resolved.signal });
+      workspaceByDatasetPath.set(documentPath, nextWorkspace);
 
-      const panel = panelByDatasetPath.get(activeDatasetContext.documentPath);
+      const panel = panelByDatasetPath.get(documentPath);
       if (!panel) {
         return;
       }
@@ -498,38 +516,53 @@ export function activate(context: VSCode.ExtensionContext): void {
   }
 
   const runSidePanelQuickAdd = (item?: unknown): void => {
-    const signal = resolveSignalFromCommandArgument(item);
-    if (!signal) {
+    const resolved = resolveSignalFromCommandArgument(item);
+    if (!resolved) {
       void vscode.window.showErrorMessage("Select a numeric signal in the Wave Viewer side panel.");
       return;
     }
 
-    if (!resolveQuickAddDoubleClick(signal)) {
+    if (!resolveQuickAddDoubleClick(resolved)) {
       return;
     }
 
-    const activeDatasetContext = setSignalTreeFromActiveCsv();
-    if (!activeDatasetContext) {
-      void vscode.window.showErrorMessage("Open an active .csv file before using Wave Viewer signals.");
+    const documentPath = resolveLoadedDatasetPath(resolved.datasetPath);
+    if (!documentPath) {
+      void vscode.window.showErrorMessage(
+        "Select a signal under a loaded CSV file in the Wave Viewer side panel."
+      );
       return;
     }
 
-    if (!activeDatasetContext.signals.includes(signal)) {
-      void vscode.window.showErrorMessage(`Signal '${signal}' is not available in the active dataset.`);
+    const loadedDataset = loadedDatasetByPath.get(documentPath);
+    if (!loadedDataset) {
+      void vscode.window.showErrorMessage(`Loaded dataset '${documentPath}' is no longer available.`);
       return;
     }
 
-    const panel = panelByDatasetPath.get(activeDatasetContext.documentPath);
+    const signals = loadedDataset.dataset.columns.map((column) => column.name);
+    if (!signals.includes(resolved.signal)) {
+      void vscode.window.showErrorMessage(
+        `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
+      );
+      return;
+    }
+
+    const panel = panelByDatasetPath.get(documentPath);
     if (!panel) {
       const workspace =
-        workspaceByDatasetPath.get(activeDatasetContext.documentPath) ??
-        createWorkspaceState(activeDatasetContext.defaultXSignal);
-      const nextWorkspace = applySidePanelSignalAction(workspace, { type: "add-to-plot", signal });
-      workspaceByDatasetPath.set(activeDatasetContext.documentPath, nextWorkspace);
+        workspaceByDatasetPath.get(documentPath) ?? createWorkspaceState(loadedDataset.defaultXSignal);
+      const nextWorkspace = applySidePanelSignalAction(workspace, {
+        type: "add-to-plot",
+        signal: resolved.signal
+      });
+      workspaceByDatasetPath.set(documentPath, nextWorkspace);
       return;
     }
 
-    void panel.webview.postMessage(createProtocolEnvelope("host/sidePanelQuickAdd", { signal }));
+    void panel.webview.postMessage(
+      createProtocolEnvelope("host/sidePanelQuickAdd", { signal: resolved.signal })
+    );
   };
 
   const command = createOpenViewerCommand({
@@ -540,6 +573,9 @@ export function activate(context: VSCode.ExtensionContext): void {
       const dataset = parseCsv({ path: documentPath, csvText });
       const defaultXSignal = selectDefaultX(dataset);
       return { dataset, defaultXSignal };
+    },
+    onDatasetLoaded: (documentPath, loaded) => {
+      registerLoadedDataset(documentPath, loaded);
     },
     getCachedWorkspace: (documentPath) => workspaceByDatasetPath.get(documentPath),
     setCachedWorkspace: (documentPath, workspace) => {
@@ -623,18 +659,11 @@ export function activate(context: VSCode.ExtensionContext): void {
     readTextFile: (filePath) => fs.readFileSync(filePath, "utf8")
   });
 
-  setSignalTreeFromActiveCsv();
-
   const signalTreeView = vscode.window.createTreeView(SIGNAL_BROWSER_VIEW_ID, {
     treeDataProvider: signalTreeProvider,
     dragAndDropController: createSignalTreeDragAndDropController(vscode)
   });
   context.subscriptions.push(signalTreeView);
-  context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(() => {
-      setSignalTreeFromActiveCsv();
-    })
-  );
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
   context.subscriptions.push(vscode.commands.registerCommand(EXPORT_SPEC_COMMAND, exportSpecCommand));
   context.subscriptions.push(vscode.commands.registerCommand(IMPORT_SPEC_COMMAND, importSpecCommand));

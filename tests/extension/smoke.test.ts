@@ -58,6 +58,7 @@ function createDeps(overrides?: {
   buildHtml?: string;
   loadDatasetError?: string;
   initialWorkspace?: WorkspaceState;
+  onDatasetLoaded?: ReturnType<typeof vi.fn>;
 }): {
   deps: CommandDeps;
   panelFixture: PanelFixture;
@@ -114,6 +115,9 @@ function createDeps(overrides?: {
     logDebug,
     buildHtml: () => overrides?.buildHtml ?? "<html>shell</html>"
   };
+  if (overrides?.onDatasetLoaded) {
+    deps.onDatasetLoaded = overrides.onDatasetLoaded;
+  }
 
   return { deps, panelFixture, showError, logDebug, getCachedWorkspace, setCachedWorkspace };
 }
@@ -213,6 +217,25 @@ describe("T-002 extension shell smoke", () => {
     expect(datasetMessage?.type).toBe("host/datasetLoaded");
     expect(datasetMessage?.payload).not.toHaveProperty("layout");
     expect(datasetMessage?.payload).not.toHaveProperty("axes");
+  });
+
+  it("registers loaded dataset context when open viewer parses a csv", async () => {
+    const onDatasetLoaded = vi.fn();
+    const { deps } = createDeps({ onDatasetLoaded });
+
+    await createOpenViewerCommand(deps)();
+
+    expect(onDatasetLoaded).toHaveBeenCalledWith("/workspace/examples/simulations/ota.spice.csv", {
+      dataset: {
+        path: "/workspace/examples/simulations/ota.spice.csv",
+        rowCount: 3,
+        columns: [
+          { name: "time", values: [0, 1, 2] },
+          { name: "vin", values: [1, 2, 3] }
+        ]
+      },
+      defaultXSignal: "time"
+    });
   });
 
   it("ignores unknown inbound messages without posting responses", async () => {
