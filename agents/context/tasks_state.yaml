@@ -20,7 +20,7 @@ T-005:
   pr: 5
   merged: true
 T-006:
-  status: ready
+  status: in_progress
   pr: null
   merged: false
 T-007:
