@@ -24,6 +24,6 @@ T-006:
   pr: 6
   merged: true
 T-007:
-  status: ready
+  status: in_progress
   pr: null
   merged: false
