@@ -67,7 +67,7 @@ describe("signal tree dataset registry entries", () => {
     };
   }
 
-  it("renders loaded files as parent entries and signals as children", () => {
+  it("renders loaded files as parent entries and signals as children", async () => {
     const provider = createSignalTreeDataProvider(createVscodeShim() as never);
 
     provider.setLoadedDatasets([
@@ -78,7 +78,7 @@ describe("signal tree dataset registry entries", () => {
       }
     ]);
 
-    const roots = provider.getChildren();
+    const roots = (await provider.getChildren()) ?? [];
     expect(roots).toHaveLength(1);
     expect(roots[0]).toMatchObject({
       kind: "dataset",
@@ -86,7 +86,7 @@ describe("signal tree dataset registry entries", () => {
       fileName: "a.csv"
     });
 
-    const children = provider.getChildren(roots[0]);
+    const children = (await provider.getChildren(roots[0])) ?? [];
     expect(children).toEqual([
       {
         kind: "signal",
