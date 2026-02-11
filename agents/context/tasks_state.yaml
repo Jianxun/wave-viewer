@@ -12,7 +12,7 @@ T-022:
   pr: 26
   merged: true
 T-023:
-  status: ready
+  status: in_progress
   pr: null
   merged: false
 T-024:
