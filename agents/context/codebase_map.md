@@ -12,6 +12,9 @@
     - `wave-viewer-mvp.md`
     - `testing-strategy.md`
     - `domain-stacked-shared-x-implementation.md` (ADR-0002 execution guide)
+- `doc/`
+  - Architecture references:
+    - `vaporview-architecture-findings.md` (side-panel/custom-editor architecture analysis)
 - `scripts/`
   - Workflow helper scripts:
     - `lint_tasks_state.py`: validates `tasks.yaml` and `tasks_state.yaml`.
@@ -24,7 +27,7 @@
 - Task workflow state: `agents/context/tasks_state.yaml`
 - Archived tasks: `agents/context/tasks_archived.yaml`
 - Global resume point: `agents/context/project_status.md`
-- Active task scratchpads: `agents/scratchpads/T-008.md` to `agents/scratchpads/T-012.md`
+- Active task scratchpads: `agents/scratchpads/T-013.md` to `agents/scratchpads/T-016.md`
 - MVP implementation spec: `doc/specs/wave-viewer-mvp.md`
 - ADR-0002 implementation spec: `doc/specs/domain-stacked-shared-x-implementation.md`
 

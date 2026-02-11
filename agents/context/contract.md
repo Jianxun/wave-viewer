@@ -11,7 +11,8 @@ Active ADRs:
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle.
-- Webview UI (HTML/CSS/TypeScript): plot tabs, signal list, trace list, axis manager, Plotly canvas.
+- VS Code side-panel signal browser view: discover/select signals and invoke plot actions.
+- Webview UI (HTML/CSS/TypeScript): plot tabs, trace list, axis manager, Plotly canvas, and lane drop targets.
 - CSV ingestion layer: parse CSV, infer plottable numeric signals, normalize dataset.
 - Plot state layer: manage workspace with multiple plots/tabs and N-axis metadata.
 - Plot adapter: map dataset and plot state to one shared-`xaxis` figure with domain-stacked `yaxis*` lanes.
@@ -81,3 +82,4 @@ Active ADRs:
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.
 - 2026-02-11: Adopted domain-stacked Y-axis rendering in a single figure with shared X-axis/rangeslider (no subplot sync model); see ADR-0002.
+- 2026-02-11: Adopt side-panel-first signal workflow direction (inspired by VaporView architecture) while retaining reducer-driven deterministic plot state updates.

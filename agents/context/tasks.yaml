@@ -1,119 +1,103 @@
 schema_version: 2
 current_sprint:
-  - id: T-008
-    title: Rebaseline workspace state for domain-stacked shared-x rendering
+  - id: T-013
+    title: Add side-panel signal browser and extension-webview signal actions
     owner: Executor
     dod:
-      - Align `WorkspaceState`/`PlotState`/`AxisState` types with ADR-0002 and remove overlay-specific assumptions.
-      - Ensure axis order in `plot.axes` is treated as top-to-bottom lane order.
-      - Update reducer actions and invariants for axis add/remove/reorder under the lane model.
-      - Preserve trace-instance semantics so a signal can appear in multiple lanes.
+      - Contribute a VS Code side-panel signal browser view for loaded numeric signals.
+      - Implement a `TreeDataProvider` for signal entries with add-to-plot command support.
+      - Wire extension-host actions so side-panel interactions add traces to the active plot deterministically.
+      - Keep current in-webview signal controls functional as fallback during migration.
     verify:
       - npm run lint
+      - npm test -- tests/extension/smoke.test.ts
       - npm test -- tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-008.md
-      spec: doc/specs/domain-stacked-shared-x-implementation.md
-      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
+      scratchpad: agents/scratchpads/T-013.md
+      spec: doc/vaporview-architecture-findings.md
     files:
-      - src/webview/state/workspaceState.ts
-      - src/webview/state/reducer.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-008.md
-  - id: T-009
-    title: Implement Plotly domain-stacked lanes with shared x-axis rangeslider
-    owner: Executor
-    depends_on:
-      - T-008
-    dod:
-      - Replace overlay-axis rendering with non-overlapping domain-stacked `yaxis*` layout.
-      - Enforce one shared `xaxis` and one shared `xaxis.rangeslider` per plot tab.
-      - Implement deterministic domain calculation per spec (`g=0.04`, top-to-bottom from axis order).
-      - Update relayout parsing for shared x-range and per-lane y-range capture.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/webview/plotly/adapter.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-009.md
-      spec: doc/specs/domain-stacked-shared-x-implementation.md
-      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
-    files:
-      - src/webview/plotly/adapter.ts
-      - src/webview/plotly/renderPlot.ts
+      - package.json
+      - src/extension.ts
+      - src/extension/signalTree.ts
+      - src/core/dataset/types.ts
       - src/webview/main.ts
-      - tests/unit/webview/plotly/adapter.test.ts
-      - agents/scratchpads/T-009.md
-backlog:
-  - id: T-010
-    title: Update axis manager UI for lane ordering and assignment clarity
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-013.md
+  - id: T-014
+    title: Implement drag and drop from signal browser to axis lanes
     owner: Executor
     depends_on:
-      - T-009
+      - T-013
     dod:
-      - Update Axis Manager interactions to reflect lane semantics (top/bottom ordering, not overlay side controls).
-      - Add explicit reorder actions in UI and reducer integration.
-      - Keep signal-to-axis assignment workflow explicit and consistent with trace-instance model.
-      - Ensure axis deletion/reassignment UX remains deterministic and validation-safe.
+      - Enable dragging signal items from the side-panel browser.
+      - Add webview drop targets for axis lanes (axis rows) with visible hover feedback.
+      - On drop, add a trace bound to the target axis; support explicit drop target for creating a new axis.
+      - Keep reducer-driven updates deterministic and compatible with existing workspace replay flow.
     verify:
       - npm run lint
-      - npm test
+      - npm test -- tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts
     links:
-      scratchpad: agents/scratchpads/T-010.md
-      spec: doc/specs/domain-stacked-shared-x-implementation.md
+      scratchpad: agents/scratchpads/T-014.md
+      spec: doc/vaporview-architecture-findings.md
     files:
       - src/webview/components/AxisManager.ts
-      - src/webview/components/SignalList.ts
-      - src/webview/components/TraceList.ts
       - src/webview/main.ts
+      - src/webview/index.html
+      - src/webview/styles.css
+      - src/extension.ts
       - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-010.md
-  - id: T-011
-    title: Revise plot spec schema and importer/exporter for ADR-0002 semantics
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-014.md
+backlog:
+  - id: T-015
+    title: Add canvas-domain drop overlay and quick-add ergonomics
     owner: Executor
     depends_on:
-      - T-010
+      - T-014
     dod:
-      - Update spec schema/types to represent domain-stacked lane semantics.
-      - Keep deterministic ordering guarantees for plots, axes, and traces.
-      - Define explicit handling for legacy specs (clear error or controlled migration path, documented in code/tests).
-      - Update import/export validation for axis references and missing signals.
+      - Add a plot-canvas drop overlay that maps pointer location to domain-stacked lanes.
+      - Implement drop-to-lane behavior matching lane domain boundaries from the Plotly adapter.
+      - Add double-click quick-add from side panel to active/default target lane.
+      - Ensure overlay and row-target drop paths share one dispatch contract.
     verify:
       - npm run lint
-      - npm test -- tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
+      - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-011.md
-      spec: doc/specs/domain-stacked-shared-x-implementation.md
-      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
+      scratchpad: agents/scratchpads/T-015.md
+      spec: doc/vaporview-architecture-findings.md
     files:
-      - src/core/spec/plotSpecV1.ts
-      - src/core/spec/exportSpec.ts
-      - src/core/spec/importSpec.ts
-      - tests/unit/spec/roundtrip.test.ts
-      - tests/unit/spec/importErrors.test.ts
-      - agents/scratchpads/T-011.md
-  - id: T-012
-    title: End-to-end regression coverage and docs refresh for domain-stacked behavior
+      - src/webview/plotly/adapter.ts
+      - src/webview/main.ts
+      - src/webview/index.html
+      - src/webview/styles.css
+      - src/webview/components/SignalList.ts
+      - tests/unit/webview/plotly/adapter.test.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-015.md
+  - id: T-016
+    title: Keyboard and workflow polish for side-panel-driven plotting
     owner: Executor
     depends_on:
-      - T-011
+      - T-015
     dod:
-      - Update e2e smoke scenario to verify stacked non-overlapping lanes and shared rangeslider behavior.
-      - Refresh README workflow language to match lane terminology and controls.
-      - Add regression assertions that prevent fallback to overlay-axis behavior.
-      - Record known limits and follow-up items in docs (without expanding MVP scope).
+      - Add keybinding-backed actions for zoom-to-fit and cancel-active-gesture semantics in viewer scope.
+      - Add context actions for side-panel signal items (`Add to Plot`, `Add to New Axis`, `Reveal in Plot`).
+      - Update README usage workflow to document side-panel-first plotting interactions.
+      - Add regression checks for command wiring and key action message flow.
     verify:
       - npm run lint
       - npm test
-      - npm run test:e2e
     links:
-      scratchpad: agents/scratchpads/T-012.md
-      spec: doc/specs/domain-stacked-shared-x-implementation.md
+      scratchpad: agents/scratchpads/T-016.md
+      spec: doc/vaporview-architecture-findings.md
     files:
-      - tests/e2e/waveViewerReplay.test.ts
+      - package.json
+      - src/extension.ts
+      - src/webview/main.ts
       - tests/extension/smoke.test.ts
       - README.md
-      - doc/specs/wave-viewer-mvp.md
-      - agents/scratchpads/T-012.md
+      - agents/scratchpads/T-016.md
 exploration_candidates:
-  - Evaluate dynamic lane heights and adaptive gaps for >8 axes.
-  - Evaluate decimation strategy for large CSV files under shared-x lane rendering.
+  - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) for tighter VS Code integration.
+  - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.
+  - Evaluate decimation strategy for large CSV files under side-panel-driven multi-trace workflows.

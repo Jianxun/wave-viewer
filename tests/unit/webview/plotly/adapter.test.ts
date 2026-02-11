@@ -65,10 +65,39 @@ describe("plotly adapter", () => {
 
     expect(figure.layout.xaxis).toMatchObject({
       title: { text: "time" },
-      rangeslider: { visible: true }
+      rangeslider: { visible: true, autorange: true, range: [0, 2] },
+      autorange: true,
+      fixedrange: false
+    });
+    expect(figure.layout).toMatchObject({
+      template: "plotly_dark",
+      paper_bgcolor: "#101723",
+      plot_bgcolor: "#101723",
+      dragmode: "zoom"
     });
     expect(figure.layout.yaxis).toMatchObject({ domain: [0.52, 1], anchor: "x" });
     expect(figure.layout.yaxis2).toMatchObject({ domain: [0, 0.48], anchor: "x" });
+    expect(figure.layout.yaxis).toMatchObject({ fixedrange: false });
+    expect(figure.layout.yaxis2).toMatchObject({ fixedrange: false });
+    expect(figure.layout.shapes).toHaveLength(2);
+    expect(figure.layout.shapes?.[0]).toMatchObject({
+      type: "rect",
+      xref: "paper",
+      yref: "paper",
+      x0: 0,
+      x1: 1,
+      y0: 0.52,
+      y1: 1
+    });
+    expect(figure.layout.shapes?.[1]).toMatchObject({
+      type: "rect",
+      xref: "paper",
+      yref: "paper",
+      x0: 0,
+      x1: 1,
+      y0: 0,
+      y1: 0.48
+    });
   });
 
   it("restores persisted x/y ranges into plotly layout", () => {
@@ -83,7 +112,7 @@ describe("plotly adapter", () => {
       columns
     });
 
-    expect(figure.layout.xaxis).toMatchObject({ range: [0.2, 1.8] });
+    expect(figure.layout.xaxis).toMatchObject({ autorange: false, range: [0.2, 1.8] });
     expect(figure.layout.yaxis).toMatchObject({ range: [1, 4] });
     expect(figure.layout.yaxis2).toMatchObject({ range: [0, 5] });
   });

@@ -26,18 +26,38 @@ export type PlotlyAxisLayout = {
   domain?: [number, number];
   anchor?: "x";
   automargin?: boolean;
+  fixedrange?: boolean;
 };
 
 export type PlotlyLayout = {
   margin: { l: number; r: number; t: number; b: number };
   showlegend: boolean;
+  template?: "plotly_dark";
+  paper_bgcolor?: string;
+  plot_bgcolor?: string;
+  font?: { color: string };
+  dragmode?: "zoom";
+  shapes?: Array<{
+    type: "rect";
+    xref: "paper";
+    yref: "paper";
+    x0: number;
+    x1: number;
+    y0: number;
+    y1: number;
+    line: { color: string; width: number };
+    fillcolor: "rgba(0,0,0,0)";
+    layer: "below";
+  }>;
   hovermode: "x unified";
   legend: { orientation: "h"; y: number; x: number };
   xaxis: {
     title?: { text: string };
+    autorange?: boolean;
     range?: [number, number];
-    rangeslider?: { visible: boolean };
+    rangeslider?: { visible: boolean; autorange?: boolean; range?: [number, number] };
     automargin: boolean;
+    fixedrange?: boolean;
   };
   [key: string]: unknown;
 };
@@ -65,6 +85,7 @@ export function buildPlotlyFigure(payload: {
 }): PlotlyFigure {
   const columnsByName = new Map(payload.columns.map((column) => [column.name, column.values] as const));
   const xValues = columnsByName.get(payload.plot.xSignal) ?? [];
+  const xBounds = getBounds(xValues);
 
   const data: PlotlyTrace[] = payload.plot.traces.map((trace) => {
     const yValues = columnsByName.get(trace.signal) ?? [];
@@ -88,17 +109,30 @@ export function buildPlotlyFigure(payload: {
   const layout: PlotlyLayout = {
     margin: { l: 48, r: 48, t: 20, b: 44 },
     showlegend: true,
+    template: "plotly_dark",
+    paper_bgcolor: "#101723",
+    plot_bgcolor: "#101723",
+    font: { color: "#e8edf8" },
+    dragmode: "zoom",
     hovermode: "x unified",
     legend: { orientation: "h", y: 1.08, x: 0 },
     xaxis: {
       title: { text: payload.plot.xSignal },
+      autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
-      rangeslider: { visible: true },
-      automargin: true
+      rangeslider: {
+        visible: true,
+        autorange: true,
+        range: xBounds
+      },
+      automargin: true,
+      fixedrange: false
     }
   };
 
   const laneDomains = buildLaneDomains(payload.plot.axes.length);
+  layout.shapes = buildLaneOutlineShapes(laneDomains);
+
   for (const [index, axis] of payload.plot.axes.entries()) {
     const mapping = mapAxisIdToPlotly(axis.id);
     layout[mapping.layoutKey] = toAxisLayout(axis, laneDomains[index]);
@@ -114,7 +148,8 @@ function toAxisLayout(axis: AxisState, domain: [number, number] | undefined): Pl
     range: axis.range,
     domain,
     anchor: "x",
-    automargin: true
+    automargin: true,
+    fixedrange: false
   };
 }
 
@@ -148,6 +183,23 @@ function clampToDomain(value: number): number {
     return 1;
   }
   return value;
+}
+
+function buildLaneOutlineShapes(
+  laneDomains: Array<[number, number]>
+): NonNullable<PlotlyLayout["shapes"]> {
+  return laneDomains.map(([y0, y1]) => ({
+    type: "rect",
+    xref: "paper",
+    yref: "paper",
+    x0: 0,
+    x1: 1,
+    y0,
+    y1,
+    line: { color: "#3b4f7f", width: 1 },
+    fillcolor: "rgba(0,0,0,0)",
+    layer: "below"
+  }));
 }
 
 export type PlotRangeUpdates = {
@@ -214,4 +266,27 @@ function toFiniteNumber(value: unknown): number | undefined {
   }
 
   return value;
+}
+
+function getBounds(values: number[]): [number, number] | undefined {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  for (const value of values) {
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    if (value < min) {
+      min = value;
+    }
+    if (value > max) {
+      max = value;
+    }
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return undefined;
+  }
+
+  return [min, max];
 }
