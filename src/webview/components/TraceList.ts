@@ -1,4 +1,5 @@
 import type { AxisId, AxisState, TraceState } from "../state/workspaceState";
+import { formatAxisOptionLabel } from "./axisLabels";
 
 export type TraceListProps = {
   container: HTMLElement;
@@ -28,7 +29,13 @@ export function renderTraceList(props: TraceListProps): void {
     const axisSelect = document.createElement("select");
     axisSelect.className = "inline-select";
     for (const axis of props.axes) {
-      axisSelect.add(new Option(axis.id.toUpperCase(), axis.id, axis.id === trace.axisId));
+      axisSelect.add(
+        new Option(
+          formatAxisOptionLabel(props.axes, axis.id),
+          axis.id,
+          axis.id === trace.axisId
+        )
+      );
     }
     axisSelect.addEventListener("change", () => props.onSetAxis(trace.id, axisSelect.value as AxisId));
 

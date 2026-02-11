@@ -81,6 +81,16 @@ describe("workspaceState", () => {
     expect(plot?.traces.map((trace) => trace.axisId)).toEqual(["y1"]);
   });
 
+  it("rejects axis removal when reassignment target matches removed axis", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, { signal: "vout", axisId: "y2" });
+
+    expect(() =>
+      removeAxis(workspace, { axisId: "y2", reassignToAxisId: "y2" })
+    ).toThrow("Axis reassignment target must differ from removed axis.");
+  });
+
   it("never reuses axis ids after axis deletion in the same plot session", () => {
     let workspace = createWorkspaceState("time");
     workspace = addAxis(workspace, {});

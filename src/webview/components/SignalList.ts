@@ -1,4 +1,5 @@
 import type { AxisId, AxisState } from "../state/workspaceState";
+import { formatAxisOptionLabel } from "./axisLabels";
 
 export type SignalListProps = {
   container: HTMLElement;
@@ -26,7 +27,7 @@ export function renderSignalList(props: SignalListProps): void {
     const axisSelect = document.createElement("select");
     axisSelect.className = "inline-select";
     for (const axis of props.axes) {
-      axisSelect.add(new Option(axis.id.toUpperCase(), axis.id));
+      axisSelect.add(new Option(formatAxisOptionLabel(props.axes, axis.id), axis.id));
     }
     axisSelect.add(new Option("Create new axis", "create-new"));
 

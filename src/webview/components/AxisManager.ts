@@ -1,9 +1,11 @@
 import type { AxisId, AxisState } from "../state/workspaceState";
+import { formatAxisLaneLabel, formatAxisOptionLabel } from "./axisLabels";
 
 export type AxisManagerProps = {
   container: HTMLElement;
   axes: AxisState[];
   onAddAxis(): void;
+  onReorderAxis(payload: { axisId: AxisId; toIndex: number }): void;
   onRemoveAxis(payload: { axisId: AxisId; reassignToAxisId?: AxisId }): void;
   onReassignTraces(payload: { fromAxisId: AxisId; toAxisId: AxisId }): void;
   onUpdateAxis(payload: { axisId: AxisId; patch: Partial<Omit<AxisState, "id">> }): void;
@@ -12,21 +14,13 @@ export type AxisManagerProps = {
 export function renderAxisManager(props: AxisManagerProps): void {
   props.container.replaceChildren();
 
-  for (const axis of props.axes) {
+  for (const [index, axis] of props.axes.entries()) {
     const row = document.createElement("div");
     row.className = "list-row axis-row";
 
     const label = document.createElement("span");
     label.className = "signal-name";
-    label.textContent = axis.id.toUpperCase();
-
-    const sideSelect = document.createElement("select");
-    sideSelect.className = "inline-select";
-    sideSelect.add(new Option("Left", "left", axis.side === "left"));
-    sideSelect.add(new Option("Right", "right", axis.side === "right"));
-    sideSelect.addEventListener("change", () => {
-      props.onUpdateAxis({ axisId: axis.id, patch: { side: sideSelect.value as "left" | "right" } });
-    });
+    label.textContent = formatAxisLaneLabel(props.axes, axis);
 
     const titleInput = document.createElement("input");
     titleInput.type = "text";
@@ -39,12 +33,30 @@ export function renderAxisManager(props: AxisManagerProps): void {
 
     const reassignSelect = document.createElement("select");
     reassignSelect.className = "inline-select";
-    reassignSelect.add(new Option("Keep", ""));
+    reassignSelect.add(new Option("Reassign traces: select target", ""));
     for (const candidate of props.axes) {
       if (candidate.id !== axis.id) {
-        reassignSelect.add(new Option(`Move traces -> ${candidate.id.toUpperCase()}`, candidate.id));
+        reassignSelect.add(new Option(formatAxisOptionLabel(props.axes, candidate.id), candidate.id));
       }
     }
+
+    const moveUpButton = document.createElement("button");
+    moveUpButton.type = "button";
+    moveUpButton.className = "chip-button";
+    moveUpButton.textContent = "Move Up";
+    moveUpButton.disabled = index === 0;
+    moveUpButton.addEventListener("click", () => {
+      props.onReorderAxis({ axisId: axis.id, toIndex: index - 1 });
+    });
+
+    const moveDownButton = document.createElement("button");
+    moveDownButton.type = "button";
+    moveDownButton.className = "chip-button";
+    moveDownButton.textContent = "Move Down";
+    moveDownButton.disabled = index === props.axes.length - 1;
+    moveDownButton.addEventListener("click", () => {
+      props.onReorderAxis({ axisId: axis.id, toIndex: index + 1 });
+    });
 
     const reassignButton = document.createElement("button");
     reassignButton.type = "button";
@@ -72,7 +84,15 @@ export function renderAxisManager(props: AxisManagerProps): void {
       });
     });
 
-    row.append(label, sideSelect, titleInput, reassignSelect, reassignButton, removeButton);
+    row.append(
+      label,
+      moveUpButton,
+      moveDownButton,
+      titleInput,
+      reassignSelect,
+      reassignButton,
+      removeButton
+    );
     props.container.appendChild(row);
   }
 
