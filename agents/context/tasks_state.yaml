@@ -24,6 +24,6 @@ T-017:
   pr: 21
   merged: true
 T-019:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 22
+  merged: true
