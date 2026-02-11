@@ -16,6 +16,6 @@ T-023:
   pr: 27
   merged: true
 T-024:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 28
+  merged: true

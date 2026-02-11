@@ -55,6 +55,8 @@ export type PlotlyLayout = {
     title?: { text: string };
     autorange?: boolean;
     range?: [number, number];
+    anchor?: "free";
+    position?: number;
     rangeslider?: { visible: boolean; autorange?: boolean; range?: [number, number] };
     automargin: boolean;
     fixedrange?: boolean;
@@ -72,16 +74,29 @@ export type AxisLaneDomain = {
   domain: [number, number];
 };
 
-export function mapAxisIdToPlotly(axisId: AxisId): { traceRef: string; layoutKey: string } {
-  if (axisId === "y1") {
+export type RenderAxisMapping = AxisLaneDomain & {
+  laneIndex: number;
+  traceRef: string;
+  layoutKey: string;
+};
+
+export function mapLaneIndexToPlotly(laneIndex: number): { traceRef: string; layoutKey: string } {
+  const suffix = laneIndex + 1;
+  if (suffix === 1) {
     return { traceRef: "y", layoutKey: "yaxis" };
   }
 
-  const suffix = axisId.slice(1);
-  return {
-    traceRef: `y${suffix}`,
-    layoutKey: `yaxis${suffix}`
-  };
+  return { traceRef: `y${suffix}`, layoutKey: `yaxis${suffix}` };
+}
+
+export function buildRenderAxisMappings(axes: ReadonlyArray<Pick<AxisState, "id">>): RenderAxisMapping[] {
+  const domains = buildLaneDomains(axes.length);
+  return axes.map((axis, laneIndex) => ({
+    axisId: axis.id,
+    laneIndex,
+    domain: domains[laneIndex] ?? [0, 1],
+    ...mapLaneIndexToPlotly(laneIndex)
+  }));
 }
 
 export function buildPlotlyFigure(payload: {
@@ -91,10 +106,13 @@ export function buildPlotlyFigure(payload: {
   const columnsByName = new Map(payload.columns.map((column) => [column.name, column.values] as const));
   const xValues = columnsByName.get(payload.plot.xSignal) ?? [];
   const xBounds = getBounds(xValues);
+  const axisMappings = buildRenderAxisMappings(payload.plot.axes);
+  const axisMappingById = new Map(axisMappings.map((mapping) => [mapping.axisId, mapping] as const));
+  const defaultTraceAxisRef = axisMappings[0]?.traceRef ?? "y";
 
   const data: PlotlyTrace[] = payload.plot.traces.map((trace) => {
     const yValues = columnsByName.get(trace.signal) ?? [];
-    const axisMap = mapAxisIdToPlotly(trace.axisId);
+    const axisMap = axisMappingById.get(trace.axisId);
 
     return {
       type: "scatter",
@@ -102,7 +120,7 @@ export function buildPlotlyFigure(payload: {
       name: trace.signal,
       x: xValues,
       y: yValues,
-      yaxis: axisMap.traceRef,
+      yaxis: axisMap?.traceRef ?? defaultTraceAxisRef,
       visible: trace.visible,
       line: {
         color: trace.color,
@@ -125,6 +143,8 @@ export function buildPlotlyFigure(payload: {
       title: { text: payload.plot.xSignal },
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
+      anchor: "free",
+      position: 0,
       rangeslider: {
         visible: true,
         autorange: true,
@@ -135,20 +155,21 @@ export function buildPlotlyFigure(payload: {
     }
   };
 
-  const laneDomains = getAxisLaneDomains(payload.plot.axes);
-  layout.shapes = buildLaneOutlineShapes(laneDomains.map((lane) => lane.domain));
+  layout.shapes = buildLaneOutlineShapes(axisMappings.map((lane) => lane.domain));
 
   for (const [index, axis] of payload.plot.axes.entries()) {
-    const mapping = mapAxisIdToPlotly(axis.id);
-    layout[mapping.layoutKey] = toAxisLayout(axis, laneDomains[index]?.domain);
+    const mapping = axisMappings[index];
+    if (!mapping) {
+      continue;
+    }
+    layout[mapping.layoutKey] = toAxisLayout(axis, mapping.domain);
   }
 
   return { data, layout };
 }
 
 export function getAxisLaneDomains(axes: ReadonlyArray<Pick<AxisState, "id">>): AxisLaneDomain[] {
-  const domains = buildLaneDomains(axes.length);
-  return axes.map((axis, index) => ({ axisId: axis.id, domain: domains[index] ?? [0, 1] }));
+  return buildRenderAxisMappings(axes).map(({ axisId, domain }) => ({ axisId, domain }));
 }
 
 export function resolveAxisIdFromNormalizedY(
@@ -253,12 +274,12 @@ export function parseRelayoutRanges(
 ): PlotRangeUpdates {
   const axisRanges: Array<{ axisId: AxisId; range?: [number, number] }> = [];
   const xRangeRead = readRangeUpdate(relayoutData, "xaxis");
+  const axisMappings = buildRenderAxisMappings(axes);
 
-  for (const axis of axes) {
-    const plotlyAxis = mapAxisIdToPlotly(axis.id).layoutKey;
-    const axisRead = readRangeUpdate(relayoutData, plotlyAxis);
+  for (const mapping of axisMappings) {
+    const axisRead = readRangeUpdate(relayoutData, mapping.layoutKey);
     if (axisRead.present) {
-      axisRanges.push({ axisId: axis.id, range: axisRead.range });
+      axisRanges.push({ axisId: mapping.axisId, range: axisRead.range });
     }
   }
 
