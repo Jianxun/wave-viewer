@@ -8,9 +8,9 @@ T-002:
   pr: 2
   merged: true
 T-003:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 3
+  merged: true
 T-004:
   status: ready
   pr: null

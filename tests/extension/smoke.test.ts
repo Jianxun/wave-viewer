@@ -48,6 +48,7 @@ function createDeps(overrides?: {
   hasActiveDocument?: boolean;
   panelFixture?: PanelFixture;
   buildHtml?: string;
+  loadDatasetError?: string;
 }): { deps: CommandDeps; panelFixture: PanelFixture; showError: ReturnType<typeof vi.fn> } {
   const panelFixture = overrides?.panelFixture ?? createPanelFixture();
   const showError = vi.fn();
@@ -66,6 +67,19 @@ function createDeps(overrides?: {
         uri: {
           fsPath: fileName
         }
+      };
+    },
+    loadDataset: () => {
+      if (overrides?.loadDatasetError) {
+        throw new Error(overrides.loadDatasetError);
+      }
+      return {
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time" }, { name: "vin" }]
+        },
+        defaultXSignal: "time"
       };
     },
     createPanel: () => panelFixture.panel,
@@ -105,6 +119,20 @@ describe("T-002 extension shell smoke", () => {
     expect(showError).toHaveBeenCalledWith("Wave Viewer only supports active .csv files.");
   });
 
+  it("surfaces parser/load errors before opening the panel", async () => {
+    const { deps, panelFixture, showError } = createDeps({
+      loadDatasetError: "Malformed CSV row 7 in /workspace/examples/simulations/ota.spice.csv."
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    expect(showError).toHaveBeenCalledWith(
+      "Malformed CSV row 7 in /workspace/examples/simulations/ota.spice.csv."
+    );
+    expect(panelFixture.panel.webview.html).toBe("");
+    expect(panelFixture.sentMessages).toEqual([]);
+  });
+
   it("loads webview shell and posts init + dataset events after ready", async () => {
     const { deps, panelFixture, showError } = createDeps();
 
@@ -124,7 +152,10 @@ describe("T-002 extension shell smoke", () => {
         type: "host/datasetLoaded",
         payload: {
           path: "/workspace/examples/simulations/ota.spice.csv",
-          fileName: "ota.spice.csv"
+          fileName: "ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time" }, { name: "vin" }],
+          defaultXSignal: "time"
         }
       }
     ]);
