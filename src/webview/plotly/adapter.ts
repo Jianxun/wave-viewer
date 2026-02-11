@@ -21,10 +21,9 @@ export type PlotlyTrace = {
 
 export type PlotlyAxisLayout = {
   title?: { text: string };
-  side?: "left" | "right";
   type?: "linear" | "log";
   range?: [number, number];
-  overlaying?: "y";
+  domain?: [number, number];
   anchor?: "x";
   automargin?: boolean;
 };
@@ -37,6 +36,7 @@ export type PlotlyLayout = {
   xaxis: {
     title?: { text: string };
     range?: [number, number];
+    rangeslider?: { visible: boolean };
     automargin: boolean;
   };
   [key: string]: unknown;
@@ -93,33 +93,61 @@ export function buildPlotlyFigure(payload: {
     xaxis: {
       title: { text: payload.plot.xSignal },
       range: payload.plot.xRange,
+      rangeslider: { visible: true },
       automargin: true
     }
   };
 
-  for (const axis of payload.plot.axes) {
+  const laneDomains = buildLaneDomains(payload.plot.axes.length);
+  for (const [index, axis] of payload.plot.axes.entries()) {
     const mapping = mapAxisIdToPlotly(axis.id);
-    layout[mapping.layoutKey] = toAxisLayout(axis);
+    layout[mapping.layoutKey] = toAxisLayout(axis, laneDomains[index]);
   }
 
   return { data, layout };
 }
 
-function toAxisLayout(axis: AxisState): PlotlyAxisLayout {
-  const axisLayout: PlotlyAxisLayout = {
+function toAxisLayout(axis: AxisState, domain: [number, number] | undefined): PlotlyAxisLayout {
+  return {
     title: axis.title ? { text: axis.title } : undefined,
-    side: axis.side,
     type: axis.scale === "log" ? "log" : "linear",
     range: axis.range,
+    domain,
+    anchor: "x",
     automargin: true
   };
+}
 
-  if (axis.id !== "y1") {
-    axisLayout.overlaying = "y";
-    axisLayout.anchor = "x";
+function buildLaneDomains(laneCount: number): Array<[number, number]> {
+  if (laneCount <= 0) {
+    return [];
   }
 
-  return axisLayout;
+  if (laneCount === 1) {
+    return [[0, 1]];
+  }
+
+  const gap = 0.04;
+  const laneHeight = (1 - gap * (laneCount - 1)) / laneCount;
+  const domains: Array<[number, number]> = [];
+
+  for (let index = 0; index < laneCount; index += 1) {
+    const top = 1 - index * (laneHeight + gap);
+    const bottom = top - laneHeight;
+    domains.push([clampToDomain(bottom), clampToDomain(top)]);
+  }
+
+  return domains;
+}
+
+function clampToDomain(value: number): number {
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 1) {
+    return 1;
+  }
+  return value;
 }
 
 export type PlotRangeUpdates = {

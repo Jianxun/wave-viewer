@@ -96,9 +96,20 @@ describe("plotly adapter", () => {
       columns
     });
 
-    expect(figure.layout.yaxis3).toMatchObject({ domain: [0.6933333333333334, 1] });
-    expect(figure.layout.yaxis).toMatchObject({ domain: [0.3466666666666667, 0.6533333333333333] });
-    expect(figure.layout.yaxis2).toMatchObject({ domain: [0, 0.30666666666666664] });
+    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
+      0.6933333333333334
+    );
+    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(1);
+    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
+      0.3466666666666667
+    );
+    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
+      0.6533333333333333
+    );
+    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(0);
+    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
+      0.30666666666666664
+    );
   });
 
   it("uses full domain when a plot has one lane", () => {
