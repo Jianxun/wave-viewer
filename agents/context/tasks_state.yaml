@@ -16,6 +16,6 @@ T-011:
   pr: 12
   merged: true
 T-012:
-  status: ready_for_review
+  status: review_clean
   pr: 13
   merged: false
