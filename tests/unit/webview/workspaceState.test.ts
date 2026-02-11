@@ -166,4 +166,24 @@ describe("workspace reducer", () => {
     expect(activePlot?.traces).toHaveLength(1);
     expect(activePlot?.traces[0]).toMatchObject({ signal: "vin", axisId: "y2" });
   });
+
+  it("keeps in-webview signal-list fallback add controls functional", () => {
+    const actions: WorkspaceAction[] = [
+      { type: "axis/add" },
+      { type: "trace/add", payload: { signal: "vin", axisId: "y2" } },
+      { type: "trace/add", payload: { signal: "vout", axisId: "y1" } }
+    ];
+
+    const finalState = actions.reduce(
+      (state, action) => reduceWorkspaceState(state, action),
+      createWorkspaceState("time")
+    );
+
+    const activePlot = finalState.plots.find((plot) => plot.id === finalState.activePlotId);
+    expect(activePlot?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(activePlot?.traces.map((trace) => ({ signal: trace.signal, axisId: trace.axisId }))).toEqual([
+      { signal: "vin", axisId: "y2" },
+      { signal: "vout", axisId: "y1" }
+    ]);
+  });
 });
