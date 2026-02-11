@@ -6,7 +6,12 @@ import { exportPlotSpecV1 } from "./core/spec/exportSpec";
 import { importPlotSpecV1 } from "./core/spec/importSpec";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
-import type { Dataset } from "./core/dataset/types";
+import {
+  createProtocolEnvelope,
+  parseWebviewToHostMessage,
+  type Dataset,
+  type ProtocolEnvelope
+} from "./core/dataset/types";
 import {
   createSignalTreeDataProvider,
   type SignalTreeDataProvider,
@@ -34,25 +39,22 @@ export type SidePanelSignalAction =
   | { type: "reveal-in-plot"; signal: string };
 
 export type HostToWebviewMessage =
-  | { type: "host/init"; payload: { title: string } }
-  | {
-      type: "host/datasetLoaded";
-      payload: {
+  | ProtocolEnvelope<"host/init", { title: string }>
+  | ProtocolEnvelope<
+      "host/datasetLoaded",
+      {
         path: string;
         fileName: string;
         rowCount: number;
         columns: Array<{ name: string; values: number[] }>;
         defaultXSignal: string;
-      };
-    }
-  | { type: "host/workspaceLoaded"; payload: { workspace: WorkspaceState } };
+      }
+    >
+  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>;
 
 export type WebviewToHostMessage =
-  | { type: "webview/ready" }
-  | {
-      type: "webview/workspaceChanged";
-      payload: { workspace: WorkspaceState };
-    };
+  | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
+  | ProtocolEnvelope<"webview/workspaceChanged", { workspace: WorkspaceState }>;
 
 export type ActiveDocumentLike = {
   fileName: string;
@@ -64,7 +66,7 @@ export type WebviewLike = {
   cspSource: string;
   asWebviewUri(uri: unknown): string;
   postMessage(message: HostToWebviewMessage): Promise<boolean>;
-  onDidReceiveMessage(handler: (message: WebviewToHostMessage) => void): void;
+  onDidReceiveMessage(handler: (message: unknown) => void): void;
 };
 
 export type WebviewPanelLike = {
@@ -81,6 +83,7 @@ export type CommandDeps = {
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string, panel: WebviewPanelLike): void;
   showError(message: string): void;
+  logDebug?(message: string, details?: unknown): void;
   buildHtml(webview: WebviewLike, extensionUri: unknown): string;
 };
 
@@ -182,24 +185,30 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
     deps.onPanelCreated?.(activeDocument.uri.fsPath, panel);
     panel.webview.html = deps.buildHtml(panel.webview, deps.extensionUri);
 
-    panel.webview.onDidReceiveMessage((message) => {
+    panel.webview.onDidReceiveMessage((rawMessage) => {
+      const message = parseWebviewToHostMessage(rawMessage);
+      if (!message) {
+        deps.logDebug?.("Ignored invalid or unknown webview message.", rawMessage);
+        return;
+      }
+
       if (message.type === "webview/workspaceChanged") {
-        deps.setCachedWorkspace?.(activeDocument.uri.fsPath, message.payload.workspace);
+        deps.setCachedWorkspace?.(
+          activeDocument.uri.fsPath,
+          message.payload.workspace as WorkspaceState
+        );
         return;
       }
 
       if (message.type !== "webview/ready") {
+        deps.logDebug?.("Ignored unsupported webview message type.", message.type);
         return;
       }
 
-      void panel.webview.postMessage({
-        type: "host/init",
-        payload: { title: "Wave Viewer" }
-      });
+      void panel.webview.postMessage(createProtocolEnvelope("host/init", { title: "Wave Viewer" }));
 
-      void panel.webview.postMessage({
-        type: "host/datasetLoaded",
-        payload: {
+      void panel.webview.postMessage(
+        createProtocolEnvelope("host/datasetLoaded", {
           path: activeDocument.uri.fsPath,
           fileName: path.basename(activeDocument.fileName),
           rowCount: normalizedDataset.dataset.rowCount,
@@ -208,15 +217,14 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
             values: column.values
           })),
           defaultXSignal: normalizedDataset.defaultXSignal
-        }
-      });
+        })
+      );
 
       const cachedWorkspace = deps.getCachedWorkspace?.(activeDocument.uri.fsPath);
       if (cachedWorkspace) {
-        void panel.webview.postMessage({
-          type: "host/workspaceLoaded",
-          payload: { workspace: cachedWorkspace }
-        });
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/workspaceLoaded", { workspace: cachedWorkspace })
+        );
       }
     });
   };
@@ -398,10 +406,9 @@ export function activate(context: VSCode.ExtensionContext): void {
         return;
       }
 
-      void panel.webview.postMessage({
-        type: "host/workspaceLoaded",
-        payload: { workspace: nextWorkspace }
-      });
+      void panel.webview.postMessage(
+        createProtocolEnvelope("host/workspaceLoaded", { workspace: nextWorkspace })
+      );
     };
   }
 
@@ -431,6 +438,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
+    },
+    logDebug: (message, details) => {
+      console.debug(`[wave-viewer] ${message}`, details);
     },
     buildHtml: (webview, extensionUriArg) =>
       buildWebviewHtml(webview as unknown as VSCode.Webview, extensionUriArg as VSCode.Uri)
