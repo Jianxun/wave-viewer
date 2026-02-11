@@ -17,6 +17,8 @@ import {
   createSignalTreeDragAndDropController,
   createSignalTreeDataProvider,
   type SignalTreeDataProvider,
+  LOAD_CSV_FILES_COMMAND,
+  RELOAD_ALL_FILES_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
@@ -31,6 +33,8 @@ export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
 export const EXPORT_SPEC_COMMAND = "waveViewer.exportPlotSpec";
 export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
 export {
+  LOAD_CSV_FILES_COMMAND,
+  RELOAD_ALL_FILES_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
@@ -101,6 +105,26 @@ export type CommandDeps = {
   showError(message: string): void;
   logDebug?(message: string, details?: unknown): void;
   buildHtml(webview: WebviewLike, extensionUri: unknown): string;
+};
+
+export type LoadCsvFilesCommandDeps = {
+  showOpenDialog(): Promise<string[] | undefined>;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  registerLoadedDataset(
+    documentPath: string,
+    loaded: { dataset: Dataset; defaultXSignal: string }
+  ): void;
+  showError(message: string): void;
+};
+
+export type ReloadAllLoadedFilesCommandDeps = {
+  getLoadedDatasetPaths(): readonly string[];
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  registerLoadedDataset(
+    documentPath: string,
+    loaded: { dataset: Dataset; defaultXSignal: string }
+  ): void;
+  showError(message: string): void;
 };
 
 export function applySidePanelSignalAction(
@@ -306,6 +330,39 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         );
       }
     });
+  };
+}
+
+export function createLoadCsvFilesCommand(deps: LoadCsvFilesCommandDeps): () => Promise<void> {
+  return async () => {
+    const selectedPaths = await deps.showOpenDialog();
+    if (!selectedPaths || selectedPaths.length === 0) {
+      return;
+    }
+
+    for (const documentPath of selectedPaths) {
+      try {
+        const loaded = deps.loadDataset(documentPath);
+        deps.registerLoadedDataset(documentPath, loaded);
+      } catch (error) {
+        deps.showError(`Failed to load '${documentPath}': ${getErrorMessage(error)}`);
+      }
+    }
+  };
+}
+
+export function createReloadAllLoadedFilesCommand(
+  deps: ReloadAllLoadedFilesCommandDeps
+): () => Promise<void> {
+  return async () => {
+    for (const documentPath of deps.getLoadedDatasetPaths()) {
+      try {
+        const loaded = deps.loadDataset(documentPath);
+        deps.registerLoadedDataset(documentPath, loaded);
+      } catch (error) {
+        deps.showError(`Failed to reload '${documentPath}': ${getErrorMessage(error)}`);
+      }
+    }
   };
 }
 
@@ -659,6 +716,42 @@ export function activate(context: VSCode.ExtensionContext): void {
     readTextFile: (filePath) => fs.readFileSync(filePath, "utf8")
   });
 
+  const loadCsvFilesCommand = createLoadCsvFilesCommand({
+    showOpenDialog: async () => {
+      const result = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: true,
+        filters: { CSV: ["csv"] }
+      });
+      return result?.map((uri) => uri.fsPath);
+    },
+    loadDataset: (documentPath) => {
+      const csvText = fs.readFileSync(documentPath, "utf8");
+      const dataset = parseCsv({ path: documentPath, csvText });
+      const defaultXSignal = selectDefaultX(dataset);
+      return { dataset, defaultXSignal };
+    },
+    registerLoadedDataset,
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    }
+  });
+
+  const reloadAllLoadedFilesCommand = createReloadAllLoadedFilesCommand({
+    getLoadedDatasetPaths: () => Array.from(loadedDatasetByPath.keys()),
+    loadDataset: (documentPath) => {
+      const csvText = fs.readFileSync(documentPath, "utf8");
+      const dataset = parseCsv({ path: documentPath, csvText });
+      const defaultXSignal = selectDefaultX(dataset);
+      return { dataset, defaultXSignal };
+    },
+    registerLoadedDataset,
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    }
+  });
+
   const signalTreeView = vscode.window.createTreeView(SIGNAL_BROWSER_VIEW_ID, {
     treeDataProvider: signalTreeProvider,
     dragAndDropController: createSignalTreeDragAndDropController(vscode)
@@ -687,6 +780,10 @@ export function activate(context: VSCode.ExtensionContext): void {
       REVEAL_SIGNAL_IN_PLOT_COMMAND,
       runSidePanelSignalAction("reveal-in-plot")
     )
+  );
+  context.subscriptions.push(vscode.commands.registerCommand(LOAD_CSV_FILES_COMMAND, loadCsvFilesCommand));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(RELOAD_ALL_FILES_COMMAND, reloadAllLoadedFilesCommand)
   );
 }
 
