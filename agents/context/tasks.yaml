@@ -1,172 +1,120 @@
 schema_version: 2
 current_sprint:
-  - id: T-013
-    title: Build side-panel signal browser foundation and command wiring
+  - id: T-020
+    title: Persist single-session loaded CSV registry for side-panel signal browser
     owner: Executor
     dod:
-      - Contribute a VS Code side-panel signal tree for active dataset numeric signals with deterministic ordering.
-      - Implement side-panel actions (`Add to Plot`, `Add to New Axis`, `Reveal in Plot`) and route them through extension-host dispatch.
-      - Ensure side-panel actions mutate workspace through reducer-compatible flows (no direct webview-only mutation).
-      - Keep current in-webview signal controls functional as transitional fallback.
+      - Replace active-editor-derived signal listing with an explicit in-memory loaded-dataset registry for one Wave Viewer session.
+      - Keep Explorer tree populated when focus moves from CSV editor to webview or other editors.
+      - Render loaded files as parent nodes with signal children so signal actions can be scoped to a concrete loaded file.
+      - Ensure existing side-panel signal actions continue to work against the selected dataset node context.
     verify:
       - npm run lint
       - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-013.md
+      scratchpad: agents/scratchpads/T-020.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+    files:
+      - src/extension.ts
+      - src/extension/signalTree.ts
+      - src/core/csv/parseCsv.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-020.md
+  - id: T-021
+    title: Add Explorer context menu actions to load CSV and reload all loaded files
+    owner: Executor
+    depends_on:
+      - T-020
+    dod:
+      - Add Explorer view context-menu command `Load CSV File...` that opens a file picker and loads one or more CSV files into the side-panel registry.
+      - Add Explorer view context-menu command `Reload All Files` that reparses all currently loaded CSV files and refreshes tree content.
+      - Surface actionable errors for parse failures while preserving already-loaded valid datasets.
+      - Keep command wiring deterministic and covered by extension smoke tests.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-021.md
       spec: doc/specs/side-panel-workflow.md
       adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
       - package.json
       - src/extension.ts
       - src/extension/signalTree.ts
-      - src/extension/viewerBridge.ts
-      - src/webview/main.ts
       - tests/extension/smoke.test.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-013.md
-  - id: T-014
-    title: Introduce protocol envelope and runtime validators scaffold
+      - agents/scratchpads/T-021.md
+  - id: T-022
+    title: Add Explorer context menu action to remove loaded file and keep workflow stable
     owner: Executor
     depends_on:
-      - T-013
+      - T-021
     dod:
-      - Introduce explicit protocol envelope (`version`, `type`, `payload`) for host/webview messages.
-      - Implement runtime validation utilities for inbound host and webview messages.
-      - Add safe unknown-message handling with debug logging hooks.
-      - Land protocol scaffolding without changing existing message behaviors beyond validation wrappers.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/webview/workspaceState.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-014.md
-      spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0004-host-webview-protocol-versioning.md
-    files:
-      - src/extension.ts
-      - src/webview/main.ts
-      - src/core/dataset/types.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-014.md
-  - id: T-018
-    title: Migrate host-webview message flows to normalized protocol contracts
-    owner: Executor
-    depends_on:
-      - T-014
-    dod:
-      - Migrate required message contracts (`host/datasetLoaded`, `host/workspaceLoaded`, `host/workspacePatched`, `webview/workspaceChanged`, `webview/dropSignal`) to envelope-based handling.
-      - Ensure message handlers use runtime validators before dispatch/mutation.
-      - Verify compatibility behavior for invalid payloads and unknown message types.
-      - Keep reducer outcomes deterministic for equivalent message intents.
+      - Add file-node context-menu command `Remove Loaded File` that removes exactly one loaded dataset from the registry and tree.
+      - Ensure removing a loaded file updates related side-panel interactions without clearing unrelated loaded datasets.
+      - If removed file has an open viewer panel, keep panel behavior predictable (show warning and block new side-panel adds for that dataset).
+      - Add regression checks for remove-file behavior and follow-up signal actions.
     verify:
       - npm run lint
       - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-018.md
-      spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0004-host-webview-protocol-versioning.md
-    files:
-      - src/extension.ts
-      - src/webview/main.ts
-      - tests/extension/smoke.test.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-018.md
-backlog:
-  - id: T-015
-    title: Implement axis-row drag/drop signal targeting via normalized drop contract
-    owner: Executor
-    depends_on:
-      - T-018
-    dod:
-      - Enable dragging signal items from the side-panel browser to axis-row drop targets.
-      - Add visible row hover/drop affordances and support explicit new-axis target behavior.
-      - Emit only normalized `webview/dropSignal` payloads from webview drop handling.
-      - Keep reducer-driven updates deterministic and replay-compatible.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-015.md
+      scratchpad: agents/scratchpads/T-022.md
       spec: doc/specs/side-panel-workflow.md
       adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
-      - src/webview/components/AxisManager.ts
-      - src/webview/main.ts
-      - src/webview/index.html
-      - src/webview/styles.css
+      - package.json
       - src/extension.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - tests/unit/webview/plotly/adapter.test.ts
+      - src/extension/signalTree.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-015.md
-  - id: T-016
-    title: Add canvas-domain drop overlay and quick-add convergence
+      - tests/unit/webview/workspaceState.test.ts
+      - agents/scratchpads/T-022.md
+  - id: T-023
+    title: Fix Plotly interaction regression caused by canvas drop overlay hit-testing
     owner: Executor
     depends_on:
-      - T-015
+      - T-022
     dod:
-      - Add plot-canvas drop overlay that maps pointer location to domain-stacked lanes.
-      - Implement drop-to-lane behavior matching lane domain boundaries from the Plotly adapter.
-      - Add double-click quick-add from side panel to active/default target lane.
-      - Ensure overlay, row-target drop, and quick-add paths share one dispatch contract.
+      - Ensure Plotly canvas interactions remain fully functional when no drag operation is active: legend click toggles traces, hover cursor/tooltip behavior, pan/zoom interactions.
+      - Update canvas drop-overlay styling/behavior so overlay lanes never intercept pointer events outside active drag handling.
+      - If drag feedback requires interaction state, gate overlay visibility/activation to drag lifecycle events only (`dragenter`/`dragover`/`dragleave`/`drop`).
+      - Keep canvas overlay lane highlighting behavior intact during valid signal drag operations.
+      - Add regression coverage that validates overlay elements do not block normal plot interactions.
     verify:
       - npm run lint
       - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-016.md
+      scratchpad: agents/scratchpads/T-023.md
       spec: doc/specs/side-panel-workflow.md
       adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
-      - src/webview/plotly/adapter.ts
+      - src/webview/styles.css
       - src/webview/main.ts
       - src/webview/index.html
-      - src/webview/styles.css
-      - src/webview/components/SignalList.ts
-      - tests/unit/webview/plotly/adapter.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-016.md
-  - id: T-017
-    title: Add parity regression suite for side-panel workflow stabilization
+      - agents/scratchpads/T-023.md
+  - id: T-024
+    title: Stabilize shared x-axis anchoring independent of lane reorder
     owner: Executor
-    depends_on:
-      - T-016
     dod:
-      - Add regression coverage proving equivalent workspace outcomes for side-panel command, axis-row drop, and canvas-overlay drop paths.
-      - Verify fallback in-webview signal controls remain functional during stabilization window.
-      - Record stabilization test evidence and residual risks in task scratchpad.
+      - Decouple shared x-axis anchoring from workspace axis identity/order so x-axis ticks do not move when lanes reorder.
+      - Introduce a render-layer axis mapping strategy that preserves workspace axis ids (`y1..yN`) while assigning non-overlapping Plotly lane domains deterministically.
+      - Ensure add/remove/reorder axis operations keep lane rendering stable and preserve existing drag/drop lane targeting semantics.
+      - Add regression coverage proving x-axis tick placement remains stable across axis reorder operations.
     verify:
       - npm run lint
-      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts
+      - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/unit/webview/workspaceState.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-017.md
-      spec: doc/specs/wave-viewer-mvp.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+      scratchpad: agents/scratchpads/T-024.md
+      spec: doc/specs/domain-stacked-shared-x-implementation.md
+      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
     files:
-      - src/extension.ts
+      - src/webview/plotly/adapter.ts
+      - src/webview/plotly/renderPlot.ts
       - src/webview/main.ts
-      - tests/extension/smoke.test.ts
-      - tests/unit/webview/workspaceState.test.ts
       - tests/unit/webview/plotly/adapter.test.ts
-      - agents/scratchpads/T-017.md
-  - id: T-019
-    title: Publish stabilization handoff and workflow documentation updates
-    owner: Executor
-    depends_on:
-      - T-017
-    dod:
-      - Update README workflow section to document side-panel-first usage and transitional fallback expectations.
-      - Document stabilization gate outcomes, known limits, and follow-up recommendations in task scratchpad.
-      - Ensure task artifacts clearly state that in-webview signal-add deprecation remains deferred.
-    verify:
-      - npm run lint
-      - npm test -- tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-019.md
-      spec: doc/specs/wave-viewer-mvp.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
-    files:
-      - README.md
-      - agents/scratchpads/T-019.md
       - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-024.md
+backlog: []
 exploration_candidates:
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after side-panel workflow stabilization criteria are met.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.

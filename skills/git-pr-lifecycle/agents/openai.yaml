@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git PR Lifecycle"
+  short_description: "Branch, PR, merge, and prune workflow"
+  default_prompt: "Use $git-pr-lifecycle to create a feature branch, commit current changes, open a PR to main, merge it, and prune the branch."
