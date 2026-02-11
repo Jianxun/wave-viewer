@@ -16,6 +16,6 @@ T-023:
   pr: 27
   merged: true
 T-024:
-  status: review_clean
+  status: done
   pr: 28
-  merged: false
+  merged: true
