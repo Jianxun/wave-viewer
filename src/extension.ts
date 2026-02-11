@@ -522,7 +522,7 @@ export function activate(context: VSCode.ExtensionContext): void {
       return;
     }
 
-    if (!resolveQuickAddDoubleClick(resolved.signal)) {
+    if (!resolveQuickAddDoubleClick(resolved)) {
       return;
     }
 

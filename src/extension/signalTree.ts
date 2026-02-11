@@ -191,19 +191,24 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
 export function createDoubleClickQuickAddResolver(options?: {
   thresholdMs?: number;
   now?: () => number;
-}): (signal: string) => boolean {
+}): (selection: ResolvedSignalSelection) => boolean {
   const thresholdMs = options?.thresholdMs ?? 450;
   const now = options?.now ?? (() => Date.now());
 
-  let lastSignal: string | undefined;
+  let lastSelectionKey: string | undefined;
   let lastClickTimestamp = 0;
 
-  return (signal: string): boolean => {
+  return (selection: ResolvedSignalSelection): boolean => {
     const timestamp = now();
+    const selectionKey = selection.datasetPath
+      ? `${selection.datasetPath}\u0000${selection.signal}`
+      : `\u0000${selection.signal}`;
     const isDoubleClick =
-      lastSignal === signal && timestamp - lastClickTimestamp >= 0 && timestamp - lastClickTimestamp <= thresholdMs;
+      lastSelectionKey === selectionKey &&
+      timestamp - lastClickTimestamp >= 0 &&
+      timestamp - lastClickTimestamp <= thresholdMs;
 
-    lastSignal = signal;
+    lastSelectionKey = selectionKey;
     lastClickTimestamp = timestamp;
 
     if (!isDoubleClick) {
@@ -211,7 +216,7 @@ export function createDoubleClickQuickAddResolver(options?: {
     }
 
     // Require a fresh pair of clicks for the next quick-add.
-    lastSignal = undefined;
+    lastSelectionKey = undefined;
     return true;
   };
 }

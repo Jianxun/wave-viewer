@@ -15,9 +15,9 @@ describe("signal tree quick-add", () => {
       now: () => now
     });
 
-    expect(resolve("vin")).toBe(false);
+    expect(resolve({ signal: "vin", datasetPath: "/workspace/examples/a.csv" })).toBe(false);
     now += 300;
-    expect(resolve("vin")).toBe(true);
+    expect(resolve({ signal: "vin", datasetPath: "/workspace/examples/a.csv" })).toBe(true);
   });
 
   it("does not trigger when clicks exceed threshold or signal changes", () => {
@@ -27,13 +27,27 @@ describe("signal tree quick-add", () => {
       now: () => now
     });
 
-    expect(resolve("vin")).toBe(false);
+    expect(resolve({ signal: "vin", datasetPath: "/workspace/examples/a.csv" })).toBe(false);
     now += 300;
-    expect(resolve("vin")).toBe(false);
+    expect(resolve({ signal: "vin", datasetPath: "/workspace/examples/a.csv" })).toBe(false);
     now += 10;
-    expect(resolve("vout")).toBe(false);
+    expect(resolve({ signal: "vout", datasetPath: "/workspace/examples/a.csv" })).toBe(false);
     now += 10;
-    expect(resolve("vin")).toBe(false);
+    expect(resolve({ signal: "vin", datasetPath: "/workspace/examples/a.csv" })).toBe(false);
+  });
+
+  it("does not trigger across datasets for the same signal name", () => {
+    let now = 1_000;
+    const resolve = createDoubleClickQuickAddResolver({
+      thresholdMs: 500,
+      now: () => now
+    });
+
+    expect(resolve({ signal: "time", datasetPath: "/workspace/examples/a.csv" })).toBe(false);
+    now += 100;
+    expect(resolve({ signal: "time", datasetPath: "/workspace/examples/b.csv" })).toBe(false);
+    now += 100;
+    expect(resolve({ signal: "time", datasetPath: "/workspace/examples/b.csv" })).toBe(true);
   });
 
   it("uses stable quick-add command id", () => {
