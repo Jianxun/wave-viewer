@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset/types";
 import {
+  applyDropSignalAction,
   applySidePanelSignalAction,
   createOpenViewerCommand,
   isCsvFile,
@@ -15,6 +16,7 @@ import {
   type WebviewPanelLike
 } from "../../src/extension";
 import { toDeterministicSignalOrder } from "../../src/extension/signalTree";
+import type { WorkspaceState } from "../../src/webview/state/workspaceState";
 
 type PanelFixture = {
   panel: WebviewPanelLike;
@@ -54,10 +56,24 @@ function createDeps(overrides?: {
   panelFixture?: PanelFixture;
   buildHtml?: string;
   loadDatasetError?: string;
-}): { deps: CommandDeps; panelFixture: PanelFixture; showError: ReturnType<typeof vi.fn> } {
+  initialWorkspace?: WorkspaceState;
+}): {
+  deps: CommandDeps;
+  panelFixture: PanelFixture;
+  showError: ReturnType<typeof vi.fn>;
+  logDebug: ReturnType<typeof vi.fn>;
+  getCachedWorkspace: ReturnType<typeof vi.fn>;
+  setCachedWorkspace: ReturnType<typeof vi.fn>;
+} {
   const panelFixture = overrides?.panelFixture ?? createPanelFixture();
   const showError = vi.fn();
+  const logDebug = vi.fn();
   const hasActiveDocument = overrides?.hasActiveDocument ?? true;
+  let cachedWorkspace = overrides?.initialWorkspace;
+  const getCachedWorkspace = vi.fn(() => cachedWorkspace);
+  const setCachedWorkspace = vi.fn((_documentPath: string, workspace: WorkspaceState) => {
+    cachedWorkspace = workspace;
+  });
 
   const deps: CommandDeps = {
     extensionUri: { path: "/workspace" },
@@ -91,11 +107,30 @@ function createDeps(overrides?: {
       };
     },
     createPanel: () => panelFixture.panel,
+    getCachedWorkspace,
+    setCachedWorkspace,
     showError,
+    logDebug,
     buildHtml: () => overrides?.buildHtml ?? "<html>shell</html>"
   };
 
-  return { deps, panelFixture, showError };
+  return { deps, panelFixture, showError, logDebug, getCachedWorkspace, setCachedWorkspace };
+}
+
+function createWorkspaceFixture(): WorkspaceState {
+  return {
+    activePlotId: "plot-1",
+    plots: [
+      {
+        id: "plot-1",
+        name: "Plot 1",
+        xSignal: "time",
+        axes: [{ id: "y1" }],
+        traces: [],
+        nextAxisNumber: 2
+      }
+    ]
+  };
 }
 
 describe("T-002 extension shell smoke", () => {
@@ -285,5 +320,87 @@ describe("T-013 side-panel signal actions", () => {
 
   it("keeps signal order deterministic by source column order", () => {
     expect(toDeterministicSignalOrder(["time", "vin", "vout"])).toEqual(["time", "vin", "vout"]);
+  });
+});
+
+describe("T-018 normalized protocol handling", () => {
+  it("handles validated dropSignal by caching and posting workspacePatched", async () => {
+    const { deps, panelFixture, setCachedWorkspace } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "axis-row"
+      })
+    );
+
+    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/workspacePatched",
+        payload: {
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          reason: "dropSignal:axis-row"
+        }
+      }
+    ]);
+  });
+
+  it("ignores invalid dropSignal payloads and does not mutate workspace", async () => {
+    const { deps, panelFixture, logDebug, setCachedWorkspace } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis" },
+        source: "axis-row"
+      })
+    );
+
+    expect(setCachedWorkspace).not.toHaveBeenCalled();
+    expect(panelFixture.sentMessages).toEqual([]);
+    expect(logDebug).toHaveBeenCalledWith(
+      "Ignored invalid or unknown webview message.",
+      expect.objectContaining({
+        type: "webview/dropSignal"
+      })
+    );
+  });
+
+  it("keeps reducer outcomes deterministic for equivalent add intents", () => {
+    const initial = createWorkspaceFixture();
+    const fromSidePanel = applySidePanelSignalAction(initial, { type: "add-to-plot", signal: "vin" });
+    const fromDropSignal = applyDropSignalAction(initial, {
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "axis", axisId: "y1" },
+      source: "axis-row"
+    });
+
+    expect(fromDropSignal).toEqual(fromSidePanel);
   });
 });

@@ -19,6 +19,47 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts host workspacePatched with reason and workspace payload", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/workspacePatched", {
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        reason: "sidePanel:add-to-plot"
+      })
+    );
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/workspacePatched",
+      payload: {
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        reason: "sidePanel:add-to-plot"
+      }
+    });
+  });
+
   it("rejects host messages with invalid envelope version", () => {
     const parsed = parseHostToWebviewMessage({
       version: 99,
@@ -46,9 +87,51 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview dropSignal payloads for axis targets", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "axis-row"
+      })
+    );
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/dropSignal",
+      payload: {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "axis-row"
+      }
+    });
+  });
+
   it("rejects malformed workspaceChanged payloads", () => {
     const parsed = parseWebviewToHostMessage(
-      createProtocolEnvelope("webview/workspaceChanged", { workspace: null })
+      createProtocolEnvelope("webview/workspaceChanged", { workspace: null, reason: "sync" })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects workspaceChanged payloads without reason", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/workspaceChanged", {
+        workspace: { activePlotId: "plot-1", plots: [] }
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview dropSignal payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis" },
+        source: "axis-row"
+      })
     );
     expect(parsed).toBeUndefined();
   });

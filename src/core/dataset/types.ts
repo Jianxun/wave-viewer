@@ -47,12 +47,15 @@ export type ParsedHostToWebviewMessage =
         defaultXSignal: string;
       }
     >
-  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: Record<string, unknown> }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: Record<string, unknown>; reason: string }>;
+  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceStateLike }>
+  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceStateLike; reason: string }>;
 
 export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
-  | ProtocolEnvelope<"webview/workspaceChanged", { workspace: Record<string, unknown> }>
+  | ProtocolEnvelope<
+      "webview/workspaceChanged",
+      { workspace: WorkspaceStateLike; reason: string }
+    >
   | ProtocolEnvelope<
       "webview/dropSignal",
       {
@@ -69,6 +72,32 @@ export type ParsedWebviewToHostMessage =
         args?: Record<string, unknown>;
       }
     >;
+
+type WorkspaceStateLike = {
+  activePlotId: string;
+  plots: Array<{
+    id: string;
+    name: string;
+    xSignal: string;
+    axes: Array<{
+      id: `y${number}` | string;
+      side?: "left" | "right";
+      title?: string;
+      range?: [number, number];
+      scale?: "linear" | "log";
+    }>;
+    traces: Array<{
+      id: string;
+      signal: string;
+      axisId: `y${number}` | string;
+      visible: boolean;
+      color?: string;
+      lineWidth?: number;
+    }>;
+    nextAxisNumber: number;
+    xRange?: [number, number];
+  }>;
+};
 
 export function createProtocolEnvelope<TType extends string, TPayload>(
   type: TType,
@@ -167,10 +196,10 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
   }
 
   if (type === "host/workspacePatched") {
-    return isRecord(payload.workspace) && typeof payload.reason === "string";
+    return isWorkspaceStateLike(payload.workspace) && typeof payload.reason === "string";
   }
 
-  return isRecord(payload.workspace);
+  return isWorkspaceStateLike(payload.workspace);
 }
 
 function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown): boolean {
@@ -183,7 +212,7 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
   }
 
   if (type === "webview/workspaceChanged") {
-    return isRecord(payload.workspace);
+    return isWorkspaceStateLike(payload.workspace) && typeof payload.reason === "string";
   }
 
   if (type === "webview/dropSignal") {
@@ -213,4 +242,95 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isWorkspaceStateLike(value: unknown): value is WorkspaceStateLike {
+  if (!isRecord(value) || typeof value.activePlotId !== "string" || !Array.isArray(value.plots)) {
+    return false;
+  }
+
+  return value.plots.every((plot) => isPlotStateLike(plot));
+}
+
+function isPlotStateLike(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.xSignal !== "string" ||
+    typeof value.nextAxisNumber !== "number" ||
+    !Number.isInteger(value.nextAxisNumber) ||
+    !Array.isArray(value.axes) ||
+    !Array.isArray(value.traces)
+  ) {
+    return false;
+  }
+
+  if (value.xRange !== undefined && !isNumericRange(value.xRange)) {
+    return false;
+  }
+
+  return value.axes.every((axis) => isAxisStateLike(axis)) && value.traces.every((trace) => isTraceStateLike(trace));
+}
+
+function isAxisStateLike(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.id !== "string") {
+    return false;
+  }
+
+  if (value.side !== undefined && value.side !== "left" && value.side !== "right") {
+    return false;
+  }
+
+  if (value.title !== undefined && typeof value.title !== "string") {
+    return false;
+  }
+
+  if (value.range !== undefined && !isNumericRange(value.range)) {
+    return false;
+  }
+
+  if (value.scale !== undefined && value.scale !== "linear" && value.scale !== "log") {
+    return false;
+  }
+
+  return true;
+}
+
+function isTraceStateLike(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.signal !== "string" ||
+    typeof value.axisId !== "string" ||
+    typeof value.visible !== "boolean"
+  ) {
+    return false;
+  }
+
+  if (value.color !== undefined && typeof value.color !== "string") {
+    return false;
+  }
+
+  if (value.lineWidth !== undefined) {
+    if (typeof value.lineWidth !== "number" || !Number.isFinite(value.lineWidth)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isNumericRange(value: unknown): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === "number" &&
+    Number.isFinite(value[0]) &&
+    typeof value[1] === "number" &&
+    Number.isFinite(value[1])
+  );
 }
