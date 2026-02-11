@@ -50,7 +50,10 @@
           <h1 id="active-plot-title">Plot 1</h1>
         </div>
         <section id="plot-canvas" class="plot-canvas" aria-label="Plot Canvas Container">
-          <p class="canvas-placeholder">Plotly canvas mounts here.</p>
+          <div id="plot-root" class="plot-root" aria-label="Plotly canvas root">
+            <p class="canvas-placeholder">Plotly canvas mounts here.</p>
+          </div>
+          <div id="plot-drop-overlay" class="plot-drop-overlay" aria-hidden="true"></div>
         </section>
       </main>
     </div>

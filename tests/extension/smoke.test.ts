@@ -422,4 +422,45 @@ describe("T-018 normalized protocol handling", () => {
       }
     ]);
   });
+
+  it("handles canvas-overlay dropSignal source and records source-specific patch reason", async () => {
+    const { deps, panelFixture, setCachedWorkspace } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "canvas-overlay"
+      })
+    );
+
+    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/workspacePatched",
+        payload: {
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          reason: "dropSignal:canvas-overlay"
+        }
+      }
+    ]);
+  });
 });

@@ -9,10 +9,16 @@ import { renderAxisManager } from "./components/AxisManager";
 import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
 import { renderTraceList } from "./components/TraceList";
-import { parseRelayoutRanges, type DatasetColumnData } from "./plotly/adapter";
+import {
+  getAxisLaneDomains,
+  parseRelayoutRanges,
+  resolveAxisIdFromNormalizedY,
+  type DatasetColumnData
+} from "./plotly/adapter";
 import { createPlotRenderer } from "./plotly/renderPlot";
 import { reduceWorkspaceState, type WorkspaceAction } from "./state/reducer";
 import {
+  type AxisId,
   createWorkspaceState,
   getActivePlot,
   type WorkspaceState
@@ -49,9 +55,13 @@ const signalListEl = getRequiredElement("signal-list");
 const traceListEl = getRequiredElement("trace-list");
 const axisManagerEl = getRequiredElement("axis-manager");
 const plotCanvasEl = getRequiredElement("plot-canvas");
+const plotRootEl = getRequiredElement("plot-root");
+const plotDropOverlayEl = getRequiredElement("plot-drop-overlay");
+
+let preferredDropAxisId: AxisId | undefined;
 
 const plotRenderer = createPlotRenderer({
-  container: plotCanvasEl,
+  container: plotRootEl,
   onRelayout: (eventData) => {
     if (!workspace) {
       return;
@@ -102,6 +112,84 @@ function dispatch(action: WorkspaceAction): void {
   } catch (error) {
     bridgeStatusEl.textContent = `State error: ${getErrorMessage(error)}`;
   }
+}
+
+function resolvePreferredDropTarget(): { kind: "axis"; axisId: AxisId } | { kind: "new-axis" } {
+  if (!workspace) {
+    return { kind: "new-axis" };
+  }
+
+  const activePlot = getActivePlot(workspace);
+  if (activePlot.axes.length === 0) {
+    return { kind: "new-axis" };
+  }
+
+  const preferred = activePlot.axes.find((axis) => axis.id === preferredDropAxisId)?.id;
+  if (preferred) {
+    return { kind: "axis", axisId: preferred };
+  }
+
+  return { kind: "axis", axisId: activePlot.axes[0].id };
+}
+
+function postDropSignal(payload: {
+  signal: string;
+  target: { kind: "axis"; axisId: AxisId } | { kind: "new-axis" };
+  source: "axis-row" | "canvas-overlay";
+}): void {
+  if (!workspace) {
+    return;
+  }
+
+  if (payload.target.kind === "axis") {
+    preferredDropAxisId = payload.target.axisId;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/dropSignal", {
+      signal: payload.signal,
+      plotId: getActivePlot(workspace).id,
+      target: payload.target,
+      source: payload.source
+    })
+  );
+}
+
+function renderCanvasDropOverlay(axes: ReadonlyArray<{ id: AxisId }>): void {
+  plotDropOverlayEl.replaceChildren();
+  const laneDomains = getAxisLaneDomains(axes);
+
+  for (const lane of laneDomains) {
+    const laneEl = document.createElement("div");
+    laneEl.className = "plot-drop-lane";
+    laneEl.dataset.axisId = lane.axisId;
+    laneEl.style.top = `${(1 - lane.domain[1]) * 100}%`;
+    laneEl.style.height = `${(lane.domain[1] - lane.domain[0]) * 100}%`;
+    plotDropOverlayEl.appendChild(laneEl);
+  }
+}
+
+function setCanvasDropLaneActive(axisId: AxisId | undefined): void {
+  const lanes = plotDropOverlayEl.querySelectorAll<HTMLElement>(".plot-drop-lane");
+  for (const lane of lanes) {
+    lane.classList.toggle("drop-active", lane.dataset.axisId === axisId);
+  }
+}
+
+function resolveAxisIdFromCanvasEvent(event: DragEvent): AxisId | undefined {
+  if (!workspace) {
+    return undefined;
+  }
+
+  const rect = plotCanvasEl.getBoundingClientRect();
+  if (rect.height <= 0) {
+    return undefined;
+  }
+
+  const ratioFromTop = (event.clientY - rect.top) / rect.height;
+  const normalizedY = 1 - Math.max(0, Math.min(1, ratioFromTop));
+  const activePlot = getActivePlot(workspace);
+  return resolveAxisIdFromNormalizedY(activePlot.axes, normalizedY);
 }
 
 async function renderWorkspace(): Promise<void> {
@@ -155,6 +243,13 @@ async function renderWorkspace(): Promise<void> {
       }
 
       dispatch({ type: "trace/add", payload: { signal, axisId: axisChoice } });
+    },
+    onQuickAdd: ({ signal }) => {
+      postDropSignal({
+        signal,
+        target: resolvePreferredDropTarget(),
+        source: "axis-row"
+      });
     }
   });
 
@@ -184,18 +279,11 @@ async function renderWorkspace(): Promise<void> {
       return extractSignalFromDropData(event.dataTransfer);
     },
     onDropSignal: ({ signal, target }) => {
-      if (!workspace) {
-        return;
-      }
-      const plotId = getActivePlot(workspace).id;
-      vscode.postMessage(
-        createProtocolEnvelope("webview/dropSignal", {
-          signal,
-          plotId,
-          target,
-          source: "axis-row"
-        })
-      );
+      postDropSignal({
+        signal,
+        target,
+        source: "axis-row"
+      });
     },
     onAddAxis: () => dispatch({ type: "axis/add" }),
     onReorderAxis: ({ axisId, toIndex }) =>
@@ -215,6 +303,7 @@ async function renderWorkspace(): Promise<void> {
   });
 
   await plotRenderer.render(activePlot, columns);
+  renderCanvasDropOverlay(activePlot.axes);
   vscode.postMessage(
     createProtocolEnvelope("webview/workspaceChanged", {
       workspace,
@@ -248,6 +337,52 @@ xSignalSelectEl.addEventListener("change", () => {
   }
 
   dispatch({ type: "plot/setXSignal", payload: { xSignal: xSignalSelectEl.value } });
+});
+
+plotCanvasEl.addEventListener("dragenter", (event) => {
+  if (!event.dataTransfer || !hasSupportedDropSignalType(event.dataTransfer)) {
+    return;
+  }
+  event.preventDefault();
+});
+
+plotCanvasEl.addEventListener("dragover", (event) => {
+  if (!event.dataTransfer || !hasSupportedDropSignalType(event.dataTransfer)) {
+    return;
+  }
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+  setCanvasDropLaneActive(resolveAxisIdFromCanvasEvent(event));
+});
+
+plotCanvasEl.addEventListener("dragleave", (event) => {
+  const nextTarget = event.relatedTarget as Node | null;
+  if (nextTarget && plotCanvasEl.contains(nextTarget)) {
+    return;
+  }
+  setCanvasDropLaneActive(undefined);
+});
+
+plotCanvasEl.addEventListener("drop", (event) => {
+  setCanvasDropLaneActive(undefined);
+
+  if (!event.dataTransfer) {
+    return;
+  }
+
+  const signal = extractSignalFromDropData(event.dataTransfer);
+  const axisId = resolveAxisIdFromCanvasEvent(event);
+  if (!signal || !axisId) {
+    return;
+  }
+
+  event.preventDefault();
+  postDropSignal({
+    signal,
+    target: { kind: "axis", axisId },
+    source: "canvas-overlay"
+  });
 });
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {

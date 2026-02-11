@@ -6,6 +6,7 @@ export type SignalListProps = {
   signals: string[];
   axes: AxisState[];
   onAddTrace(payload: { signal: string; axisChoice: AxisId | "create-new" }): void;
+  onQuickAdd?(payload: { signal: string }): void;
 };
 
 export function renderSignalList(props: SignalListProps): void {
@@ -23,6 +24,10 @@ export function renderSignalList(props: SignalListProps): void {
     const name = document.createElement("span");
     name.className = "signal-name";
     name.textContent = signal;
+    name.title = "Double-click to quick add to active/default lane";
+    name.addEventListener("dblclick", () => {
+      props.onQuickAdd?.({ signal });
+    });
 
     const axisSelect = document.createElement("select");
     axisSelect.className = "inline-select";
