@@ -17,6 +17,7 @@ import {
   getActivePlot,
   type WorkspaceState
 } from "./state/workspaceState";
+import { extractSignalFromDropData, hasSupportedDropSignalType } from "./dropSignal";
 
 type HostMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
@@ -170,6 +171,32 @@ async function renderWorkspace(): Promise<void> {
   renderAxisManager({
     container: axisManagerEl,
     axes: activePlot.axes,
+    canDropSignal: (event) => {
+      if (!event.dataTransfer) {
+        return false;
+      }
+      return hasSupportedDropSignalType(event.dataTransfer);
+    },
+    parseDroppedSignal: (event) => {
+      if (!event.dataTransfer) {
+        return undefined;
+      }
+      return extractSignalFromDropData(event.dataTransfer);
+    },
+    onDropSignal: ({ signal, target }) => {
+      if (!workspace) {
+        return;
+      }
+      const plotId = getActivePlot(workspace).id;
+      vscode.postMessage(
+        createProtocolEnvelope("webview/dropSignal", {
+          signal,
+          plotId,
+          target,
+          source: "axis-row"
+        })
+      );
+    },
     onAddAxis: () => dispatch({ type: "axis/add" }),
     onReorderAxis: ({ axisId, toIndex }) =>
       dispatch({ type: "axis/reorder", payload: { axisId, toIndex } }),

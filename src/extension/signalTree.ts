@@ -2,6 +2,7 @@ import type * as VSCode from "vscode";
 
 export const SIGNAL_BROWSER_VIEW_ID = "waveViewer.signalBrowser";
 export const SIGNAL_BROWSER_ITEM_CONTEXT = "waveViewer.signal";
+export const SIGNAL_BROWSER_TREE_DRAG_MIME = "application/vnd.code.tree.waveViewer.signalBrowser";
 
 export const SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND = "waveViewer.signalBrowser.addToPlot";
 export const SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND = "waveViewer.signalBrowser.addToNewAxis";
@@ -16,6 +17,30 @@ export type SignalTreeDataProvider = VSCode.TreeDataProvider<SignalTreeEntry> & 
   getSignals(): readonly string[];
   clear(): void;
 };
+
+export function createSignalTreeDragAndDropController(
+  vscode: typeof VSCode
+): VSCode.TreeDragAndDropController<SignalTreeEntry> {
+  return {
+    dragMimeTypes: [SIGNAL_BROWSER_TREE_DRAG_MIME, "text/plain"],
+    dropMimeTypes: [],
+    async handleDrag(source, dataTransfer): Promise<void> {
+      const firstEntry = source[0];
+      if (!firstEntry) {
+        return;
+      }
+
+      dataTransfer.set(
+        SIGNAL_BROWSER_TREE_DRAG_MIME,
+        new vscode.DataTransferItem(JSON.stringify({ signal: firstEntry.signal }))
+      );
+      dataTransfer.set("text/plain", new vscode.DataTransferItem(firstEntry.signal));
+    },
+    async handleDrop(): Promise<void> {
+      // Side panel is a drag source only for this workflow.
+    }
+  };
+}
 
 export function toDeterministicSignalOrder(signalNames: readonly string[]): string[] {
   return signalNames.slice();

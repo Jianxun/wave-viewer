@@ -403,4 +403,23 @@ describe("T-018 normalized protocol handling", () => {
 
     expect(fromDropSignal).toEqual(fromSidePanel);
   });
+
+  it("handles dropSignal new-axis target by creating one axis and binding the dropped trace", () => {
+    const next = applyDropSignalAction(createWorkspaceFixture(), {
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "new-axis" },
+      source: "axis-row"
+    });
+
+    expect(next.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(next.plots[0]?.traces).toEqual([
+      {
+        id: "trace-1",
+        signal: "vin",
+        axisId: "y2",
+        visible: true
+      }
+    ]);
+  });
 });

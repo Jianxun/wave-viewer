@@ -156,6 +156,25 @@ body {
   grid-template-columns: minmax(150px, 220px) auto auto minmax(80px, 1fr) minmax(160px, 1fr) auto auto;
 }
 
+.drop-target {
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.drop-target.drop-active {
+  border-color: #7ea7ff;
+  background: color-mix(in srgb, #27437d 35%, transparent);
+}
+
+.axis-row-new-target {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px;
+}
+
 .signal-name {
   overflow: hidden;
   text-overflow: ellipsis;

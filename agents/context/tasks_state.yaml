@@ -12,9 +12,9 @@ T-018:
   pr: 18
   merged: true
 T-015:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 19
+  merged: true
 T-016:
   status: ready
   pr: null
