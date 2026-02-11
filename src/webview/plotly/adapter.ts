@@ -6,7 +6,7 @@ export type DatasetColumnData = {
 };
 
 export type PlotlyTrace = {
-  type: "scattergl";
+  type: "scatter";
   mode: "lines";
   name: string;
   x: number[];
@@ -71,7 +71,7 @@ export function buildPlotlyFigure(payload: {
     const axisMap = mapAxisIdToPlotly(trace.axisId);
 
     return {
-      type: "scattergl",
+      type: "scatter",
       mode: "lines",
       name: trace.signal,
       x: xValues,

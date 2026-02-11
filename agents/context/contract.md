@@ -7,13 +7,14 @@ The initial milestone focuses on a reliable MVP for local CSV visualization with
 
 Active ADRs:
 - `ADR-0001`: Workspace uses tabs, trace-instance axis assignment, extensible `y1..yN` axis model, deterministic YAML replay.
+- `ADR-0002`: Per-plot rendering uses one shared `xaxis` + rangeslider and non-overlapping `yaxis*` domains (not synced multi-canvas subplots).
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle.
 - Webview UI (HTML/CSS/TypeScript): plot tabs, signal list, trace list, axis manager, Plotly canvas.
 - CSV ingestion layer: parse CSV, infer plottable numeric signals, normalize dataset.
 - Plot state layer: manage workspace with multiple plots/tabs and N-axis metadata.
-- Plot adapter: map dataset and plot state to Plotly traces/layout.
+- Plot adapter: map dataset and plot state to one shared-`xaxis` figure with domain-stacked `yaxis*` lanes.
 - Spec persistence: export/import deterministic YAML workspace specs.
 
 ## Interfaces & data contracts
@@ -54,6 +55,9 @@ Active ADRs:
 - MUST support per-tab X-signal selection.
 - MUST support plotting the same signal on multiple Y-axes via independent trace instances.
 - MUST provision axis identifiers as extensible (`y1..yN`) instead of hardcoding two-axis-only state.
+- MUST use one shared `xaxis` per plot tab with one rangeslider.
+- MUST render multiple Y axes in non-overlapping vertical domains (stacked lanes) within one figure.
+- MUST NOT rely on multi-canvas or cross-subplot sync mechanisms for shared X behavior.
 - MUST keep exported YAML deterministic for rendered state (tab/trace/axis order and assignments).
 - MUST fail clearly when importing a YAML spec that references missing signals.
 
@@ -76,3 +80,4 @@ Active ADRs:
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.
+- 2026-02-11: Adopted domain-stacked Y-axis rendering in a single figure with shared X-axis/rangeslider (no subplot sync model); see ADR-0002.
