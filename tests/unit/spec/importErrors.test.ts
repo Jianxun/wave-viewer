@@ -34,7 +34,6 @@ describe("T-006 spec import errors", () => {
       "      xSignal: time",
       "      axes:",
       "        - id: y1",
-      "          side: left",
       "      traces:",
       "        - id: trace-1",
       "          signal: vin",
@@ -69,7 +68,6 @@ describe("T-006 spec import errors", () => {
       "      xSignal: time",
       "      axes:",
       "        - id: y1",
-      "          side: left",
       "      traces: []"
     ].join("\n");
 
@@ -79,5 +77,32 @@ describe("T-006 spec import errors", () => {
         availableSignals: ["time"]
       })
     ).toThrow("Active plot id plot-missing is missing from workspace.plots.");
+  });
+
+  it("rejects legacy axis side fields with a migration error", () => {
+    const yamlText = [
+      "version: 1",
+      "dataset:",
+      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "workspace:",
+      "  activePlotId: plot-1",
+      "  plots:",
+      "    - id: plot-1",
+      "      name: Plot 1",
+      "      xSignal: time",
+      "      axes:",
+      "        - id: y1",
+      "          side: left",
+      "      traces: []"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time"]
+      })
+    ).toThrow(
+      "Plot plot-1 axis y1 uses legacy field side. Re-export this workspace with the current Wave Viewer version."
+    );
   });
 });

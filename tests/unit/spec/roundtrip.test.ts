@@ -15,8 +15,8 @@ describe("T-006 spec roundtrip", () => {
           xSignal: "time",
           xRange: [0, 10],
           axes: [
-            { id: "y1", side: "left", title: "Vin", range: [-1, 1], scale: "linear" },
-            { id: "y2", side: "right", title: "Vout", scale: "log" }
+            { id: "y1", title: "Vin", range: [-1, 1], scale: "linear" },
+            { id: "y2", title: "Vout", scale: "log" }
           ],
           traces: [
             {
@@ -40,7 +40,7 @@ describe("T-006 spec roundtrip", () => {
           id: "plot-2",
           name: "Plot 2",
           xSignal: "freq",
-          axes: [{ id: "y1", side: "left" }],
+          axes: [{ id: "y1" }],
           traces: [],
           nextAxisNumber: 2
         }
@@ -68,7 +68,7 @@ describe("T-006 spec roundtrip", () => {
     expect(yamlAgain).toBe(yaml);
   });
 
-  it("preserves axes without side through export/import replay", () => {
+  it("does not serialize legacy side fields", () => {
     const workspace: WorkspaceState = {
       activePlotId: "plot-1",
       plots: [
@@ -76,10 +76,36 @@ describe("T-006 spec roundtrip", () => {
           id: "plot-1",
           name: "Plot 1",
           xSignal: "time",
-          axes: [{ id: "y1" }, { id: "y2", side: "right" }],
+          axes: [{ id: "y1", title: "Lane 1" }, { id: "y2", scale: "log" }],
           traces: [
             { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
             { id: "trace-2", signal: "vout", axisId: "y2", visible: true }
+          ],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+
+    const yaml = exportPlotSpecV1({
+      datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+      workspace
+    });
+
+    expect(yaml).not.toContain("side:");
+  });
+
+  it("preserves lane-order axes through export/import replay", () => {
+    const workspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y2", title: "Top lane" }, { id: "y1", title: "Bottom lane" }],
+          traces: [
+            { id: "trace-1", signal: "vin", axisId: "y2", visible: true },
+            { id: "trace-2", signal: "vout", axisId: "y1", visible: true }
           ],
           nextAxisNumber: 3
         }
@@ -95,8 +121,8 @@ describe("T-006 spec roundtrip", () => {
       availableSignals: ["time", "vin", "vout"]
     });
 
+    expect(yaml).toContain("id: y2");
     expect(yaml).toContain("id: y1");
-    expect(yaml).not.toContain("id: y1\n        side:");
     expect(parsed.workspace).toEqual(workspace);
   });
 });
