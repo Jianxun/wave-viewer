@@ -11,6 +11,7 @@ import {
   setPlotXSignal,
   setTraceAxis,
   setTraceVisible,
+  updateAxis,
   type WorkspaceState
 } from "./workspaceState";
 
@@ -28,6 +29,19 @@ export type WorkspaceAction =
   | {
       type: "axis/reassignTraces";
       payload: { plotId?: string; fromAxisId: `y${number}`; toAxisId: `y${number}` };
+    }
+  | {
+      type: "axis/update";
+      payload: {
+        plotId?: string;
+        axisId: `y${number}`;
+        patch: Partial<{
+          side: "left" | "right";
+          title: string;
+          range: [number, number];
+          scale: "linear" | "log";
+        }>;
+      };
     }
   | {
       type: "trace/add";
@@ -61,6 +75,8 @@ export function reduceWorkspaceState(state: WorkspaceState, action: WorkspaceAct
       return removeAxis(state, action.payload);
     case "axis/reassignTraces":
       return reassignAxisTraces(state, action.payload);
+    case "axis/update":
+      return updateAxis(state, action.payload);
     case "trace/add":
       return addTrace(state, action.payload);
     case "trace/setAxis":

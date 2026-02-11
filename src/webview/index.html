@@ -18,9 +18,24 @@
           <div id="plot-tabs" class="plot-tabs" role="tablist" aria-label="Plot tabs"></div>
         </div>
 
-        <div class="placeholder-section">
-          <div class="section-title">Controls</div>
-          <p class="muted">Signal, trace, and axis controls will be added in follow-up tasks.</p>
+        <div class="control-section">
+          <div class="section-title">X Signal</div>
+          <select id="x-signal-select" class="inline-select" aria-label="X signal selector"></select>
+        </div>
+
+        <div class="control-section">
+          <div class="section-title">Signals</div>
+          <div id="signal-list" class="list-stack" aria-label="Signal list"></div>
+        </div>
+
+        <div class="control-section">
+          <div class="section-title">Traces</div>
+          <div id="trace-list" class="list-stack" aria-label="Trace list"></div>
+        </div>
+
+        <div class="control-section">
+          <div class="section-title">Axes</div>
+          <div id="axis-manager" class="list-stack" aria-label="Axis manager"></div>
         </div>
 
         <div class="placeholder-section">
