@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRenderAxisMappings,
   buildPlotlyFigure,
   getAxisLaneDomains,
-  mapAxisIdToPlotly,
+  mapLaneIndexToPlotly,
   parseRelayoutRanges,
   resolveAxisIdFromNormalizedY,
   type DatasetColumnData
@@ -37,10 +38,19 @@ function createPlot(overrides?: Partial<PlotState>): PlotState {
 }
 
 describe("plotly adapter", () => {
-  it("maps y1..yN to plotly axis ids", () => {
-    expect(mapAxisIdToPlotly("y1")).toEqual({ traceRef: "y", layoutKey: "yaxis" });
-    expect(mapAxisIdToPlotly("y2")).toEqual({ traceRef: "y2", layoutKey: "yaxis2" });
-    expect(mapAxisIdToPlotly("y5")).toEqual({ traceRef: "y5", layoutKey: "yaxis5" });
+  it("maps render lane indexes to plotly axis ids", () => {
+    expect(mapLaneIndexToPlotly(0)).toEqual({ traceRef: "y", layoutKey: "yaxis" });
+    expect(mapLaneIndexToPlotly(1)).toEqual({ traceRef: "y2", layoutKey: "yaxis2" });
+    expect(mapLaneIndexToPlotly(4)).toEqual({ traceRef: "y5", layoutKey: "yaxis5" });
+  });
+
+  it("builds render axis mappings from axis order", () => {
+    const mappings = buildRenderAxisMappings([{ id: "y3" }, { id: "y1" }, { id: "y2" }]);
+    expect(mappings.map((entry) => `${entry.axisId}:${entry.layoutKey}`)).toEqual([
+      "y3:yaxis",
+      "y1:yaxis2",
+      "y2:yaxis3"
+    ]);
   });
 
   it("maps plot state to traces/layout with visibility and axis mapping", () => {
@@ -67,6 +77,8 @@ describe("plotly adapter", () => {
 
     expect(figure.layout.xaxis).toMatchObject({
       title: { text: "time" },
+      anchor: "free",
+      position: 0,
       rangeslider: { visible: true, autorange: true, range: [0, 2] },
       autorange: true,
       fixedrange: false
@@ -127,20 +139,45 @@ describe("plotly adapter", () => {
       columns
     });
 
-    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
+    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
       0.6933333333333334
     );
-    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(1);
-    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
+    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(1);
+    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
       0.3466666666666667
     );
-    expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
+    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
       0.6533333333333333
     );
-    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(0);
-    expect((figure.layout.yaxis2 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
+    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(0);
+    expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
       0.30666666666666664
     );
+    expect(figure.data.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y3"]);
+  });
+
+  it("keeps shared x-axis tick anchoring stable when lane order changes", () => {
+    const basePlot = createPlot({
+      axes: [{ id: "y1" }, { id: "y2" }, { id: "y3" }],
+      traces: [
+        { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
+        { id: "trace-2", signal: "vout", axisId: "y3", visible: true }
+      ]
+    });
+    const reorderedPlot = createPlot({
+      axes: [{ id: "y3" }, { id: "y1" }, { id: "y2" }],
+      traces: [
+        { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
+        { id: "trace-2", signal: "vout", axisId: "y3", visible: true }
+      ]
+    });
+
+    const baseline = buildPlotlyFigure({ plot: basePlot, columns });
+    const reordered = buildPlotlyFigure({ plot: reorderedPlot, columns });
+
+    expect(baseline.layout.xaxis).toMatchObject({ anchor: "free", position: 0 });
+    expect(reordered.layout.xaxis).toMatchObject({ anchor: "free", position: 0 });
+    expect(reordered.data.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y"]);
   });
 
   it("uses full domain when a plot has one lane", () => {
@@ -207,6 +244,28 @@ describe("plotly adapter", () => {
       hasChanges: true,
       xRange: undefined,
       axisRanges: [{ axisId: "y1", range: undefined }]
+    });
+  });
+
+  it("parses relayout updates using render axis mapping for reordered lanes", () => {
+    const axes: AxisState[] = [{ id: "y3" }, { id: "y1" }, { id: "y2" }];
+
+    const update = parseRelayoutRanges(
+      {
+        "yaxis2.range[0]": -1,
+        "yaxis2.range[1]": 1,
+        "yaxis3.autorange": true
+      },
+      axes
+    );
+
+    expect(update).toEqual({
+      hasChanges: true,
+      xRange: undefined,
+      axisRanges: [
+        { axisId: "y1", range: [-1, 1] },
+        { axisId: "y2", range: undefined }
+      ]
     });
   });
 });
