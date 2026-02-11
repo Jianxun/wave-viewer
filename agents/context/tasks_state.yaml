@@ -8,7 +8,7 @@ T-021:
   pr: 25
   merged: true
 T-022:
-  status: ready_for_review
+  status: review_clean
   pr: 26
   merged: false
 T-023:
