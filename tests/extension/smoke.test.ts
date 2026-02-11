@@ -165,5 +165,10 @@ describe("T-002 extension shell smoke", () => {
         }
       }
     ]);
+
+    const datasetMessage = panelFixture.sentMessages[1];
+    expect(datasetMessage?.type).toBe("host/datasetLoaded");
+    expect(datasetMessage?.payload).not.toHaveProperty("layout");
+    expect(datasetMessage?.payload).not.toHaveProperty("axes");
   });
 });

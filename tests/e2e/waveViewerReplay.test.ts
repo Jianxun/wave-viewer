@@ -6,6 +6,7 @@ import { parseCsv } from "../../src/core/csv/parseCsv";
 import { selectDefaultX } from "../../src/core/dataset/selectDefaultX";
 import { exportPlotSpecV1 } from "../../src/core/spec/exportSpec";
 import { importPlotSpecV1 } from "../../src/core/spec/importSpec";
+import { buildPlotlyFigure } from "../../src/webview/plotly/adapter";
 import { reduceWorkspaceState } from "../../src/webview/state/reducer";
 import { createWorkspaceState, type WorkspaceState } from "../../src/webview/state/workspaceState";
 
@@ -51,7 +52,7 @@ function createExploredWorkspace(defaultXSignal: string): WorkspaceState {
 }
 
 describe("T-007 e2e replay smoke", () => {
-  it("replays ota.spice.csv workspace with two tabs and multi-axis traces", () => {
+  it("replays ota.spice.csv workspace with two tabs, stacked lanes, and shared rangeslider", () => {
     const csvPath = path.resolve(process.cwd(), "examples/simulations/ota.spice.csv");
     const csvText = fs.readFileSync(csvPath, "utf8");
     const dataset = parseCsv({ path: csvPath, csvText });
@@ -80,5 +81,26 @@ describe("T-007 e2e replay smoke", () => {
 
     expect(replay.datasetPath).toBe(dataset.path);
     expect(replay.workspace).toEqual(workspace);
+
+    const figure = buildPlotlyFigure({
+      plot: replay.workspace.plots[0]!,
+      columns: dataset.columns
+    });
+    const xAxisKeys = Object.keys(figure.layout).filter((key) => key.startsWith("xaxis"));
+
+    expect(xAxisKeys).toEqual(["xaxis"]);
+    expect(figure.layout.xaxis.rangeslider).toEqual({ visible: true });
+
+    const topLane = figure.layout.yaxis as { domain?: [number, number]; overlaying?: string };
+    const bottomLane = figure.layout.yaxis2 as { domain?: [number, number]; overlaying?: string };
+    const topDomain = topLane.domain;
+    const bottomDomain = bottomLane.domain;
+
+    expect(topDomain).toBeDefined();
+    expect(bottomDomain).toBeDefined();
+    expect(topDomain![0]).toBeGreaterThan(bottomDomain![1]);
+    expect(topDomain![0] - bottomDomain![1]).toBeCloseTo(0.04);
+    expect(topLane.overlaying).toBeUndefined();
+    expect(bottomLane.overlaying).toBeUndefined();
   });
 });
