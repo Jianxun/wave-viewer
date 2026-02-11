@@ -1,15 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applySidePanelSignalAction,
   createOpenViewerCommand,
   isCsvFile,
   OPEN_VIEWER_COMMAND,
+  REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
+  SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   type CommandDeps,
   type HostToWebviewMessage,
   type WebviewLike,
   type WebviewPanelLike,
   type WebviewToHostMessage
 } from "../../src/extension";
+import { toDeterministicSignalOrder } from "../../src/extension/signalTree";
 
 type PanelFixture = {
   panel: WebviewPanelLike;
@@ -170,5 +175,104 @@ describe("T-002 extension shell smoke", () => {
     expect(datasetMessage?.type).toBe("host/datasetLoaded");
     expect(datasetMessage?.payload).not.toHaveProperty("layout");
     expect(datasetMessage?.payload).not.toHaveProperty("axes");
+  });
+});
+
+describe("T-013 side-panel signal actions", () => {
+  it("exports side-panel command ids", () => {
+    expect(SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND).toBe("waveViewer.signalBrowser.addToPlot");
+    expect(SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND).toBe("waveViewer.signalBrowser.addToNewAxis");
+    expect(REVEAL_SIGNAL_IN_PLOT_COMMAND).toBe("waveViewer.signalBrowser.revealInPlot");
+  });
+
+  it("applies add-to-plot through reducer-compatible trace append", () => {
+    const next = applySidePanelSignalAction(
+      {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [],
+            nextAxisNumber: 2
+          }
+        ]
+      },
+      { type: "add-to-plot", signal: "vin" }
+    );
+
+    expect(next.plots[0]?.traces).toEqual([
+      {
+        id: "trace-1",
+        signal: "vin",
+        axisId: "y1",
+        visible: true
+      }
+    ]);
+  });
+
+  it("applies add-to-new-axis by appending one axis and one trace bound to it", () => {
+    const next = applySidePanelSignalAction(
+      {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [],
+            nextAxisNumber: 2
+          }
+        ]
+      },
+      { type: "add-to-new-axis", signal: "vin" }
+    );
+
+    expect(next.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(next.plots[0]?.traces).toEqual([
+      {
+        id: "trace-1",
+        signal: "vin",
+        axisId: "y2",
+        visible: true
+      }
+    ]);
+  });
+
+  it("reveals signal by activating the first plot that already contains it", () => {
+    const next = applySidePanelSignalAction(
+      {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [],
+            nextAxisNumber: 2
+          },
+          {
+            id: "plot-2",
+            name: "Plot 2",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: false }],
+            nextAxisNumber: 2
+          }
+        ]
+      },
+      { type: "reveal-in-plot", signal: "vin" }
+    );
+
+    expect(next.activePlotId).toBe("plot-2");
+    expect(next.plots[1]?.traces[0]?.visible).toBe(true);
+  });
+
+  it("keeps signal order deterministic by source column order", () => {
+    expect(toDeterministicSignalOrder(["time", "vin", "vout"])).toEqual(["time", "vin", "vout"]);
   });
 });

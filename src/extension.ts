@@ -7,11 +7,31 @@ import { importPlotSpecV1 } from "./core/spec/importSpec";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
 import type { Dataset } from "./core/dataset/types";
+import {
+  createSignalTreeDataProvider,
+  type SignalTreeDataProvider,
+  SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
+  SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
+  SIGNAL_BROWSER_VIEW_ID,
+  REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  resolveSignalFromCommandArgument
+} from "./extension/signalTree";
+import { reduceWorkspaceState } from "./webview/state/reducer";
 import { createWorkspaceState, type WorkspaceState } from "./webview/state/workspaceState";
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
 export const EXPORT_SPEC_COMMAND = "waveViewer.exportPlotSpec";
 export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
+export {
+  REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
+  SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND
+};
+
+export type SidePanelSignalAction =
+  | { type: "add-to-plot"; signal: string }
+  | { type: "add-to-new-axis"; signal: string }
+  | { type: "reveal-in-plot"; signal: string };
 
 export type HostToWebviewMessage =
   | { type: "host/init"; payload: { title: string } }
@@ -49,6 +69,7 @@ export type WebviewLike = {
 
 export type WebviewPanelLike = {
   webview: WebviewLike;
+  onDidDispose?(listener: () => void): void;
 };
 
 export type CommandDeps = {
@@ -58,9 +79,59 @@ export type CommandDeps = {
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   createPanel(): WebviewPanelLike;
+  onPanelCreated?(documentPath: string, panel: WebviewPanelLike): void;
   showError(message: string): void;
   buildHtml(webview: WebviewLike, extensionUri: unknown): string;
 };
+
+export function applySidePanelSignalAction(
+  workspace: WorkspaceState,
+  action: SidePanelSignalAction
+): WorkspaceState {
+  if (action.type === "add-to-plot") {
+    return reduceWorkspaceState(workspace, {
+      type: "trace/add",
+      payload: { signal: action.signal }
+    });
+  }
+
+  if (action.type === "add-to-new-axis") {
+    const withAxis = reduceWorkspaceState(workspace, { type: "axis/add" });
+    const activePlot = withAxis.plots.find((plot) => plot.id === withAxis.activePlotId);
+    const axisId = activePlot?.axes[activePlot.axes.length - 1]?.id;
+    if (!axisId) {
+      return withAxis;
+    }
+    return reduceWorkspaceState(withAxis, {
+      type: "trace/add",
+      payload: { signal: action.signal, axisId }
+    });
+  }
+
+  const revealPlot = workspace.plots.find((plot) =>
+    plot.traces.some((trace) => trace.signal === action.signal)
+  );
+  if (!revealPlot) {
+    return workspace;
+  }
+
+  let revealed = reduceWorkspaceState(workspace, {
+    type: "plot/setActive",
+    payload: { plotId: revealPlot.id }
+  });
+
+  for (const trace of revealPlot.traces) {
+    if (trace.signal !== action.signal || trace.visible) {
+      continue;
+    }
+    revealed = reduceWorkspaceState(revealed, {
+      type: "trace/setVisible",
+      payload: { traceId: trace.id, visible: true }
+    });
+  }
+
+  return revealed;
+}
 
 export type ExportSpecCommandDeps = {
   getActiveDocument(): ActiveDocumentLike | undefined;
@@ -108,6 +179,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
     }
 
     const panel = deps.createPanel();
+    deps.onPanelCreated?.(activeDocument.uri.fsPath, panel);
     panel.webview.html = deps.buildHtml(panel.webview, deps.extensionUri);
 
     panel.webview.onDidReceiveMessage((message) => {
@@ -269,6 +341,69 @@ function loadVscode(): typeof VSCode {
 export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
+  const panelByDatasetPath = new Map<string, WebviewPanelLike>();
+  const signalTreeProvider = createSignalTreeDataProvider(vscode);
+
+  function setSignalTreeFromActiveCsv(): {
+    documentPath: string;
+    defaultXSignal: string;
+    signals: readonly string[];
+  } | null {
+    const activeDocument = vscode.window.activeTextEditor?.document;
+    if (!activeDocument || !isCsvFile(activeDocument.fileName)) {
+      signalTreeProvider.clear();
+      return null;
+    }
+
+    try {
+      const csvText = fs.readFileSync(activeDocument.uri.fsPath, "utf8");
+      const dataset = parseCsv({ path: activeDocument.uri.fsPath, csvText });
+      const signals = dataset.columns.map((column) => column.name);
+      signalTreeProvider.setSignals(signals);
+      const defaultXSignal = selectDefaultX(dataset);
+      return { documentPath: activeDocument.uri.fsPath, defaultXSignal, signals };
+    } catch {
+      signalTreeProvider.clear();
+      return null;
+    }
+  }
+
+  function runSidePanelSignalAction(actionType: SidePanelSignalAction["type"]): (item?: unknown) => void {
+    return (item?: unknown) => {
+      const signal = resolveSignalFromCommandArgument(item);
+      if (!signal) {
+        void vscode.window.showErrorMessage("Select a numeric signal in the Wave Viewer side panel.");
+        return;
+      }
+
+      const activeDatasetContext = setSignalTreeFromActiveCsv();
+      if (!activeDatasetContext) {
+        void vscode.window.showErrorMessage("Open an active .csv file before using Wave Viewer signals.");
+        return;
+      }
+
+      if (!activeDatasetContext.signals.includes(signal)) {
+        void vscode.window.showErrorMessage(`Signal '${signal}' is not available in the active dataset.`);
+        return;
+      }
+
+      const workspace =
+        workspaceByDatasetPath.get(activeDatasetContext.documentPath) ??
+        createWorkspaceState(activeDatasetContext.defaultXSignal);
+      const nextWorkspace = applySidePanelSignalAction(workspace, { type: actionType, signal });
+      workspaceByDatasetPath.set(activeDatasetContext.documentPath, nextWorkspace);
+
+      const panel = panelByDatasetPath.get(activeDatasetContext.documentPath);
+      if (!panel) {
+        return;
+      }
+
+      void panel.webview.postMessage({
+        type: "host/workspaceLoaded",
+        payload: { workspace: nextWorkspace }
+      });
+    };
+  }
 
   const command = createOpenViewerCommand({
     extensionUri: context.extensionUri,
@@ -288,6 +423,12 @@ export function activate(context: VSCode.ExtensionContext): void {
         enableScripts: true,
         retainContextWhenHidden: true
       }) as unknown as WebviewPanelLike,
+    onPanelCreated: (documentPath, panel) => {
+      panelByDatasetPath.set(documentPath, panel);
+      panel.onDidDispose?.(() => {
+        panelByDatasetPath.delete(documentPath);
+      });
+    },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     },
@@ -352,9 +493,37 @@ export function activate(context: VSCode.ExtensionContext): void {
     readTextFile: (filePath) => fs.readFileSync(filePath, "utf8")
   });
 
+  setSignalTreeFromActiveCsv();
+
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider(SIGNAL_BROWSER_VIEW_ID, signalTreeProvider)
+  );
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      setSignalTreeFromActiveCsv();
+    })
+  );
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
   context.subscriptions.push(vscode.commands.registerCommand(EXPORT_SPEC_COMMAND, exportSpecCommand));
   context.subscriptions.push(vscode.commands.registerCommand(IMPORT_SPEC_COMMAND, importSpecCommand));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
+      runSidePanelSignalAction("add-to-plot")
+    )
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
+      runSidePanelSignalAction("add-to-new-axis")
+    )
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      REVEAL_SIGNAL_IN_PLOT_COMMAND,
+      runSidePanelSignalAction("reveal-in-plot")
+    )
+  );
 }
 
 export function deactivate(): void {

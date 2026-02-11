@@ -15,7 +15,11 @@
   "activationEvents": [
     "onCommand:waveViewer.openViewer",
     "onCommand:waveViewer.exportPlotSpec",
-    "onCommand:waveViewer.importPlotSpec"
+    "onCommand:waveViewer.importPlotSpec",
+    "onCommand:waveViewer.signalBrowser.addToPlot",
+    "onCommand:waveViewer.signalBrowser.addToNewAxis",
+    "onCommand:waveViewer.signalBrowser.revealInPlot",
+    "onView:waveViewer.signalBrowser"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -31,8 +35,47 @@
       {
         "command": "waveViewer.importPlotSpec",
         "title": "Wave Viewer: Import Plot Spec (YAML)"
+      },
+      {
+        "command": "waveViewer.signalBrowser.addToPlot",
+        "title": "Wave Viewer: Add Signal to Plot"
+      },
+      {
+        "command": "waveViewer.signalBrowser.addToNewAxis",
+        "title": "Wave Viewer: Add Signal to New Axis"
+      },
+      {
+        "command": "waveViewer.signalBrowser.revealInPlot",
+        "title": "Wave Viewer: Reveal Signal in Plot"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "waveViewer.signalBrowser",
+          "name": "Wave Viewer Signals"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "waveViewer.signalBrowser.addToPlot",
+          "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
+          "group": "navigation"
+        },
+        {
+          "command": "waveViewer.signalBrowser.addToNewAxis",
+          "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
+          "group": "navigation@2"
+        },
+        {
+          "command": "waveViewer.signalBrowser.revealInPlot",
+          "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
+          "group": "navigation@3"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "npm run build:extension && npm run build:webview",
