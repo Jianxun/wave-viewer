@@ -67,4 +67,36 @@ describe("T-006 spec roundtrip", () => {
 
     expect(yamlAgain).toBe(yaml);
   });
+
+  it("preserves axes without side through export/import replay", () => {
+    const workspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2", side: "right" }],
+          traces: [
+            { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
+            { id: "trace-2", signal: "vout", axisId: "y2", visible: true }
+          ],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+
+    const yaml = exportPlotSpecV1({
+      datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+      workspace
+    });
+    const parsed = importPlotSpecV1({
+      yamlText: yaml,
+      availableSignals: ["time", "vin", "vout"]
+    });
+
+    expect(yaml).toContain("id: y1");
+    expect(yaml).not.toContain("id: y1\n        side:");
+    expect(parsed.workspace).toEqual(workspace);
+  });
 });

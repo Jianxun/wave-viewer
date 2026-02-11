@@ -170,14 +170,16 @@ function validateAxis(plotId: string, value: unknown, index: number): PlotSpecAx
   if (!isAxisId(id)) {
     throw new PlotSpecImportError(`Plot ${plotId} axis at index ${index} has invalid id.`);
   }
-  if (side !== "left" && side !== "right") {
+  if (side !== undefined && side !== "left" && side !== "right") {
     throw new PlotSpecImportError(`Plot ${plotId} axis ${id} has invalid side.`);
   }
 
   const axis: PlotSpecAxisV1 = {
-    id,
-    side
+    id
   };
+  if (side !== undefined) {
+    axis.side = side;
+  }
 
   if (title !== undefined) {
     if (typeof title !== "string") {
