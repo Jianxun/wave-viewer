@@ -4,7 +4,6 @@ export const PLOT_SPEC_V1_VERSION = 1;
 
 export type PlotSpecAxisV1 = {
   id: `y${number}`;
-  side?: "left" | "right";
   title?: string;
   range?: [number, number];
   scale?: "linear" | "log";

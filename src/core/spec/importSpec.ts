@@ -170,16 +170,15 @@ function validateAxis(plotId: string, value: unknown, index: number): PlotSpecAx
   if (!isAxisId(id)) {
     throw new PlotSpecImportError(`Plot ${plotId} axis at index ${index} has invalid id.`);
   }
-  if (side !== undefined && side !== "left" && side !== "right") {
-    throw new PlotSpecImportError(`Plot ${plotId} axis ${id} has invalid side.`);
+  if (side !== undefined) {
+    throw new PlotSpecImportError(
+      `Plot ${plotId} axis ${id} uses legacy field side. Re-export this workspace with the current Wave Viewer version.`
+    );
   }
 
   const axis: PlotSpecAxisV1 = {
     id
   };
-  if (side !== undefined) {
-    axis.side = side;
-  }
 
   if (title !== undefined) {
     if (typeof title !== "string") {

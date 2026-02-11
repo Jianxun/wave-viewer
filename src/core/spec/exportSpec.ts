@@ -27,9 +27,6 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
               id: axis.id
             };
 
-            if (axis.side !== undefined) {
-              specAxis.side = axis.side;
-            }
             if (axis.title !== undefined) {
               specAxis.title = axis.title;
             }
