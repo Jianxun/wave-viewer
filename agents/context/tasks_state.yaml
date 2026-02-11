@@ -16,9 +16,9 @@ T-015:
   pr: 19
   merged: true
 T-016:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 20
+  merged: true
 T-017:
   status: ready
   pr: null

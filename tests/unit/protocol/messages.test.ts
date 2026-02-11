@@ -60,6 +60,22 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts host sidePanelQuickAdd with a non-empty signal", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/sidePanelQuickAdd", {
+        signal: "vin"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/sidePanelQuickAdd",
+      payload: {
+        signal: "vin"
+      }
+    });
+  });
+
   it("rejects host messages with invalid envelope version", () => {
     const parsed = parseHostToWebviewMessage({
       version: 99,
@@ -72,6 +88,15 @@ describe("protocol envelope validators", () => {
   it("rejects host messages with unknown type", () => {
     const parsed = parseHostToWebviewMessage(
       createProtocolEnvelope("host/unknown", { foo: "bar" })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects host sidePanelQuickAdd when signal is empty", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/sidePanelQuickAdd", {
+        signal: "  "
+      })
     );
     expect(parsed).toBeUndefined();
   });

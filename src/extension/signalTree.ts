@@ -7,6 +7,7 @@ export const SIGNAL_BROWSER_TREE_DRAG_MIME = "application/vnd.code.tree.waveView
 export const SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND = "waveViewer.signalBrowser.addToPlot";
 export const SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND = "waveViewer.signalBrowser.addToNewAxis";
 export const REVEAL_SIGNAL_IN_PLOT_COMMAND = "waveViewer.signalBrowser.revealInPlot";
+export const SIGNAL_BROWSER_QUICK_ADD_COMMAND = "waveViewer.signalBrowser.quickAdd";
 
 export type SignalTreeEntry = {
   signal: string;
@@ -74,9 +75,10 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
         label: entry.signal,
         collapsibleState: vscode.TreeItemCollapsibleState.None,
         contextValue: SIGNAL_BROWSER_ITEM_CONTEXT,
+        tooltip: "Double-click to quick add to active/default lane",
         command: {
-          command: SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
-          title: "Add to Plot",
+          command: SIGNAL_BROWSER_QUICK_ADD_COMMAND,
+          title: "Quick Add",
           arguments: [entry]
         }
       }) satisfies VSCode.TreeItem,
@@ -100,5 +102,33 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
       signals = [];
       emitter.fire(undefined);
     }
+  };
+}
+
+export function createDoubleClickQuickAddResolver(options?: {
+  thresholdMs?: number;
+  now?: () => number;
+}): (signal: string) => boolean {
+  const thresholdMs = options?.thresholdMs ?? 450;
+  const now = options?.now ?? (() => Date.now());
+
+  let lastSignal: string | undefined;
+  let lastClickTimestamp = 0;
+
+  return (signal: string): boolean => {
+    const timestamp = now();
+    const isDoubleClick =
+      lastSignal === signal && timestamp - lastClickTimestamp >= 0 && timestamp - lastClickTimestamp <= thresholdMs;
+
+    lastSignal = signal;
+    lastClickTimestamp = timestamp;
+
+    if (!isDoubleClick) {
+      return false;
+    }
+
+    // Require a fresh pair of clicks for the next quick-add.
+    lastSignal = undefined;
+    return true;
   };
 }

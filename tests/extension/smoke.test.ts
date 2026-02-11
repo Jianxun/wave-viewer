@@ -8,6 +8,7 @@ import {
   isCsvFile,
   OPEN_VIEWER_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
+  SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   type CommandDeps,
@@ -226,6 +227,7 @@ describe("T-002 extension shell smoke", () => {
 
 describe("T-013 side-panel signal actions", () => {
   it("exports side-panel command ids", () => {
+    expect(SIGNAL_BROWSER_QUICK_ADD_COMMAND).toBe("waveViewer.signalBrowser.quickAdd");
     expect(SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND).toBe("waveViewer.signalBrowser.addToPlot");
     expect(SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND).toBe("waveViewer.signalBrowser.addToNewAxis");
     expect(REVEAL_SIGNAL_IN_PLOT_COMMAND).toBe("waveViewer.signalBrowser.revealInPlot");
@@ -419,6 +421,47 @@ describe("T-018 normalized protocol handling", () => {
         signal: "vin",
         axisId: "y2",
         visible: true
+      }
+    ]);
+  });
+
+  it("handles canvas-overlay dropSignal source and records source-specific patch reason", async () => {
+    const { deps, panelFixture, setCachedWorkspace } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "canvas-overlay"
+      })
+    );
+
+    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/workspacePatched",
+        payload: {
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          reason: "dropSignal:canvas-overlay"
+        }
       }
     ]);
   });

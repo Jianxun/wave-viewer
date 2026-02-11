@@ -65,17 +65,47 @@ body {
 }
 
 .plot-canvas {
+  position: relative;
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   margin: 12px;
   border: 1px dashed #44609f;
   border-radius: 10px;
+  overflow: hidden;
   background: linear-gradient(180deg, #172136 0%, #101723 100%);
 }
 
+.plot-root {
+  width: 100%;
+  height: 100%;
+}
+
+.plot-drop-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.plot-drop-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.plot-drop-lane.drop-active {
+  border-color: #7ea7ff;
+  background: color-mix(in srgb, #27437d 26%, transparent);
+}
+
 .canvas-placeholder {
+  margin: 0;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
   color: var(--text-muted);
 }
 

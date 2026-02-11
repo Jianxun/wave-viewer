@@ -13,11 +13,13 @@ import {
   type ProtocolEnvelope
 } from "./core/dataset/types";
 import {
+  createDoubleClickQuickAddResolver,
   createSignalTreeDragAndDropController,
   createSignalTreeDataProvider,
   type SignalTreeDataProvider,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
+  SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_VIEW_ID,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
   resolveSignalFromCommandArgument
@@ -31,7 +33,8 @@ export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
 export {
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
-  SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND
+  SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
+  SIGNAL_BROWSER_QUICK_ADD_COMMAND
 };
 
 export type SidePanelSignalAction =
@@ -52,7 +55,8 @@ export type HostToWebviewMessage =
       }
     >
   | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>;
+  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>
+  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>;
 
 export type WebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
@@ -428,6 +432,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
   const panelByDatasetPath = new Map<string, WebviewPanelLike>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
+  const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
 
   function setSignalTreeFromActiveCsv(): {
     documentPath: string;
@@ -491,6 +496,41 @@ export function activate(context: VSCode.ExtensionContext): void {
       );
     };
   }
+
+  const runSidePanelQuickAdd = (item?: unknown): void => {
+    const signal = resolveSignalFromCommandArgument(item);
+    if (!signal) {
+      void vscode.window.showErrorMessage("Select a numeric signal in the Wave Viewer side panel.");
+      return;
+    }
+
+    if (!resolveQuickAddDoubleClick(signal)) {
+      return;
+    }
+
+    const activeDatasetContext = setSignalTreeFromActiveCsv();
+    if (!activeDatasetContext) {
+      void vscode.window.showErrorMessage("Open an active .csv file before using Wave Viewer signals.");
+      return;
+    }
+
+    if (!activeDatasetContext.signals.includes(signal)) {
+      void vscode.window.showErrorMessage(`Signal '${signal}' is not available in the active dataset.`);
+      return;
+    }
+
+    const panel = panelByDatasetPath.get(activeDatasetContext.documentPath);
+    if (!panel) {
+      const workspace =
+        workspaceByDatasetPath.get(activeDatasetContext.documentPath) ??
+        createWorkspaceState(activeDatasetContext.defaultXSignal);
+      const nextWorkspace = applySidePanelSignalAction(workspace, { type: "add-to-plot", signal });
+      workspaceByDatasetPath.set(activeDatasetContext.documentPath, nextWorkspace);
+      return;
+    }
+
+    void panel.webview.postMessage(createProtocolEnvelope("host/sidePanelQuickAdd", { signal }));
+  };
 
   const command = createOpenViewerCommand({
     extensionUri: context.extensionUri,
@@ -598,6 +638,9 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
   context.subscriptions.push(vscode.commands.registerCommand(EXPORT_SPEC_COMMAND, exportSpecCommand));
   context.subscriptions.push(vscode.commands.registerCommand(IMPORT_SPEC_COMMAND, importSpecCommand));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(SIGNAL_BROWSER_QUICK_ADD_COMMAND, runSidePanelQuickAdd)
+  );
   context.subscriptions.push(
     vscode.commands.registerCommand(
       SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
