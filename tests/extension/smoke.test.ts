@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset/types";
@@ -751,5 +753,26 @@ describe("T-018 normalized protocol handling", () => {
         }
       }
     ]);
+  });
+});
+
+describe("T-023 canvas drop overlay interaction safety", () => {
+  it("keeps overlay non-interactive outside active drag lifecycle", () => {
+    const css = fs.readFileSync(path.resolve("src/webview/styles.css"), "utf8");
+
+    expect(css).toMatch(/\.plot-drop-overlay\s*\{[\s\S]*?pointer-events:\s*none;/);
+    expect(css).toMatch(/\.plot-drop-overlay\.drag-active\s*\{[\s\S]*?pointer-events:\s*auto;/);
+    expect(css).toMatch(/\.plot-drop-lane\s*\{[\s\S]*?pointer-events:\s*none;/);
+  });
+
+  it("gates canvas overlay activation to drag lifecycle events only", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain("function setCanvasDropOverlayActive(active: boolean): void");
+    expect(source).toContain('plotDropOverlayEl.classList.toggle("drag-active", active);');
+    expect(source).toContain('plotCanvasEl.addEventListener("dragenter"');
+    expect(source).toContain('plotCanvasEl.addEventListener("dragover"');
+    expect(source).toContain('plotCanvasEl.addEventListener("dragleave"');
+    expect(source).toContain('plotCanvasEl.addEventListener("drop"');
   });
 });
