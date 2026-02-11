@@ -1,27 +1,24 @@
 # Project Status
 
 ## Current state summary
-- Baseline MVP (`T-001..T-007`) and ADR-0002 lane migration (`T-008..T-012`) are complete and archived.
-- Plot canvas visual/interaction refinements were applied after `T-012`:
-  - dark Plotly canvas theme
-  - drag zoom parity with legacy yaml2plot behavior
-  - rangeslider bounds clipping to X-data min/max
-  - lane/domain outline rendering
-- VaporView architecture reference was reviewed and documented in `doc/vaporview-architecture-findings.md`.
-- Active execution queue is now `T-013..T-016` for side-panel-first signal workflows.
+- Side-panel-first workflow wave is implemented and merged (`T-013`, `T-014`, `T-018`, `T-015`, `T-016`, `T-017`, `T-019`).
+- Specs/ADRs were realigned to side-panel workflow + versioned host/webview protocol and custom-editor defer policy.
+- Completed side-panel workflow tasks (`T-013`..`T-019`) are archived in `agents/context/tasks_archived.yaml`.
+- Product direction for next slice is single-session UX hardening: explicit loaded CSV management in Explorer (instead of active-editor-derived signal listing).
 
 ## Last merged/verified status
-- PRs #1 through #13 merged for MVP + ADR-0002 lane model tasks.
-- Task archive updated for `T-008..T-012` on 2026-02-11.
-- New architecture/task slicing prepared for side-panel and drag/drop ergonomics.
-- Verification to run after slicing edits: `./venv/bin/python scripts/lint_tasks_state.py`.
+- PRs #16, #17, #18, #19, #20, #21, and #22 are merged.
+- Latest architecture/spec/task realignment PR (#15) is also merged.
+- Active task state tracks only upcoming `T-020..T-024` as `ready` after archiving completed work.
+- Context consistency check passes: `./venv/bin/python scripts/lint_tasks_state.py`.
 
 ## Next 1-3 tasks
-1. T-013: add side-panel signal browser and extension-webview signal actions.
-2. T-014: implement drag and drop from side-panel signals to axis lanes.
-3. T-015: add canvas-domain drop overlay and quick-add ergonomics.
+1. T-020: persist a single-session loaded CSV registry for the Explorer signal browser (no focus-based clearing).
+2. T-021: add Explorer context-menu commands `Load CSV File...` and `Reload All Files`.
+3. T-022: add Explorer context-menu command `Remove Loaded File` with stable side-panel behavior.
 
 ## Known risks / unknowns
-- Side-panel and webview action routing can drift if command/message contracts are not centralized.
-- Drag/drop targeting must remain deterministic across row targets and canvas-domain targets.
-- Large dataset performance remains unbenchmarked for multi-trace side-panel workflows.
+- Current canvas drop overlay likely intercepts Plotly interactions (legend click/hover cursor) when not dragging; tracked as `T-023`.
+- Shared x-axis ticks are currently coupled to lane ordering (`y1` anchoring), which causes unstable tick placement when lanes reorder; tracked as `T-024`.
+- Transition from single-dataset assumptions to loaded-file registry must preserve deterministic side-panel action routing.
+- Removing a loaded file while related viewer state exists needs explicit user-facing behavior to avoid ambiguous side effects.
