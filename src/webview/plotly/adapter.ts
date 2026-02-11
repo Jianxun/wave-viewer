@@ -67,6 +67,11 @@ export type PlotlyFigure = {
   layout: PlotlyLayout;
 };
 
+export type AxisLaneDomain = {
+  axisId: AxisId;
+  domain: [number, number];
+};
+
 export function mapAxisIdToPlotly(axisId: AxisId): { traceRef: string; layoutKey: string } {
   if (axisId === "y1") {
     return { traceRef: "y", layoutKey: "yaxis" };
@@ -130,15 +135,49 @@ export function buildPlotlyFigure(payload: {
     }
   };
 
-  const laneDomains = buildLaneDomains(payload.plot.axes.length);
-  layout.shapes = buildLaneOutlineShapes(laneDomains);
+  const laneDomains = getAxisLaneDomains(payload.plot.axes);
+  layout.shapes = buildLaneOutlineShapes(laneDomains.map((lane) => lane.domain));
 
   for (const [index, axis] of payload.plot.axes.entries()) {
     const mapping = mapAxisIdToPlotly(axis.id);
-    layout[mapping.layoutKey] = toAxisLayout(axis, laneDomains[index]);
+    layout[mapping.layoutKey] = toAxisLayout(axis, laneDomains[index]?.domain);
   }
 
   return { data, layout };
+}
+
+export function getAxisLaneDomains(axes: ReadonlyArray<Pick<AxisState, "id">>): AxisLaneDomain[] {
+  const domains = buildLaneDomains(axes.length);
+  return axes.map((axis, index) => ({ axisId: axis.id, domain: domains[index] ?? [0, 1] }));
+}
+
+export function resolveAxisIdFromNormalizedY(
+  axes: ReadonlyArray<Pick<AxisState, "id">>,
+  normalizedY: number
+): AxisId | undefined {
+  if (axes.length === 0 || !Number.isFinite(normalizedY)) {
+    return undefined;
+  }
+
+  const y = clampToDomain(normalizedY);
+  const lanes = getAxisLaneDomains(axes);
+  const matchingLane = lanes.find(({ domain }) => y >= domain[0] && y <= domain[1]);
+  if (matchingLane) {
+    return matchingLane.axisId;
+  }
+
+  let nearestLane = lanes[0];
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const lane of lanes) {
+    const [start, end] = lane.domain;
+    const distance = y < start ? start - y : y > end ? y - end : 0;
+    if (distance <= nearestDistance) {
+      nearestDistance = distance;
+      nearestLane = lane;
+    }
+  }
+
+  return nearestLane.axisId;
 }
 
 function toAxisLayout(axis: AxisState, domain: [number, number] | undefined): PlotlyAxisLayout {

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPlotlyFigure,
+  getAxisLaneDomains,
   mapAxisIdToPlotly,
   parseRelayoutRanges,
+  resolveAxisIdFromNormalizedY,
   type DatasetColumnData
 } from "../../../../src/webview/plotly/adapter";
 import type { AxisState, PlotState } from "../../../../src/webview/state/workspaceState";
@@ -150,6 +152,25 @@ describe("plotly adapter", () => {
     });
 
     expect(figure.layout.yaxis).toMatchObject({ domain: [0, 1] });
+  });
+
+  it("returns axis lane domains using axis order and shared domain math", () => {
+    const domains = getAxisLaneDomains([{ id: "y3" }, { id: "y1" }, { id: "y2" }]);
+    expect(domains.map((entry) => entry.axisId)).toEqual(["y3", "y1", "y2"]);
+    expect(domains[0]?.domain[0]).toBeCloseTo(0.6933333333333334);
+    expect(domains[0]?.domain[1]).toBeCloseTo(1);
+    expect(domains[1]?.domain[0]).toBeCloseTo(0.3466666666666667);
+    expect(domains[1]?.domain[1]).toBeCloseTo(0.6533333333333333);
+    expect(domains[2]?.domain[0]).toBeCloseTo(0);
+    expect(domains[2]?.domain[1]).toBeCloseTo(0.30666666666666664);
+  });
+
+  it("resolves normalized Y to axis ids and snaps gap positions to nearest lane", () => {
+    const axes: AxisState[] = [{ id: "y1" }, { id: "y2" }];
+    expect(resolveAxisIdFromNormalizedY(axes, 0.75)).toBe("y1");
+    expect(resolveAxisIdFromNormalizedY(axes, 0.2)).toBe("y2");
+    expect(resolveAxisIdFromNormalizedY(axes, 0.5)).toBe("y2");
+    expect(resolveAxisIdFromNormalizedY(axes, 0.505)).toBe("y1");
   });
 
   it("parses relayout updates for range capture and reset", () => {
