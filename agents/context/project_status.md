@@ -7,7 +7,8 @@
 - UX migration slice (`T-038`..`T-040`) is complete and merged (lane-owned chips, lane activation intent, anchored new-axis insertion semantics).
 - Lane drag reassignment now persists through host-authoritative state updates (no snap-back after focus changes).
 - New-lane affordance now uses click-to-create (instead of drag-to-create) and is fixed at the bottom of lane board to avoid active-lane repositioning churn.
-- The previously drafted UI polish task slice (`T-041`..`T-043`) is removed from planning.
+- Latest UI stabilization pass shipped: lane controls (`Up/Down/Close`) persist to host, quick-add routes to active lane again, x-axis anchors to bottom lane, and range slider is restored/tuned.
+- New focus area is multi-plot correctness and persistence.
 
 ## Last merged/verified status
 - PRs #30, #31, #32, #33, #34, and #35 are merged (`T-025`..`T-030`).
@@ -19,11 +20,15 @@
   - lane activation intent is wired end-to-end (webview click -> host state patch -> explorer add targeting),
   - lane-to-lane chip drag works,
   - bottom-anchored "Click here to create a new lane" control appends lane at board bottom.
+  - quick-add to active lane is restored,
+  - x-axis range slider is visible, anchored to bottom lane, and drag interaction no longer redefines range unexpectedly.
 
 ## Next 1-3 tasks
-1. Re-scope the next UI slice before adding new sprint tasks.
+1. `T-041` Make plot tab lifecycle host-authoritative (`+Plot`/select/remove persistence across focus/reopen).
+2. `T-042` Ensure explorer quick-add/drop targets active plot + active lane in multi-plot sessions.
+3. `T-043` Fix plot rename persistence via host intent.
 
 ## Known risks / unknowns
 - Chip drag behavior must key by `trace.id` to avoid duplicate-signal collisions and unintended trace reassignment.
-- Sidebar simplification still has UX debt (visual density, control discoverability, and consistency with waveform viewer mental model).
-- Must preserve parity for quick-add and side-panel add flows while changing lane-creation affordances.
+- Multi-plot actions still have local-vs-host drift risk until all plot lifecycle actions are intent-driven.
+- PNG export/save is currently broken and tracked as `T-044` in backlog.

@@ -1,6 +1,81 @@
 schema_version: 2
-current_sprint: []
-backlog: []
+current_sprint:
+  - id: T-041
+    title: Make plot tab lifecycle host-authoritative (+Plot/select/remove persistence)
+    owner: Executor
+    dod:
+      - Add webview intents and host handlers so plot add/select/remove actions persist via host state transactions.
+      - Replace local-only plot tab mutations in webview with host intent posting.
+      - Verify plot tabs remain stable after focus changes and reopening viewer.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-041.md
+    files:
+      - src/webview/main.ts
+      - src/extension/commands.ts
+      - src/core/dataset/types.ts
+      - src/extension/types.ts
+      - tests/extension/smoke.test.ts
+  - id: T-042
+    title: Route explorer quick-add to active plot + active lane in multi-plot sessions
+    owner: Executor
+    depends_on:
+      - T-041
+    dod:
+      - Ensure side-panel quick-add applies to viewerState active plot and its active lane, not stale/default plot.
+      - Keep tuple injection and quick-add intent ordering deterministic under multi-plot routing.
+      - Add/extend tests for multi-plot quick-add targeting correctness.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-042.md
+    files:
+      - src/extension.ts
+      - src/extension/sidePanel.ts
+      - src/extension/hostStateStore.ts
+      - src/webview/main.ts
+      - tests/extension/smoke.test.ts
+  - id: T-043
+    title: Persist plot rename through host intent
+    owner: Executor
+    depends_on:
+      - T-041
+    dod:
+      - Add host-backed rename intent path and remove local-only rename state mutation.
+      - Keep rename validation deterministic (trimmed non-empty names).
+      - Add test coverage for rename persistence after host patch/reload.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-043.md
+    files:
+      - src/webview/main.ts
+      - src/extension/commands.ts
+      - src/core/dataset/types.ts
+      - src/extension/types.ts
+      - tests/extension/smoke.test.ts
+backlog:
+  - id: T-044
+    title: Restore working PNG export/save flow
+    owner: Executor
+    dod:
+      - Reproduce and fix broken PNG export behavior from viewer UI.
+      - Ensure export works across multi-lane and multi-plot states.
+      - Add regression test coverage and update user-facing affordance text if needed.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-044.md
+    files:
+      - src/webview/plotly/renderPlot.ts
+      - src/webview/main.ts
+      - src/extension/commands.ts
+      - tests/extension/smoke.test.ts
 exploration_candidates:
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.
