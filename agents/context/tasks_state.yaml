@@ -12,8 +12,8 @@ T-034:
   pr: 41
   merged: true
 T-035:
-  status: ready
-  pr: null
+  status: ready_for_review
+  pr: 42
   merged: false
 T-036:
   status: ready
