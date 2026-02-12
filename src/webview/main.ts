@@ -208,7 +208,7 @@ function postSetTraceAxis(traceId: string, axisId: AxisId): void {
   );
 }
 
-function postAddAxis(afterAxisId: AxisId): void {
+function postAddAxis(afterAxisId?: AxisId): void {
   if (!workspace) {
     return;
   }

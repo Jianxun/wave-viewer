@@ -1933,7 +1933,7 @@ describe("T-040 new-lane drop target placement and insertion anchor wiring", () 
 
     expect(signalListSource).toContain('body.textContent = "Click here to create a new lane";');
     expect(signalListSource).toContain("options.onCreateLane(options.afterAxisId);");
-    expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
+    expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lastLaneAxisId }');
     expect(mainSource).toContain('createProtocolEnvelope("webview/intent/addAxis"');
     expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
   });
