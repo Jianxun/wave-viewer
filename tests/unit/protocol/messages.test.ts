@@ -215,6 +215,27 @@ describe("protocol envelope validators", () => {
     expect(parsed).toBeUndefined();
   });
 
+  it("rejects legacy webview/dropSignal payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/dropSignal", {
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "axis-row"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects legacy webview/command payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/command", {
+        command: "zoomToFit"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
   it("rejects removed webview/workspaceChanged payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/workspaceChanged", {
