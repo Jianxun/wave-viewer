@@ -60,18 +60,20 @@ describe("protocol envelope validators", () => {
     });
   });
 
-  it("accepts host sidePanelQuickAdd with a non-empty signal", () => {
+  it("accepts host viewerBindingUpdated with explicit viewer identity", () => {
     const parsed = parseHostToWebviewMessage(
-      createProtocolEnvelope("host/sidePanelQuickAdd", {
-        signal: "vin"
+      createProtocolEnvelope("host/viewerBindingUpdated", {
+        viewerId: "viewer-2",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
       })
     );
 
     expect(parsed).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/sidePanelQuickAdd",
+      type: "host/viewerBindingUpdated",
       payload: {
-        signal: "vin"
+        viewerId: "viewer-2",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
       }
     });
   });
@@ -92,10 +94,53 @@ describe("protocol envelope validators", () => {
     expect(parsed).toBeUndefined();
   });
 
-  it("rejects host sidePanelQuickAdd when signal is empty", () => {
+  it("accepts host sidePanelTraceInjected with finite tuple arrays", () => {
     const parsed = parseHostToWebviewMessage(
-      createProtocolEnvelope("host/sidePanelQuickAdd", {
-        signal: "  "
+      createProtocolEnvelope("host/sidePanelTraceInjected", {
+        viewerId: "viewer-2",
+        trace: {
+          traceId: "viewer-2:vin:3",
+          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1, 2],
+          y: [1, 2, 3]
+        }
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/sidePanelTraceInjected",
+      payload: {
+        viewerId: "viewer-2",
+        trace: {
+          traceId: "viewer-2:vin:3",
+          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1, 2],
+          y: [1, 2, 3]
+        }
+      }
+    });
+  });
+
+  it("rejects host sidePanelTraceInjected when tuple lengths are mismatched", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/sidePanelTraceInjected", {
+        viewerId: "viewer-2",
+        trace: {
+          traceId: "viewer-2:vin:3",
+          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1],
+          y: [1, 2, 3]
+        }
       })
     );
     expect(parsed).toBeUndefined();
