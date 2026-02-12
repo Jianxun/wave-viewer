@@ -25,7 +25,7 @@ export type SidePanelTraceTuplePayload = {
   y: number[];
 };
 
-export const PROTOCOL_VERSION = 1 as const;
+export const PROTOCOL_VERSION = 2 as const;
 
 export type ProtocolEnvelope<TType extends string, TPayload> = {
   version: typeof PROTOCOL_VERSION;
@@ -37,13 +37,19 @@ export type HostToWebviewMessageType =
   | "host/init"
   | "host/viewerBindingUpdated"
   | "host/datasetLoaded"
-  | "host/workspaceLoaded"
-  | "host/workspacePatched"
+  | "host/stateSnapshot"
+  | "host/statePatch"
+  | "host/tupleUpsert"
   | "host/sidePanelQuickAdd"
   | "host/sidePanelTraceInjected";
 
 export type WebviewToHostMessageType =
   | "webview/ready"
+  | "webview/intent/setActivePlot"
+  | "webview/intent/setActiveAxis"
+  | "webview/intent/dropSignal"
+  | "webview/intent/addSignalToActiveAxis"
+  | "webview/intent/addSignalToNewAxis"
   | "webview/workspaceChanged"
   | "webview/dropSignal"
   | "webview/command";
@@ -61,16 +67,50 @@ export type ParsedHostToWebviewMessage =
         defaultXSignal: string;
       }
     >
-  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceStateLike }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceStateLike; reason: string }>
+  | ProtocolEnvelope<
+      "host/stateSnapshot",
+      { revision: number; workspace: WorkspaceStateLike; viewerState: ViewerStateLike }
+    >
+  | ProtocolEnvelope<
+      "host/statePatch",
+      { revision: number; workspace: WorkspaceStateLike; viewerState: ViewerStateLike; reason: string }
+    >
+  | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
   | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
   | ProtocolEnvelope<
-      "host/sidePanelTraceInjected",
-      { viewerId: string; trace: SidePanelTraceTuplePayload }
-    >;
+    "host/sidePanelTraceInjected",
+    { viewerId: string; trace: SidePanelTraceTuplePayload }
+  >;
 
 export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
+  | ProtocolEnvelope<
+      "webview/intent/setActivePlot",
+      { viewerId: string; plotId: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/setActiveAxis",
+      { viewerId: string; plotId: string; axisId: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/dropSignal",
+      {
+        viewerId: string;
+        signal: string;
+        plotId: string;
+        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
+        source: "axis-row" | "canvas-overlay";
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/addSignalToActiveAxis",
+      { viewerId: string; signal: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/addSignalToNewAxis",
+      { viewerId: string; signal: string; requestId: string }
+    >
   | ProtocolEnvelope<
       "webview/workspaceChanged",
       { workspace: WorkspaceStateLike; reason: string }
@@ -117,6 +157,11 @@ type WorkspaceStateLike = {
     nextAxisNumber: number;
     xRange?: [number, number];
   }>;
+};
+
+type ViewerStateLike = {
+  activePlotId: string;
+  activeAxisByPlotId: Record<string, `y${number}` | string>;
 };
 
 export function createProtocolEnvelope<TType extends string, TPayload>(
@@ -175,8 +220,9 @@ function isHostMessageType(type: string): type is HostToWebviewMessageType {
     type === "host/init" ||
     type === "host/viewerBindingUpdated" ||
     type === "host/datasetLoaded" ||
-    type === "host/workspaceLoaded" ||
-    type === "host/workspacePatched" ||
+    type === "host/stateSnapshot" ||
+    type === "host/statePatch" ||
+    type === "host/tupleUpsert" ||
     type === "host/sidePanelQuickAdd" ||
     type === "host/sidePanelTraceInjected"
   );
@@ -185,6 +231,11 @@ function isHostMessageType(type: string): type is HostToWebviewMessageType {
 function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
   return (
     type === "webview/ready" ||
+    type === "webview/intent/setActivePlot" ||
+    type === "webview/intent/setActiveAxis" ||
+    type === "webview/intent/dropSignal" ||
+    type === "webview/intent/addSignalToActiveAxis" ||
+    type === "webview/intent/addSignalToNewAxis" ||
     type === "webview/workspaceChanged" ||
     type === "webview/dropSignal" ||
     type === "webview/command"
@@ -225,8 +276,18 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
     );
   }
 
-  if (type === "host/workspacePatched") {
-    return isWorkspaceStateLike(payload.workspace) && typeof payload.reason === "string";
+  if (type === "host/stateSnapshot" || type === "host/statePatch") {
+    const hasPatchReason = type === "host/statePatch";
+    return (
+      isNonNegativeInteger(payload.revision) &&
+      isWorkspaceStateLike(payload.workspace) &&
+      isViewerStateLike(payload.viewerState) &&
+      (!hasPatchReason || typeof payload.reason === "string")
+    );
+  }
+
+  if (type === "host/tupleUpsert") {
+    return Array.isArray(payload.tuples) && payload.tuples.every((tuple) => isSidePanelTraceTuplePayload(tuple));
   }
 
   if (type === "host/sidePanelQuickAdd") {
@@ -251,6 +312,46 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
 
   if (type === "webview/workspaceChanged") {
     return isWorkspaceStateLike(payload.workspace) && typeof payload.reason === "string";
+  }
+
+  if (
+    type === "webview/intent/setActivePlot" ||
+    type === "webview/intent/addSignalToActiveAxis" ||
+    type === "webview/intent/addSignalToNewAxis"
+  ) {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.requestId) &&
+      (type === "webview/intent/setActivePlot" ? isNonEmptyString(payload.plotId) : isNonEmptyString(payload.signal))
+    );
+  }
+
+  if (type === "webview/intent/setActiveAxis") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.axisId) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/dropSignal") {
+    if (
+      !isNonEmptyString(payload.viewerId) ||
+      !isNonEmptyString(payload.requestId) ||
+      typeof payload.signal !== "string" ||
+      typeof payload.plotId !== "string" ||
+      !isRecord(payload.target) ||
+      (payload.source !== "axis-row" && payload.source !== "canvas-overlay")
+    ) {
+      return false;
+    }
+
+    if (payload.target.kind === "axis") {
+      return typeof payload.target.axisId === "string";
+    }
+
+    return payload.target.kind === "new-axis";
   }
 
   if (type === "webview/dropSignal") {
@@ -292,6 +393,10 @@ function isFiniteNumericArray(value: unknown): value is number[] {
   );
 }
 
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
 function isSidePanelTraceTuplePayload(value: unknown): value is SidePanelTraceTuplePayload {
   if (!isRecord(value)) {
     return false;
@@ -318,6 +423,14 @@ function isWorkspaceStateLike(value: unknown): value is WorkspaceStateLike {
   }
 
   return value.plots.every((plot) => isPlotStateLike(plot));
+}
+
+function isViewerStateLike(value: unknown): value is ViewerStateLike {
+  if (!isRecord(value) || !isNonEmptyString(value.activePlotId) || !isRecord(value.activeAxisByPlotId)) {
+    return false;
+  }
+
+  return Object.values(value.activeAxisByPlotId).every((axisId) => typeof axisId === "string");
 }
 
 function isPlotStateLike(value: unknown): boolean {
