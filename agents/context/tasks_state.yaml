@@ -12,7 +12,7 @@ T-047:
   pr: 54
   merged: true
 T-048:
-  status: ready_for_review
+  status: review_in_progress
   pr: 56
   merged: false
 T-049:
