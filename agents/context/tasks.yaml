@@ -1,82 +1,112 @@
 schema_version: 2
 current_sprint:
-  - id: T-041
-    title: Make plot tab lifecycle host-authoritative (+Plot/select/remove persistence)
+  - id: T-045
+    title: Introduce explicit layout-session binding in host (layoutUri as persistence identity)
     owner: Executor
     dod:
-      - Add webview intents and host handlers so plot add/select/remove actions persist via host state transactions.
-      - Replace local-only plot tab mutations in webview with host intent posting.
-      - Verify plot tabs remain stable after focus changes and reopening viewer.
+      - Add host-level session model that binds each viewer to a selected layout file (`*.wave-viewer.yaml`) and resolves dataset context from that layout.
+      - Keep webview tuple-only and intent-only; no YAML IO or file identity logic in webview code.
+      - Preserve compatibility path where no explicit layout is chosen by using `<csv>.wave-viewer.yaml` as fallback identity.
     verify:
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-041.md
-    files:
-      - src/webview/main.ts
-      - src/extension/commands.ts
-      - src/core/dataset/types.ts
-      - src/extension/types.ts
-      - tests/extension/smoke.test.ts
-  - id: T-042
-    title: Route explorer quick-add to active plot + active lane in multi-plot sessions
-    owner: Executor
-    depends_on:
-      - T-041
-    dod:
-      - Ensure side-panel quick-add applies to viewerState active plot and its active lane, not stale/default plot.
-      - Keep tuple injection and quick-add intent ordering deterministic under multi-plot routing.
-      - Add/extend tests for multi-plot quick-add targeting correctness.
-    verify:
-      - npm test -- tests/extension/smoke.test.ts
-      - npm run lint
-    links:
-      scratchpad: agents/scratchpads/T-042.md
+      scratchpad: agents/scratchpads/T-045.md
     files:
       - src/extension.ts
-      - src/extension/sidePanel.ts
-      - src/extension/hostStateStore.ts
-      - src/webview/main.ts
+      - src/extension/viewerSessions.ts
+      - src/extension/types.ts
+      - src/extension/commands.ts
       - tests/extension/smoke.test.ts
-  - id: T-043
-    title: Persist plot rename through host intent
+  - id: T-046
+    title: Add explicit layout commands (Open/Save/Save As) on host
     owner: Executor
     depends_on:
-      - T-041
+      - T-045
     dod:
-      - Add host-backed rename intent path and remove local-only rename state mutation.
-      - Keep rename validation deterministic (trimmed non-empty names).
-      - Add test coverage for rename persistence after host patch/reload.
+      - Add host commands to open a layout file, save the active viewer state to layout, and save-as to a new layout file.
+      - Reuse existing spec import/export validators so command paths reject malformed YAML with actionable errors.
+      - Ensure command behavior is deterministic with active viewer/session selection and reports clear UX messages.
     verify:
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-043.md
+      scratchpad: agents/scratchpads/T-046.md
     files:
-      - src/webview/main.ts
+      - src/extension.ts
       - src/extension/commands.ts
-      - src/core/dataset/types.ts
+      - src/extension/types.ts
+      - src/core/spec/exportSpec.ts
+      - src/core/spec/importSpec.ts
+      - tests/extension/smoke.test.ts
+  - id: T-047
+    title: Host-managed layout autosave on state patch (debounced + atomic)
+    owner: Executor
+    depends_on:
+      - T-045
+    dod:
+      - Persist host-authoritative workspace revisions to bound layout file after state transactions using debounce to reduce write churn.
+      - Implement atomic write semantics (temp + rename) and self-write suppression metadata for watcher interoperability.
+      - Keep schema output deterministic for stable diffs and reproducible automation.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-047.md
+    files:
+      - src/extension.ts
+      - src/extension/commands.ts
+      - src/core/spec/exportSpec.ts
+      - src/core/spec/plotSpecV1.ts
       - src/extension/types.ts
       - tests/extension/smoke.test.ts
 backlog:
-  - id: T-044
-    title: Restore working PNG export/save flow
+  - id: T-048
+    title: Reload viewer from external layout edits (watcher + conflict guards)
     owner: Executor
+    depends_on:
+      - T-045
+      - T-047
     dod:
-      - Reproduce and fix broken PNG export behavior from viewer UI.
-      - Ensure export works across multi-lane and multi-plot states.
-      - Add regression test coverage and update user-facing affordance text if needed.
+      - Add file watcher plumbing so manual edits to the bound layout file trigger host-side import/validation and `host/statePatch` broadcast.
+      - Prevent update loops and race regressions using revision/hash guards and self-write suppression.
+      - Define and enforce failure behavior for invalid external edits (error surfaced, previous valid state retained).
     verify:
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-044.md
+      scratchpad: agents/scratchpads/T-048.md
     files:
-      - src/webview/plotly/renderPlot.ts
-      - src/webview/main.ts
+      - src/extension.ts
       - src/extension/commands.ts
+      - src/extension/types.ts
+      - src/core/spec/importSpec.ts
+      - tests/extension/smoke.test.ts
+  - id: T-049
+    title: Align layout schema for explicit files + compatibility fallback
+    owner: Executor
+    depends_on:
+      - T-046
+      - T-047
+    dod:
+      - Update plot spec contract to treat explicit layout file as primary artifact while preserving `<csv>.wave-viewer.yaml` compatibility fallback.
+      - Reduce machine-specific coupling by avoiding required absolute dataset paths when layout and CSV are colocated.
+      - Add/refresh tests and docs for reproducible multi-layout workflows on one dataset.
+    verify:
+      - npm test -- tests/unit/core/spec/importSpec.test.ts tests/unit/core/spec/exportSpec.test.ts
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-049.md
+    files:
+      - src/core/spec/plotSpecV1.ts
+      - src/core/spec/importSpec.ts
+      - src/core/spec/exportSpec.ts
+      - doc/specs/wave-viewer-mvp.md
+      - agents/context/contract.md
       - tests/extension/smoke.test.ts
 exploration_candidates:
+  - Re-scope PNG export fix as a post-layout artifact task once explicit layout workflow is merged and stable.
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.
   - Evaluate decimation strategy for large CSV files under side-panel-driven multi-trace workflows.

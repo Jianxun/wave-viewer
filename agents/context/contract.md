@@ -17,6 +17,7 @@ Active ADRs:
 - `ADR-0009` (Proposed): Host-authoritative workspace and viewer interaction state (single writer).
 - `ADR-0010` (Proposed): Revisioned intent-based host/webview protocol.
 - `ADR-0011` (Proposed): Active-axis default targeting and post-new-axis activation rules.
+- `ADR-0012`: Explicit layout artifact (`*.wave-viewer.yaml`) is primary persistence identity; YAML IO is host-managed with sidecar fallback.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -107,6 +108,7 @@ Active ADRs:
 - 2026-02-12: Tuple-based trace payload contract accepted; host sends explicit `(x, y)` inline arrays for MVP and viewer does not infer X from dataset headers (ADR-0006).
 - 2026-02-12: Spec persistence split into `reference-only` and `portable-archive` modes to support rerun and archival workflows (ADR-0007).
 - 2026-02-12: Cross-dataset axis mixing is allowed in MVP; semantic consistency responsibility remains with user (ADR-0008).
+- 2026-02-12: Explicit layout files (`*.wave-viewer.yaml`) adopted as primary persistence artifact with host-managed YAML IO and `<csv>.wave-viewer.yaml` compatibility fallback (ADR-0012).
 - 2026-02-12: Proposed host-authoritative state ownership (single writer) to eliminate host/webview dual-write races; pending ADR-0009 acceptance.
 - 2026-02-12: Proposed revisioned intent-only protocol (`webview/intent/*`, host revision gating) for deterministic sync and stale-message rejection; pending ADR-0010 acceptance.
 - 2026-02-12: Proposed active-axis semantics where `Add to Plot` targets active axis and `Add to New Axis` activates the newly created axis; pending ADR-0011 acceptance.
