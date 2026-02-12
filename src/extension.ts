@@ -4,6 +4,8 @@ import type * as VSCode from "vscode";
 
 import { exportPlotSpecV1 } from "./core/spec/exportSpec";
 import { importPlotSpecV1 } from "./core/spec/importSpec";
+import type { PlotSpecTraceTupleV1 } from "./core/spec/plotSpecV1";
+import { REFERENCE_ONLY_SPEC_MODE } from "./core/spec/plotSpecV1";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
 import {
@@ -130,6 +132,9 @@ export type CommandDeps = {
   onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
+  getCachedPortableArchiveTraceTuples?(
+    documentPath: string
+  ): ReadonlyMap<string, PlotSpecTraceTupleV1> | undefined;
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): string | undefined;
   showError(message: string): void;
@@ -458,6 +463,10 @@ export type ImportSpecCommandDeps = {
   getActiveDocument(): ActiveDocumentLike | undefined;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
+  setCachedPortableArchiveTraceTuples?(
+    documentPath: string,
+    tuples: ReadonlyMap<string, PlotSpecTraceTupleV1>
+  ): void;
   showError(message: string): void;
   showInformation(message: string): void;
   showOpenDialog(): Promise<string | undefined>;
@@ -587,6 +596,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           datasetPath,
           normalizedDataset,
           cachedWorkspace,
+          deps.getCachedPortableArchiveTraceTuples?.(datasetPath),
           deps.logDebug
         );
         if (hydratedReplay.workspace !== cachedWorkspace) {
@@ -772,6 +782,7 @@ function hydrateWorkspaceReplayPayload(
   documentPath: string,
   loadedDataset: LoadedDatasetRecord,
   workspace: WorkspaceState,
+  portableArchiveTraceTuples?: ReadonlyMap<string, PlotSpecTraceTupleV1>,
   logDebug?: (message: string, details?: unknown) => void
 ): {
   workspace: WorkspaceState;
@@ -789,26 +800,41 @@ function hydrateWorkspaceReplayPayload(
       }
 
       if (!tracePayloadBySourceId.has(sourceId)) {
-        try {
-          const payload = createSidePanelTraceInjectedPayload(
-            viewerId,
-            documentPath,
-            loadedDataset,
-            trace.signal,
-            {
-              traceId: trace.id,
-              sourceId
-            }
-          ).trace;
+        const archivedTuple = portableArchiveTraceTuples?.get(sourceId);
+        if (archivedTuple) {
+          const payload: SidePanelTraceTuplePayload = {
+            traceId: trace.id,
+            sourceId: archivedTuple.sourceId,
+            datasetPath: archivedTuple.datasetPath,
+            xName: archivedTuple.xName,
+            yName: archivedTuple.yName,
+            x: archivedTuple.x,
+            y: archivedTuple.y
+          };
           tracePayloadBySourceId.set(sourceId, payload);
           tracePayloads.push(payload);
-        } catch (error) {
-          logDebug?.("Skipped tuple hydration for cached workspace trace.", {
-            traceId: trace.id,
-            signal: trace.signal,
-            sourceId,
-            error: getErrorMessage(error)
-          });
+        } else {
+          try {
+            const payload = createSidePanelTraceInjectedPayload(
+              viewerId,
+              documentPath,
+              loadedDataset,
+              trace.signal,
+              {
+                traceId: trace.id,
+                sourceId
+              }
+            ).trace;
+            tracePayloadBySourceId.set(sourceId, payload);
+            tracePayloads.push(payload);
+          } catch (error) {
+            logDebug?.("Skipped tuple hydration for cached workspace trace.", {
+              traceId: trace.id,
+              signal: trace.signal,
+              sourceId,
+              error: getErrorMessage(error)
+            });
+          }
         }
       }
 
@@ -1073,7 +1099,10 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
       return;
     }
 
-    if (!isSameDatasetReference(parsed.datasetPath, activeDocument.uri.fsPath)) {
+    if (
+      parsed.mode === REFERENCE_ONLY_SPEC_MODE &&
+      !isSameDatasetReference(parsed.datasetPath, activeDocument.uri.fsPath)
+    ) {
       deps.showError(
         `Wave Viewer reference-only spec points to '${parsed.datasetPath}', but the active CSV is '${activeDocument.uri.fsPath}'. Open the referenced CSV or re-export the spec from the current file.`
       );
@@ -1081,6 +1110,10 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
     }
 
     deps.setCachedWorkspace(activeDocument.uri.fsPath, parsed.workspace);
+    deps.setCachedPortableArchiveTraceTuples?.(
+      activeDocument.uri.fsPath,
+      parsed.traceTupleBySourceId
+    );
     deps.showInformation(`Wave Viewer spec imported from ${specPath}`);
   };
 }
@@ -1129,6 +1162,10 @@ function loadVscode(): typeof VSCode {
 export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
+  const portableArchiveTraceTuplesByDatasetPath = new Map<
+    string,
+    Map<string, PlotSpecTraceTupleV1>
+  >();
   const viewerSessions = createViewerSessionRegistry();
   const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
   const removedDatasetPathSet = new Set<string>();
@@ -1293,6 +1330,8 @@ export function activate(context: VSCode.ExtensionContext): void {
     setCachedWorkspace: (documentPath, workspace) => {
       workspaceByDatasetPath.set(documentPath, workspace);
     },
+    getCachedPortableArchiveTraceTuples: (documentPath) =>
+      portableArchiveTraceTuplesByDatasetPath.get(documentPath),
     createPanel: () =>
       vscode.window.createWebviewPanel("waveViewer.main", "Wave Viewer", vscode.ViewColumn.Beside, {
         enableScripts: true,
@@ -1347,6 +1386,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     },
     setCachedWorkspace: (documentPath, workspace) => {
       workspaceByDatasetPath.set(documentPath, workspace);
+    },
+    setCachedPortableArchiveTraceTuples: (documentPath, tuples) => {
+      portableArchiveTraceTuplesByDatasetPath.set(documentPath, new Map(tuples));
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);

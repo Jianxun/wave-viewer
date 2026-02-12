@@ -227,6 +227,37 @@ function createReferenceOnlySpecYaml(datasetPath: string): string {
   ].join("\n");
 }
 
+function createPortableArchiveSpecYaml(datasetPath: string): string {
+  return [
+    "version: 1",
+    "mode: portable-archive",
+    "dataset:",
+    `  path: ${datasetPath}`,
+    "workspace:",
+    "  activePlotId: plot-1",
+    "  plots:",
+    "    - id: plot-1",
+    "      name: Plot 1",
+    "      xSignal: time",
+    "      axes:",
+    "        - id: y1",
+    "      traces:",
+    "        - id: trace-1",
+    "          signal: vin",
+    "          sourceId: /workspace/examples/simulations/source.csv::vin",
+    "          axisId: y1",
+    "          visible: true",
+    "archive:",
+    "  traces:",
+    "    - sourceId: /workspace/examples/simulations/source.csv::vin",
+    "      datasetPath: /workspace/examples/simulations/source.csv",
+    "      xName: time",
+    "      yName: vin",
+    "      x: [0, 1, 2]",
+    "      y: [0.1, 0.2, 0.3]"
+  ].join("\n");
+}
+
 describe("T-002 extension shell smoke", () => {
   it("exports the command id", () => {
     expect(OPEN_VIEWER_COMMAND).toBe("waveViewer.openViewer");
@@ -579,6 +610,82 @@ describe("T-030 reference-only spec import workflow", () => {
     expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer spec imported from /workspace/specs/replay.wave-viewer.yaml"
+    );
+  });
+});
+
+describe("T-031 portable-archive spec import workflow", () => {
+  it("imports portable-archive spec without requiring matching active CSV signals", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const setCachedWorkspace = vi.fn();
+    const setCachedPortableArchiveTraceTuples = vi.fn();
+    const command = createImportSpecCommand({
+      getActiveDocument: () => ({
+        fileName: "/workspace/examples/simulations/new.csv",
+        uri: { fsPath: "/workspace/examples/simulations/new.csv" }
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/new.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }]
+        },
+        defaultXSignal: "time"
+      }),
+      setCachedWorkspace,
+      setCachedPortableArchiveTraceTuples,
+      showError,
+      showInformation,
+      showOpenDialog: async () => "/workspace/specs/archive.wave-viewer.yaml",
+      readTextFile: () =>
+        createPortableArchiveSpecYaml("/workspace/examples/simulations/original.csv")
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(setCachedWorkspace).toHaveBeenCalledWith("/workspace/examples/simulations/new.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              sourceId: "/workspace/examples/simulations/source.csv::vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+    expect(setCachedPortableArchiveTraceTuples).toHaveBeenCalledTimes(1);
+    expect(setCachedPortableArchiveTraceTuples).toHaveBeenCalledWith(
+      "/workspace/examples/simulations/new.csv",
+      new Map([
+        [
+          "/workspace/examples/simulations/source.csv::vin",
+          {
+            sourceId: "/workspace/examples/simulations/source.csv::vin",
+            datasetPath: "/workspace/examples/simulations/source.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [0.1, 0.2, 0.3]
+          }
+        ]
+      ])
+    );
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer spec imported from /workspace/specs/archive.wave-viewer.yaml"
     );
   });
 });

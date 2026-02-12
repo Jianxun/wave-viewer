@@ -24,6 +24,6 @@ T-030:
   pr: 35
   merged: true
 T-031:
-  status: backlog
-  pr: null
+  status: request_changes
+  pr: 37
   merged: false

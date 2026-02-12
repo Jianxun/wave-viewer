@@ -2,8 +2,11 @@ import type { WorkspaceState } from "../../webview/state/workspaceState";
 
 export const PLOT_SPEC_V1_VERSION = 1;
 export const REFERENCE_ONLY_SPEC_MODE = "reference-only";
+export const PORTABLE_ARCHIVE_SPEC_MODE = "portable-archive";
 
-export type PlotSpecPersistenceMode = typeof REFERENCE_ONLY_SPEC_MODE | "portable-archive";
+export type PlotSpecPersistenceMode =
+  | typeof REFERENCE_ONLY_SPEC_MODE
+  | typeof PORTABLE_ARCHIVE_SPEC_MODE;
 
 export type PlotSpecAxisV1 = {
   id: `y${number}`;
@@ -15,6 +18,7 @@ export type PlotSpecAxisV1 = {
 export type PlotSpecTraceV1 = {
   id: string;
   signal: string;
+  sourceId?: string;
   axisId: `y${number}`;
   visible: boolean;
   color?: string;
@@ -40,11 +44,25 @@ export type PlotSpecV1 = {
     activePlotId: string;
     plots: PlotSpecPlotV1[];
   };
+  archive?: {
+    traces: PlotSpecTraceTupleV1[];
+  };
+};
+
+export type PlotSpecTraceTupleV1 = {
+  sourceId: string;
+  datasetPath: string;
+  xName: string;
+  yName: string;
+  x: number[];
+  y: number[];
 };
 
 export type ExportPlotSpecInput = {
+  mode?: PlotSpecPersistenceMode;
   datasetPath: string;
   workspace: WorkspaceState;
+  traceTupleBySourceId?: ReadonlyMap<string, PlotSpecTraceTupleV1>;
 };
 
 export type ImportPlotSpecInput = {
@@ -53,8 +71,10 @@ export type ImportPlotSpecInput = {
 };
 
 export type ImportPlotSpecResult = {
+  mode: PlotSpecPersistenceMode;
   datasetPath: string;
   workspace: WorkspaceState;
+  traceTupleBySourceId: Map<string, PlotSpecTraceTupleV1>;
 };
 
 export class PlotSpecImportError extends Error {
