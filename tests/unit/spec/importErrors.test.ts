@@ -3,9 +3,49 @@ import { describe, expect, it } from "vitest";
 import { importPlotSpecV1 } from "../../../src/core/spec/importSpec";
 
 describe("T-006 spec import errors", () => {
+  it("throws explicit error when mode is missing", () => {
+    const yamlText = [
+      "version: 1",
+      "dataset:",
+      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "workspace:",
+      "  activePlotId: plot-1",
+      "  plots: []"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time", "vin"]
+      })
+    ).toThrow("Plot spec mode must be explicitly set to 'reference-only'.");
+  });
+
+  it("throws explicit error for unsupported mode", () => {
+    const yamlText = [
+      "version: 1",
+      "mode: portable-archive",
+      "dataset:",
+      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "workspace:",
+      "  activePlotId: plot-1",
+      "  plots: []"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time", "vin"]
+      })
+    ).toThrow(
+      "Plot spec mode 'portable-archive' is not supported by this Wave Viewer version. Re-export as 'reference-only'."
+    );
+  });
+
   it("throws explicit error for missing plots", () => {
     const yamlText = [
       "version: 1",
+      "mode: reference-only",
       "dataset:",
       "  path: /workspace/examples/simulations/ota.spice.csv",
       "workspace:",
@@ -24,6 +64,7 @@ describe("T-006 spec import errors", () => {
   it("throws explicit error for missing signal references by plot", () => {
     const yamlText = [
       "version: 1",
+      "mode: reference-only",
       "dataset:",
       "  path: /workspace/examples/simulations/ota.spice.csv",
       "workspace:",
@@ -58,6 +99,7 @@ describe("T-006 spec import errors", () => {
   it("throws explicit error when active plot id is not present", () => {
     const yamlText = [
       "version: 1",
+      "mode: reference-only",
       "dataset:",
       "  path: /workspace/examples/simulations/ota.spice.csv",
       "workspace:",
@@ -82,6 +124,7 @@ describe("T-006 spec import errors", () => {
   it("rejects legacy axis side fields with a migration error", () => {
     const yamlText = [
       "version: 1",
+      "mode: reference-only",
       "dataset:",
       "  path: /workspace/examples/simulations/ota.spice.csv",
       "workspace:",

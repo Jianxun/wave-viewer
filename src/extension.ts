@@ -1073,9 +1073,20 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
       return;
     }
 
+    if (!isSameDatasetReference(parsed.datasetPath, activeDocument.uri.fsPath)) {
+      deps.showError(
+        `Wave Viewer reference-only spec points to '${parsed.datasetPath}', but the active CSV is '${activeDocument.uri.fsPath}'. Open the referenced CSV or re-export the spec from the current file.`
+      );
+      return;
+    }
+
     deps.setCachedWorkspace(activeDocument.uri.fsPath, parsed.workspace);
     deps.showInformation(`Wave Viewer spec imported from ${specPath}`);
   };
+}
+
+function isSameDatasetReference(leftPath: string, rightPath: string): boolean {
+  return path.resolve(leftPath) === path.resolve(rightPath);
 }
 
 function getErrorMessage(error: unknown): string {

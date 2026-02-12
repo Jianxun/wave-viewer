@@ -8,7 +8,11 @@ import type {
   PlotSpecTraceV1,
   PlotSpecV1
 } from "./plotSpecV1";
-import { PLOT_SPEC_V1_VERSION, PlotSpecImportError } from "./plotSpecV1";
+import {
+  PLOT_SPEC_V1_VERSION,
+  PlotSpecImportError,
+  REFERENCE_ONLY_SPEC_MODE
+} from "./plotSpecV1";
 
 export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResult {
   const parsed = parseYaml(input.yamlText);
@@ -76,6 +80,18 @@ function validateSpecShape(parsed: unknown): PlotSpecV1 {
     throw new PlotSpecImportError(`Unsupported plot spec version: ${String(parsed.version)}.`);
   }
 
+  if (parsed.mode !== REFERENCE_ONLY_SPEC_MODE) {
+    if (parsed.mode === undefined) {
+      throw new PlotSpecImportError("Plot spec mode must be explicitly set to 'reference-only'.");
+    }
+    if (parsed.mode === "portable-archive") {
+      throw new PlotSpecImportError(
+        "Plot spec mode 'portable-archive' is not supported by this Wave Viewer version. Re-export as 'reference-only'."
+      );
+    }
+    throw new PlotSpecImportError(`Unsupported plot spec mode: ${String(parsed.mode)}.`);
+  }
+
   const dataset = parsed.dataset;
   if (!isRecord(dataset) || typeof dataset.path !== "string" || dataset.path.trim().length === 0) {
     throw new PlotSpecImportError("Plot spec dataset.path must be a non-empty string.");
@@ -98,6 +114,7 @@ function validateSpecShape(parsed: unknown): PlotSpecV1 {
 
   return {
     version: PLOT_SPEC_V1_VERSION,
+    mode: REFERENCE_ONLY_SPEC_MODE,
     dataset: {
       path: dataset.path
     },
