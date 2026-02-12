@@ -1,9 +1,5 @@
 import type { AxisId, AxisState, PlotState } from "../state/workspaceState";
-
-export type DatasetColumnData = {
-  name: string;
-  values: number[];
-};
+import type { SidePanelTraceTuplePayload } from "../../core/dataset/types";
 
 export type PlotlyTrace = {
   type: "scatter";
@@ -101,25 +97,26 @@ export function buildRenderAxisMappings(axes: ReadonlyArray<Pick<AxisState, "id"
 
 export function buildPlotlyFigure(payload: {
   plot: PlotState;
-  columns: DatasetColumnData[];
+  traceTuplesBySourceId: ReadonlyMap<string, SidePanelTraceTuplePayload>;
 }): PlotlyFigure {
-  const columnsByName = new Map(payload.columns.map((column) => [column.name, column.values] as const));
-  const xValues = columnsByName.get(payload.plot.xSignal) ?? [];
-  const xBounds = getBounds(xValues);
+  const firstTuple = payload.plot.traces
+    .map((trace) => (trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined))
+    .find((entry) => entry !== undefined);
+  const xBounds = getBounds(firstTuple?.x ?? []);
   const axisMappings = buildRenderAxisMappings(payload.plot.axes);
   const axisMappingById = new Map(axisMappings.map((mapping) => [mapping.axisId, mapping] as const));
   const defaultTraceAxisRef = axisMappings[0]?.traceRef ?? "y";
 
   const data: PlotlyTrace[] = payload.plot.traces.map((trace) => {
-    const yValues = columnsByName.get(trace.signal) ?? [];
+    const tuple = trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined;
     const axisMap = axisMappingById.get(trace.axisId);
 
     return {
       type: "scatter",
       mode: "lines",
-      name: trace.signal,
-      x: xValues,
-      y: yValues,
+      name: tuple?.yName ?? trace.signal,
+      x: tuple?.x ?? [],
+      y: tuple?.y ?? [],
       yaxis: axisMap?.traceRef ?? defaultTraceAxisRef,
       visible: trace.visible,
       line: {
@@ -140,7 +137,7 @@ export function buildPlotlyFigure(payload: {
     hovermode: "x unified",
     legend: { orientation: "h", y: 1.08, x: 0 },
     xaxis: {
-      title: { text: payload.plot.xSignal },
+      title: { text: firstTuple?.xName ?? payload.plot.xSignal },
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
       anchor: "free",

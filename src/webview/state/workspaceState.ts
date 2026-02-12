@@ -11,6 +11,7 @@ export type AxisState = {
 export type TraceState = {
   id: string;
   signal: string;
+  sourceId?: string;
   axisId: AxisId;
   visible: boolean;
   color?: string;
@@ -263,7 +264,7 @@ export function reorderAxis(
 
 export function addTrace(
   state: WorkspaceState,
-  payload: { plotId?: string; signal: string; axisId?: AxisId }
+  payload: { plotId?: string; signal: string; sourceId?: string; axisId?: AxisId }
 ): WorkspaceState {
   const plotId = payload.plotId ?? state.activePlotId;
   return withUpdatedPlot(state, plotId, (plot) => {
@@ -286,6 +287,7 @@ export function addTrace(
         {
           id: nextTraceId,
           signal: payload.signal,
+          sourceId: payload.sourceId,
           axisId,
           visible: true
         }

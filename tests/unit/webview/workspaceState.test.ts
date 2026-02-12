@@ -59,6 +59,24 @@ describe("workspaceState", () => {
     expect(traces[1]).toMatchObject({ signal: "vin", axisId: "y2", visible: true });
   });
 
+  it("stores optional trace source metadata without changing lane assignment behavior", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, {
+      signal: "vin",
+      sourceId: "/workspace/examples/a.csv::vin",
+      axisId: "y2"
+    });
+
+    const trace = workspace.plots[0]?.traces[0];
+    expect(trace).toMatchObject({
+      signal: "vin",
+      sourceId: "/workspace/examples/a.csv::vin",
+      axisId: "y2",
+      visible: true
+    });
+  });
+
   it("blocks axis removal when traces still reference the axis", () => {
     let workspace = createWorkspaceState("time");
     workspace = addAxis(workspace, {});

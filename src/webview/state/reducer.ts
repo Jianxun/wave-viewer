@@ -48,7 +48,7 @@ export type WorkspaceAction =
     }
   | {
       type: "trace/add";
-      payload: { plotId?: string; signal: string; axisId?: `y${number}` };
+      payload: { plotId?: string; signal: string; sourceId?: string; axisId?: `y${number}` };
     }
   | {
       type: "trace/setAxis";

@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { parseCsv } from "../../src/core/csv/parseCsv";
+import type { SidePanelTraceTuplePayload } from "../../src/core/dataset/types";
 import { selectDefaultX } from "../../src/core/dataset/selectDefaultX";
 import { exportPlotSpecV1 } from "../../src/core/spec/exportSpec";
 import { importPlotSpecV1 } from "../../src/core/spec/importSpec";
@@ -82,14 +83,41 @@ describe("T-012 e2e replay smoke", () => {
     expect(replay.datasetPath).toBe(dataset.path);
     expect(replay.workspace).toEqual(workspace);
 
+    const plot = replay.workspace.plots[0]!;
+    const xColumn = dataset.columns.find((column) => column.name === plot.xSignal);
+    const traceTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>();
+    if (xColumn) {
+      for (const trace of plot.traces) {
+        const yColumn = dataset.columns.find((column) => column.name === trace.signal);
+        if (!yColumn) {
+          continue;
+        }
+        traceTuplesBySourceId.set(`${dataset.path}::${trace.signal}`, {
+          traceId: trace.id,
+          sourceId: `${dataset.path}::${trace.signal}`,
+          datasetPath: dataset.path,
+          xName: xColumn.name,
+          yName: trace.signal,
+          x: xColumn.values,
+          y: yColumn.values
+        });
+      }
+    }
+
     const figure = buildPlotlyFigure({
-      plot: replay.workspace.plots[0]!,
-      columns: dataset.columns
+      plot: {
+        ...plot,
+        traces: plot.traces.map((trace) => ({
+          ...trace,
+          sourceId: `${dataset.path}::${trace.signal}`
+        }))
+      },
+      traceTuplesBySourceId
     });
     const xAxisKeys = Object.keys(figure.layout).filter((key) => key.startsWith("xaxis"));
 
     expect(xAxisKeys).toEqual(["xaxis"]);
-    expect(figure.layout.xaxis.rangeslider).toEqual({ visible: true });
+    expect(figure.layout.xaxis.rangeslider).toMatchObject({ visible: true });
 
     const topLane = figure.layout.yaxis as { domain?: [number, number]; overlaying?: string };
     const bottomLane = figure.layout.yaxis2 as { domain?: [number, number]; overlaying?: string };

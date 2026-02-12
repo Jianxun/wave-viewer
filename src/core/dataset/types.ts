@@ -108,6 +108,7 @@ type WorkspaceStateLike = {
     traces: Array<{
       id: string;
       signal: string;
+      sourceId?: string;
       axisId: `y${number}` | string;
       visible: boolean;
       color?: string;
@@ -372,6 +373,7 @@ function isTraceStateLike(value: unknown): boolean {
     !isRecord(value) ||
     typeof value.id !== "string" ||
     typeof value.signal !== "string" ||
+    (value.sourceId !== undefined && typeof value.sourceId !== "string") ||
     typeof value.axisId !== "string" ||
     typeof value.visible !== "boolean"
   ) {
