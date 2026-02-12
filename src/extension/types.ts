@@ -275,6 +275,7 @@ export type LayoutExternalEditControllerDeps = {
 
 export type LayoutExternalEditController = {
   watchLayout(layoutUri: string): void;
+  unwatchLayout(layoutUri: string): void;
   reloadLayout(layoutUri: string): void;
   dispose(): void;
 };

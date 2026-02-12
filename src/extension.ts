@@ -235,7 +235,7 @@ export function createLayoutExternalEditController(
   deps: LayoutExternalEditControllerDeps
 ): LayoutExternalEditController {
   const debounceMs = deps.debounceMs ?? DEFAULT_LAYOUT_EXTERNAL_EDIT_DEBOUNCE_MS;
-  const watchersByLayoutUri = new Map<string, { dispose(): void }>();
+  const watchersByLayoutUri = new Map<string, { handle: { dispose(): void }; refCount: number }>();
   const lastAppliedHashByLayoutUri = new Map<string, string>();
   const timersByLayoutUri = new Map<string, ReturnType<typeof setTimeout>>();
   const reloadingLayoutUris = new Set<string>();
@@ -364,10 +364,12 @@ export function createLayoutExternalEditController(
 
   return {
     watchLayout(layoutUri) {
-      if (watchersByLayoutUri.has(layoutUri)) {
+      const existing = watchersByLayoutUri.get(layoutUri);
+      if (existing) {
+        existing.refCount += 1;
         return;
       }
-      const watcher = deps.watchLayout(layoutUri, () => {
+      const handle = deps.watchLayout(layoutUri, () => {
         const existingTimer = timersByLayoutUri.get(layoutUri);
         if (existingTimer) {
           clearTimeout(existingTimer);
@@ -383,7 +385,27 @@ export function createLayoutExternalEditController(
         }, debounceMs);
         timersByLayoutUri.set(layoutUri, timer);
       });
-      watchersByLayoutUri.set(layoutUri, watcher);
+      watchersByLayoutUri.set(layoutUri, { handle, refCount: 1 });
+    },
+    unwatchLayout(layoutUri) {
+      const watched = watchersByLayoutUri.get(layoutUri);
+      if (!watched) {
+        return;
+      }
+      watched.refCount -= 1;
+      if (watched.refCount > 0) {
+        return;
+      }
+      const existingTimer = timersByLayoutUri.get(layoutUri);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        timersByLayoutUri.delete(layoutUri);
+      }
+      watched.handle.dispose();
+      watchersByLayoutUri.delete(layoutUri);
+      reloadingLayoutUris.delete(layoutUri);
+      pendingReloadLayoutUris.delete(layoutUri);
+      lastAppliedHashByLayoutUri.delete(layoutUri);
     },
     reloadLayout(layoutUri) {
       runReload(layoutUri);
@@ -394,7 +416,7 @@ export function createLayoutExternalEditController(
       }
       timersByLayoutUri.clear();
       for (const watcher of watchersByLayoutUri.values()) {
-        watcher.dispose();
+        watcher.handle.dispose();
       }
       watchersByLayoutUri.clear();
       reloadingLayoutUris.clear();
@@ -438,6 +460,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const removedDatasetPathSet = new Set<string>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
   const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
+  const layoutByViewerId = new Map<string, string>();
 
   const commitHostStateTransaction = (
     transaction: Parameters<typeof hostStateStore.commitTransaction>[0]
@@ -537,16 +560,27 @@ export function activate(context: VSCode.ExtensionContext): void {
   });
 
   const bindViewerToDataset = (viewerId: string, datasetPath: string): void => {
+    const previousLayoutUri = layoutByViewerId.get(viewerId);
     viewerSessions.bindViewerToDataset(viewerId, datasetPath);
     const contextForViewer = viewerSessions.getViewerSessionContext(viewerId);
+    if (previousLayoutUri && previousLayoutUri !== contextForViewer?.layoutUri) {
+      layoutExternalEdit.unwatchLayout(previousLayoutUri);
+    }
     if (!contextForViewer) {
+      layoutByViewerId.delete(viewerId);
       return;
     }
+    layoutByViewerId.set(viewerId, contextForViewer.layoutUri);
     layoutExternalEdit.watchLayout(contextForViewer.layoutUri);
   };
 
   const bindViewerToLayout = (viewerId: string, layoutUri: string, datasetPath: string): void => {
+    const previousLayoutUri = layoutByViewerId.get(viewerId);
     viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
+    if (previousLayoutUri && previousLayoutUri !== layoutUri) {
+      layoutExternalEdit.unwatchLayout(previousLayoutUri);
+    }
+    layoutByViewerId.set(viewerId, layoutUri);
     layoutExternalEdit.watchLayout(layoutUri);
   };
 
@@ -554,8 +588,17 @@ export function activate(context: VSCode.ExtensionContext): void {
     const viewerId = viewerSessions.registerPanel(panel, documentPath);
     const contextForViewer = viewerSessions.getViewerSessionContext(viewerId);
     if (contextForViewer) {
+      layoutByViewerId.set(viewerId, contextForViewer.layoutUri);
       layoutExternalEdit.watchLayout(contextForViewer.layoutUri);
     }
+    panel.onDidDispose?.(() => {
+      const boundLayoutUri = layoutByViewerId.get(viewerId);
+      if (!boundLayoutUri) {
+        return;
+      }
+      layoutByViewerId.delete(viewerId);
+      layoutExternalEdit.unwatchLayout(boundLayoutUri);
+    });
     return viewerId;
   };
 

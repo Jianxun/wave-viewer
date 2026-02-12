@@ -1106,6 +1106,76 @@ describe("T-048 external layout edit reloads", () => {
 
     controller.dispose();
   });
+
+  it("keeps one watcher per layout and disposes only after final unwatch", () => {
+    const disposeHandle = vi.fn();
+    const watchLayout = vi.fn((_layoutUri: string, _onChange: () => void) => ({
+      dispose: disposeHandle
+    }));
+    const controller = createLayoutExternalEditController({
+      debounceMs: 0,
+      watchLayout,
+      readTextFile: () => "",
+      readFileStats: () => undefined,
+      resolveBindingsForLayout: () => [],
+      loadDataset: () => createLoadedDatasetFixture(),
+      applyImportedWorkspace: vi.fn(),
+      getLastSelfWriteMetadata: () => undefined,
+      showError: vi.fn()
+    });
+
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+    controller.unwatchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    expect(watchLayout).toHaveBeenCalledTimes(1);
+    expect(disposeHandle).not.toHaveBeenCalled();
+
+    controller.unwatchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    expect(disposeHandle).toHaveBeenCalledTimes(1);
+
+    controller.dispose();
+  });
+
+  it("cancels debounced reload when layout is fully unwatched", () => {
+    vi.useFakeTimers();
+    try {
+      let watchedHandler: (() => void) | undefined;
+      const applyImportedWorkspace = vi.fn();
+      const controller = createLayoutExternalEditController({
+        debounceMs: 100,
+        watchLayout: (_layoutUri, onChange) => {
+          watchedHandler = onChange;
+          return { dispose: () => undefined };
+        },
+        readTextFile: () => createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv"),
+        readFileStats: () => ({ mtimeMs: 1, sizeBytes: 1 }),
+        resolveBindingsForLayout: () => [
+          {
+            viewerId: "viewer-1",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            panel: createPanelFixture().panel
+          }
+        ],
+        loadDataset: () => createLoadedDatasetFixture(),
+        applyImportedWorkspace,
+        getLastSelfWriteMetadata: () => undefined,
+        showError: vi.fn()
+      });
+
+      controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+      watchedHandler?.();
+      controller.unwatchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+      vi.advanceTimersByTime(100);
+
+      expect(applyImportedWorkspace).not.toHaveBeenCalled();
+
+      controller.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("T-013 side-panel signal actions", () => {
