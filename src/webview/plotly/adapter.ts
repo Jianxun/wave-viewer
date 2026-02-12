@@ -1,6 +1,8 @@
 import type { AxisId, AxisState, PlotState } from "../state/workspaceState";
 import type { SidePanelTraceTuplePayload } from "../../core/dataset/types";
 
+type PlotlyAxisRef = "y" | `y${number}`;
+
 export type PlotlyTrace = {
   type: "scatter";
   mode: "lines";
@@ -49,6 +51,7 @@ export type PlotlyLayout = {
   legend: { orientation: "h"; y: number; x: number };
   xaxis: {
     title?: { text: string };
+    anchor?: `y${number}` | "y";
     autorange?: boolean;
     range?: [number, number];
     rangeslider?: { visible: boolean; autorange?: boolean; range?: [number, number] };
@@ -70,11 +73,11 @@ export type AxisLaneDomain = {
 
 export type RenderAxisMapping = AxisLaneDomain & {
   laneIndex: number;
-  traceRef: string;
+  traceRef: PlotlyAxisRef;
   layoutKey: string;
 };
 
-export function mapLaneIndexToPlotly(laneIndex: number): { traceRef: string; layoutKey: string } {
+export function mapLaneIndexToPlotly(laneIndex: number): { traceRef: PlotlyAxisRef; layoutKey: string } {
   const suffix = laneIndex + 1;
   if (suffix === 1) {
     return { traceRef: "y", layoutKey: "yaxis" };
@@ -104,6 +107,7 @@ export function buildPlotlyFigure(payload: {
   const axisMappings = buildRenderAxisMappings(payload.plot.axes);
   const axisMappingById = new Map(axisMappings.map((mapping) => [mapping.axisId, mapping] as const));
   const defaultTraceAxisRef = axisMappings[0]?.traceRef ?? "y";
+  const bottomLaneTraceAxisRef = axisMappings[axisMappings.length - 1]?.traceRef ?? "y";
 
   const data: PlotlyTrace[] = payload.plot.traces.map((trace) => {
     const tuple = trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined;
@@ -136,6 +140,7 @@ export function buildPlotlyFigure(payload: {
     legend: { orientation: "h", y: 1.08, x: 0 },
     xaxis: {
       title: { text: firstTuple?.xName ?? payload.plot.xSignal },
+      anchor: bottomLaneTraceAxisRef,
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
       rangeslider: { visible: false, autorange: true, range: xBounds },
