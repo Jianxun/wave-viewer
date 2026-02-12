@@ -367,6 +367,12 @@ export function runResolvedSidePanelQuickAdd(deps: RunResolvedSidePanelQuickAddD
       tuples: [traceInjectionPayload]
     })
   );
+
+  void deps.targetViewer.panel.webview.postMessage(
+    createProtocolEnvelope("host/sidePanelQuickAdd", {
+      signal: deps.signal
+    })
+  );
   return true;
 }
 

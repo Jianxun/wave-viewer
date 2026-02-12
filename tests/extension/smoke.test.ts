@@ -1550,7 +1550,8 @@ describe("T-027 side-panel quick-add tuple injection", () => {
     );
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/viewerBindingUpdated",
-      "host/tupleUpsert"
+      "host/tupleUpsert",
+      "host/sidePanelQuickAdd"
     ]);
     expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
@@ -1567,6 +1568,13 @@ describe("T-027 side-panel quick-add tuple injection", () => {
             y: [1, 2, 3]
           }
         ]
+      }
+    });
+    expect(panelFixture.sentMessages[2]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/sidePanelQuickAdd",
+      payload: {
+        signal: "vin"
       }
     });
   });
@@ -1630,8 +1638,12 @@ describe("T-027 side-panel quick-add tuple injection", () => {
     const tuplePayloads = panelFixture.sentMessages
       .filter((message) => message.type === "host/tupleUpsert")
       .map((message) => message.payload.tuples[0]);
+    const quickAddPayloads = panelFixture.sentMessages
+      .filter((message) => message.type === "host/sidePanelQuickAdd")
+      .map((message) => message.payload.signal);
 
     expect(tuplePayloads).toHaveLength(2);
+    expect(quickAddPayloads).toEqual(["vin", "vin"]);
     expect(tuplePayloads[0]).toMatchObject({
       sourceId: "/workspace/examples/a.csv::vin",
       xName: "time",
