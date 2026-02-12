@@ -5,7 +5,9 @@ export type SignalListProps = {
   container: HTMLElement;
   axes: AxisState[];
   traces: TraceState[];
+  activeAxisId?: AxisId;
   onSetAxis(traceId: string, axisId: AxisId): void;
+  onActivateLane(axisId: AxisId): void;
   onSetVisible(traceId: string, visible: boolean): void;
   onRemove(traceId: string): void;
 };
@@ -71,8 +73,15 @@ export function renderSignalList(props: SignalListProps): void {
 
   for (const lane of model.lanes) {
     const laneSection = createSection(lane.axisLabel);
+    laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);
     laneSection.body.classList.add("trace-lane-body", "drop-target");
     laneSection.body.dataset.axisId = lane.axisId;
+    laneSection.body.addEventListener("click", (event) => {
+      if (shouldIgnoreLaneActivation(event.target)) {
+        return;
+      }
+      props.onActivateLane(lane.axisId);
+    });
 
     laneSection.body.addEventListener("dragover", (event) => {
       if (!event.dataTransfer) {
@@ -162,6 +171,13 @@ export function renderSignalList(props: SignalListProps): void {
   if (props.traces.length === 0) {
     props.container.prepend(createMutedText("No traces yet. Add signals from the Explorer side panel."));
   }
+}
+
+function shouldIgnoreLaneActivation(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return target.closest("button,input,label,select,textarea,a") !== null;
 }
 
 function createMutedText(text: string): HTMLParagraphElement {

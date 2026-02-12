@@ -4,9 +4,9 @@ T-038:
   pr: 44
   merged: true
 T-039:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 45
+  merged: true
 T-040:
   status: ready
   pr: null

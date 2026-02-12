@@ -128,6 +128,45 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
+      if (message.type === "webview/intent/setActiveAxis") {
+        if (!datasetPath || !normalizedDataset) {
+          deps.logDebug?.("Ignored setActiveAxis because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+
+        const axisId = message.payload.axisId;
+        if (!isAxisId(axisId)) {
+          deps.logDebug?.("Ignored invalid webview setActiveAxis message payload.", {
+            payload: message.payload,
+            error: `Invalid axis id: ${axisId}`
+          });
+          return;
+        }
+
+        const transaction = deps.commitHostStateTransaction({
+          datasetPath,
+          defaultXSignal: normalizedDataset.defaultXSignal,
+          reason: "setActiveAxis:lane-click",
+          mutate: (workspace) => workspace,
+          selectActiveAxis: () => ({
+            plotId: message.payload.plotId,
+            axisId
+          })
+        });
+
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/statePatch", {
+            revision: transaction.next.revision,
+            workspace: transaction.next.workspace,
+            viewerState: transaction.next.viewerState,
+            reason: transaction.reason
+          })
+        );
+        return;
+      }
+
       if (message.type !== "webview/ready") {
         deps.logDebug?.("Ignored unsupported webview message type.", message.type);
         return;

@@ -300,7 +300,7 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
     return (
       isNonEmptyString(payload.viewerId) &&
       isNonEmptyString(payload.plotId) &&
-      isNonEmptyString(payload.axisId) &&
+      isAxisId(payload.axisId) &&
       isNonEmptyString(payload.requestId)
     );
   }
@@ -343,6 +343,10 @@ function isFiniteNumericArray(value: unknown): value is number[] {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isAxisId(value: unknown): value is `y${number}` {
+  return typeof value === "string" && /^y\d+$/.test(value);
 }
 
 function isSidePanelTraceTuplePayload(value: unknown): value is SidePanelTraceTuplePayload {
