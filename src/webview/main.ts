@@ -86,14 +86,14 @@ const plotRenderer = createPlotRenderer({
     }
 
     if (updates.xRange !== undefined || "xaxis.autorange" in eventData) {
-      dispatch({
+      applyRelayoutUpdate({
         type: "plot/setXRange",
         payload: { xRange: updates.xRange }
       });
     }
 
     for (const axisUpdate of updates.axisRanges) {
-      dispatch({
+      applyRelayoutUpdate({
         type: "axis/update",
         payload: {
           axisId: axisUpdate.axisId,
@@ -103,6 +103,18 @@ const plotRenderer = createPlotRenderer({
     }
   }
 });
+
+function applyRelayoutUpdate(action: WorkspaceAction): void {
+  if (!workspace) {
+    return;
+  }
+
+  try {
+    workspace = reduceWorkspaceState(workspace, action);
+  } catch (error) {
+    bridgeStatusEl.textContent = `State error: ${getErrorMessage(error)}`;
+  }
+}
 
 function getRequiredElement<TElement extends HTMLElement = HTMLElement>(id: string): TElement {
   const element = document.getElementById(id);
