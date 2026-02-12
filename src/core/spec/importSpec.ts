@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { parse } from "yaml";
 
 import type {
@@ -58,15 +59,15 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
   }
 
   return {
-    datasetPath: spec.dataset.path,
+    datasetPath: resolveDatasetPath(spec.dataset.path, input.specPath),
     workspace
   };
 }
 
-export function readPlotSpecDatasetPathV1(yamlText: string): string {
+export function readPlotSpecDatasetPathV1(yamlText: string, specPath?: string): string {
   const parsed = parseYaml(yamlText);
   const spec = validateSpecShape(parsed);
-  return spec.dataset.path;
+  return resolveDatasetPath(spec.dataset.path, specPath);
 }
 
 function parseYaml(yamlText: string): unknown {
@@ -321,4 +322,16 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Invalid YAML document.";
+}
+
+function resolveDatasetPath(datasetPath: string, specPath?: string): string {
+  if (path.isAbsolute(datasetPath)) {
+    return path.resolve(datasetPath);
+  }
+  if (!specPath) {
+    throw new PlotSpecImportError(
+      "Plot spec dataset.path is relative but no spec file path was provided for resolution."
+    );
+  }
+  return path.resolve(path.dirname(specPath), datasetPath);
 }

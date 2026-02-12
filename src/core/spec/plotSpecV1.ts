@@ -45,11 +45,13 @@ export type PlotSpecV1 = {
 export type ExportPlotSpecInput = {
   datasetPath: string;
   workspace: WorkspaceState;
+  specPath?: string;
 };
 
 export type ImportPlotSpecInput = {
   yamlText: string;
   availableSignals: string[];
+  specPath?: string;
 };
 
 export type ImportPlotSpecResult = {

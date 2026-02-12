@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { stringify } from "yaml";
 
 import type {
@@ -14,7 +15,7 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     version: PLOT_SPEC_V1_VERSION,
     mode: REFERENCE_ONLY_SPEC_MODE,
     dataset: {
-      path: input.datasetPath
+      path: serializeDatasetPath(input.datasetPath, input.specPath)
     },
     workspace: {
       activePlotId: input.workspace.activePlotId,
@@ -73,4 +74,18 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     lineWidth: 0
   });
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
+}
+
+function serializeDatasetPath(datasetPath: string, specPath?: string): string {
+  if (!specPath) {
+    return datasetPath;
+  }
+
+  const absoluteDatasetPath = path.resolve(datasetPath);
+  const relativePath = path.relative(path.dirname(path.resolve(specPath)), absoluteDatasetPath);
+  const normalizedPath = relativePath.split(path.sep).join("/");
+  if (normalizedPath.length === 0) {
+    return `./${path.basename(absoluteDatasetPath)}`;
+  }
+  return normalizedPath.startsWith(".") ? normalizedPath : `./${normalizedPath}`;
 }

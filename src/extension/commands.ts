@@ -878,7 +878,8 @@ export function createExportSpecCommand(deps: ExportSpecCommandDeps): () => Prom
 
     const yaml = exportPlotSpecV1({
       datasetPath: activeDocument.uri.fsPath,
-      workspace
+      workspace,
+      specPath: savePath
     });
 
     deps.writeTextFile(savePath, yaml);
@@ -916,7 +917,8 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
     try {
       parsed = importPlotSpecV1({
         yamlText: deps.readTextFile(specPath),
-        availableSignals: normalizedDataset.dataset.columns.map((column) => column.name)
+        availableSignals: normalizedDataset.dataset.columns.map((column) => column.name),
+        specPath
       });
     } catch (error) {
       deps.showError(getErrorMessage(error));
@@ -952,11 +954,12 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
     let loadedDataset: { dataset: Dataset; defaultXSignal: string };
     try {
       const yamlText = deps.readTextFile(layoutPath);
-      const datasetPath = readPlotSpecDatasetPathV1(yamlText);
+      const datasetPath = readPlotSpecDatasetPathV1(yamlText, layoutPath);
       loadedDataset = deps.loadDataset(datasetPath);
       parsed = importPlotSpecV1({
         yamlText,
-        availableSignals: loadedDataset.dataset.columns.map((column) => column.name)
+        availableSignals: loadedDataset.dataset.columns.map((column) => column.name),
+        specPath: layoutPath
       });
     } catch (error) {
       deps.showError(getErrorMessage(error));
@@ -1055,7 +1058,8 @@ export function createSaveLayoutCommand(deps: SaveLayoutCommandDeps): () => Prom
 
     const yaml = exportPlotSpecV1({
       datasetPath: context.datasetPath,
-      workspace: context.workspace
+      workspace: context.workspace,
+      specPath: context.layoutUri
     });
     deps.writeTextFile(context.layoutUri, yaml);
     deps.showInformation(`Wave Viewer layout saved to ${context.layoutUri}`);
@@ -1076,7 +1080,8 @@ export function createSaveLayoutAsCommand(deps: SaveLayoutAsCommandDeps): () => 
 
     const yaml = exportPlotSpecV1({
       datasetPath: context.datasetPath,
-      workspace: context.workspace
+      workspace: context.workspace,
+      specPath: savePath
     });
     deps.writeTextFile(savePath, yaml);
     deps.bindViewerToLayout(context.viewerId, savePath, context.datasetPath);
