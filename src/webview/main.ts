@@ -255,6 +255,7 @@ async function renderWorkspace(): Promise<void> {
     container: signalListEl,
     signals: signalNames,
     axes: activePlot.axes,
+    traces: activePlot.traces,
     onAddTrace: ({ signal, axisChoice }) => {
       if (axisChoice === "create-new") {
         dispatch({ type: "axis/add" });

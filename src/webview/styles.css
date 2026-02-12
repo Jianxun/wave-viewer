@@ -185,11 +185,32 @@ body {
   gap: 6px;
 }
 
+.signal-panel-section {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #2a3550;
+  border-radius: 8px;
+  background: color-mix(in srgb, #151e31 84%, #0c1120 16%);
+}
+
+.signal-panel-section-title {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
 .list-row {
   display: grid;
   gap: 6px;
   grid-template-columns: minmax(80px, 1fr) auto auto;
   align-items: center;
+}
+
+.signal-assigned-row {
+  grid-template-columns: 1fr;
 }
 
 .axis-row {

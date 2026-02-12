@@ -914,6 +914,24 @@ describe("T-023 canvas drop overlay interaction safety", () => {
   });
 });
 
+describe("T-028 signal panel structure", () => {
+  it("renders lane-assignment signal sections in webview layout and styling", () => {
+    const html = fs.readFileSync(path.resolve("src/webview/index.html"), "utf8");
+    const css = fs.readFileSync(path.resolve("src/webview/styles.css"), "utf8");
+
+    expect(html).toContain('id="signal-list"');
+    expect(css).toContain(".signal-panel-section");
+    expect(css).toContain(".signal-panel-section-title");
+  });
+
+  it("wires active plot traces into signal panel rendering", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain("renderSignalList({");
+    expect(source).toContain("traces: activePlot.traces");
+  });
+});
+
 describe("T-025 standalone viewer side-panel routing", () => {
   it("binds a standalone viewer to dataset action and posts datasetLoaded before patch", () => {
     const panelFixture = createPanelFixture();
