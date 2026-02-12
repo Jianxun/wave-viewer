@@ -161,6 +161,7 @@ function createDeps(overrides?: {
       };
     },
     createPanel: () => panelFixture.panel,
+    onPanelCreated: () => "viewer-1",
     getCachedWorkspace,
     setCachedWorkspace,
     showError,
@@ -258,6 +259,14 @@ describe("T-002 extension shell smoke", () => {
     });
     expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
+      type: "host/viewerBindingUpdated",
+      payload: {
+        viewerId: "viewer-1",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+      }
+    });
+    expect(panelFixture.sentMessages[2]).toEqual({
+      version: PROTOCOL_VERSION,
       type: "host/datasetLoaded",
       payload: {
         path: "/workspace/examples/simulations/ota.spice.csv",
@@ -304,6 +313,14 @@ describe("T-002 extension shell smoke", () => {
       },
       {
         version: PROTOCOL_VERSION,
+        type: "host/viewerBindingUpdated",
+        payload: {
+          viewerId: "viewer-1",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+        }
+      },
+      {
+        version: PROTOCOL_VERSION,
         type: "host/datasetLoaded",
         payload: {
           path: "/workspace/examples/simulations/ota.spice.csv",
@@ -318,7 +335,7 @@ describe("T-002 extension shell smoke", () => {
       }
     ]);
 
-    const datasetMessage = panelFixture.sentMessages[1];
+    const datasetMessage = panelFixture.sentMessages[2];
     expect(datasetMessage?.type).toBe("host/datasetLoaded");
     expect(datasetMessage?.payload).not.toHaveProperty("layout");
     expect(datasetMessage?.payload).not.toHaveProperty("axes");
@@ -336,6 +353,13 @@ describe("T-002 extension shell smoke", () => {
         version: PROTOCOL_VERSION,
         type: "host/init",
         payload: { title: "Wave Viewer" }
+      },
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/viewerBindingUpdated",
+        payload: {
+          viewerId: "viewer-1"
+        }
       }
     ]);
   });
@@ -911,6 +935,7 @@ describe("T-025 standalone viewer side-panel routing", () => {
       bindPanelToDataset: (_documentPath, panel) => {
         bindPanelToDataset();
         expect(panel).toBe(panelFixture.panel);
+        return "viewer-1";
       },
       clearStandalonePanel: (panel) => {
         if (standalonePanel === panel) {
@@ -928,6 +953,7 @@ describe("T-025 standalone viewer side-panel routing", () => {
     ]);
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/datasetLoaded",
+      "host/viewerBindingUpdated",
       "host/workspacePatched"
     ]);
     expect(panelFixture.sentMessages[0]).toEqual({
@@ -945,6 +971,14 @@ describe("T-025 standalone viewer side-panel routing", () => {
       }
     });
     expect(panelFixture.sentMessages[1]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/viewerBindingUpdated",
+      payload: {
+        viewerId: "viewer-1",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+      }
+    });
+    expect(panelFixture.sentMessages[2]).toEqual({
       version: PROTOCOL_VERSION,
       type: "host/workspacePatched",
       payload: {

@@ -27,6 +27,7 @@ import { extractSignalFromDropData, hasSupportedDropSignalType } from "./dropSig
 
 type HostMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
+  | ProtocolEnvelope<"host/viewerBindingUpdated", { viewerId: string; datasetPath?: string }>
   | ProtocolEnvelope<
       "host/datasetLoaded",
       {
@@ -39,7 +40,22 @@ type HostMessage =
     >
   | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
   | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>
-  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>;
+  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
+  | ProtocolEnvelope<
+      "host/sidePanelTraceInjected",
+      {
+        viewerId: string;
+        trace: {
+          traceId: string;
+          sourceId: string;
+          datasetPath: string;
+          xName: string;
+          yName: string;
+          x: number[];
+          y: number[];
+        };
+      }
+    >;
 
 const vscode = acquireVsCodeApi();
 
@@ -429,6 +445,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
     return;
   }
 
+  if (message.type === "host/viewerBindingUpdated") {
+    if (message.payload.datasetPath) {
+      bridgeStatusEl.textContent = `Bound ${message.payload.viewerId} -> ${message.payload.datasetPath}`;
+    } else {
+      bridgeStatusEl.textContent = `Viewer ${message.payload.viewerId} is unbound.`;
+    }
+    return;
+  }
+
   if (message.type === "host/workspaceLoaded") {
     workspace = message.payload.workspace;
     void renderWorkspace();
@@ -445,6 +470,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (message.type === "host/sidePanelQuickAdd") {
     postDropSignal({
       signal: message.payload.signal,
+      target: resolvePreferredDropTarget(),
+      source: "axis-row"
+    });
+    return;
+  }
+
+  if (message.type === "host/sidePanelTraceInjected") {
+    postDropSignal({
+      signal: message.payload.trace.yName,
       target: resolvePreferredDropTarget(),
       source: "axis-row"
     });
