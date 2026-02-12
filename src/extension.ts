@@ -150,6 +150,20 @@ export type ResolveSidePanelSelectionDeps = {
   showWarning(message: string): void;
 };
 
+export type RunResolvedSidePanelSignalActionDeps = {
+  actionType: SidePanelSignalAction["type"];
+  documentPath: string;
+  loadedDataset: LoadedDatasetRecord;
+  signal: string;
+  getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
+  setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
+  getBoundPanel(documentPath: string): WebviewPanelLike | undefined;
+  getStandalonePanel(): WebviewPanelLike | undefined;
+  bindPanelToDataset(documentPath: string, panel: WebviewPanelLike): void;
+  clearStandalonePanel(panel: WebviewPanelLike): void;
+  showWarning(message: string): void;
+};
+
 export function applySidePanelSignalAction(
   workspace: WorkspaceState,
   action: SidePanelSignalAction
@@ -340,16 +354,10 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       }
 
       void panel.webview.postMessage(
-        createProtocolEnvelope("host/datasetLoaded", {
-          path: datasetPath,
-          fileName: path.basename(datasetPath),
-          rowCount: normalizedDataset.dataset.rowCount,
-          columns: normalizedDataset.dataset.columns.map((column) => ({
-            name: column.name,
-            values: column.values
-          })),
-          defaultXSignal: normalizedDataset.defaultXSignal
-        })
+        createProtocolEnvelope(
+          "host/datasetLoaded",
+          createDatasetLoadedPayload(datasetPath, normalizedDataset)
+        )
       );
 
       const cachedWorkspace = deps.getCachedWorkspace?.(datasetPath);
@@ -461,6 +469,84 @@ export function resolveSidePanelSelection(
   }
 
   return { documentPath, loadedDataset, signal: resolved.signal };
+}
+
+function createDatasetLoadedPayload(documentPath: string, loaded: LoadedDatasetRecord): Extract<
+  HostToWebviewMessage,
+  { type: "host/datasetLoaded" }
+>["payload"] {
+  return {
+    path: documentPath,
+    fileName: path.basename(documentPath),
+    rowCount: loaded.dataset.rowCount,
+    columns: loaded.dataset.columns.map((column) => ({
+      name: column.name,
+      values: column.values
+    })),
+    defaultXSignal: loaded.defaultXSignal
+  };
+}
+
+function toSidePanelActionLabel(actionType: SidePanelSignalAction["type"]): string {
+  if (actionType === "add-to-plot") {
+    return "Add Signal to Plot";
+  }
+  if (actionType === "add-to-new-axis") {
+    return "Add Signal to New Axis";
+  }
+  return "Reveal Signal in Plot";
+}
+
+export function createNoTargetViewerWarning(
+  actionType: SidePanelSignalAction["type"],
+  documentPath: string
+): string {
+  return `${toSidePanelActionLabel(
+    actionType
+  )} failed: no open Wave Viewer can accept '${path.basename(
+    documentPath
+  )}'. Open Wave Viewer for that CSV and retry.`;
+}
+
+export function runResolvedSidePanelSignalAction(
+  deps: RunResolvedSidePanelSignalActionDeps
+): WorkspaceState {
+  const workspace =
+    deps.getCachedWorkspace(deps.documentPath) ?? createWorkspaceState(deps.loadedDataset.defaultXSignal);
+  const nextWorkspace = applySidePanelSignalAction(workspace, {
+    type: deps.actionType,
+    signal: deps.signal
+  });
+  deps.setCachedWorkspace(deps.documentPath, nextWorkspace);
+
+  const boundPanel = deps.getBoundPanel(deps.documentPath);
+  const standalonePanel = deps.getStandalonePanel();
+  const panel = boundPanel ?? standalonePanel;
+
+  if (!panel) {
+    deps.showWarning(createNoTargetViewerWarning(deps.actionType, deps.documentPath));
+    return nextWorkspace;
+  }
+
+  if (!boundPanel && standalonePanel === panel) {
+    deps.bindPanelToDataset(deps.documentPath, panel);
+    deps.clearStandalonePanel(panel);
+    void panel.webview.postMessage(
+      createProtocolEnvelope(
+        "host/datasetLoaded",
+        createDatasetLoadedPayload(deps.documentPath, deps.loadedDataset)
+      )
+    );
+  }
+
+  void panel.webview.postMessage(
+    createProtocolEnvelope("host/workspacePatched", {
+      workspace: nextWorkspace,
+      reason: `sidePanel:${deps.actionType}`
+    })
+  );
+
+  return nextWorkspace;
 }
 
 export function createExportSpecCommand(deps: ExportSpecCommandDeps): () => Promise<void> {
@@ -587,6 +673,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
   const panelByDatasetPath = new Map<string, WebviewPanelLike>();
+  let standalonePanel: WebviewPanelLike | undefined;
   const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
   const removedDatasetPathSet = new Set<string>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
@@ -651,26 +738,34 @@ export function activate(context: VSCode.ExtensionContext): void {
         return;
       }
 
-      const workspace =
-        workspaceByDatasetPath.get(selection.documentPath) ??
-        createWorkspaceState(selection.loadedDataset.defaultXSignal);
-      const nextWorkspace = applySidePanelSignalAction(workspace, {
-        type: actionType,
-        signal: selection.signal
+      runResolvedSidePanelSignalAction({
+        actionType,
+        documentPath: selection.documentPath,
+        loadedDataset: selection.loadedDataset,
+        signal: selection.signal,
+        getCachedWorkspace: (documentPath) => workspaceByDatasetPath.get(documentPath),
+        setCachedWorkspace: (documentPath, workspace) => {
+          workspaceByDatasetPath.set(documentPath, workspace);
+        },
+        getBoundPanel: (documentPath) => panelByDatasetPath.get(documentPath),
+        getStandalonePanel: () => standalonePanel,
+        bindPanelToDataset: (documentPath, panel) => {
+          panelByDatasetPath.set(documentPath, panel);
+          panel.onDidDispose?.(() => {
+            if (panelByDatasetPath.get(documentPath) === panel) {
+              panelByDatasetPath.delete(documentPath);
+            }
+          });
+        },
+        clearStandalonePanel: (panel) => {
+          if (standalonePanel === panel) {
+            standalonePanel = undefined;
+          }
+        },
+        showWarning: (message) => {
+          void vscode.window.showWarningMessage(message);
+        }
       });
-      workspaceByDatasetPath.set(selection.documentPath, nextWorkspace);
-
-      const panel = panelByDatasetPath.get(selection.documentPath);
-      if (!panel) {
-        return;
-      }
-
-      void panel.webview.postMessage(
-        createProtocolEnvelope("host/workspacePatched", {
-          workspace: nextWorkspace,
-          reason: `sidePanel:${actionType}`
-        })
-      );
     };
   }
 
@@ -738,6 +833,12 @@ export function activate(context: VSCode.ExtensionContext): void {
       }) as unknown as WebviewPanelLike,
     onPanelCreated: (documentPath, panel) => {
       if (!documentPath) {
+        standalonePanel = panel;
+        panel.onDidDispose?.(() => {
+          if (standalonePanel === panel) {
+            standalonePanel = undefined;
+          }
+        });
         return;
       }
       panelByDatasetPath.set(documentPath, panel);
