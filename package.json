@@ -29,7 +29,7 @@
     "commands": [
       {
         "command": "waveViewer.openViewer",
-        "title": "Wave Viewer: Open Active CSV"
+        "title": "Wave Viewer: Open Viewer"
       },
       {
         "command": "waveViewer.exportPlotSpec",

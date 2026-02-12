@@ -7,7 +7,7 @@ Wave Viewer is a VS Code extension for plotting numeric signals from local CSV f
 ### 1) Open
 
 1. Open `examples/simulations/ota.spice.csv` in VS Code.
-2. Run `Wave Viewer: Open Active CSV` from the Command Palette.
+2. Run `Wave Viewer: Open Viewer` from the Command Palette.
 3. Wait for the dataset status to confirm rows/signals were loaded.
 
 ### 2) Explore (Side-Panel First)

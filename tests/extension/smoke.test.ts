@@ -63,6 +63,7 @@ function createPanelFixture(): PanelFixture {
 function createDeps(overrides?: {
   fileName?: string;
   hasActiveDocument?: boolean;
+  preferredDatasetPath?: string;
   panelFixture?: PanelFixture;
   buildHtml?: string;
   loadDatasetError?: string;
@@ -101,6 +102,7 @@ function createDeps(overrides?: {
         }
       };
     },
+    getPreferredDatasetPath: () => overrides?.preferredDatasetPath,
     loadDataset: () => {
       if (overrides?.loadDatasetError) {
         throw new Error(overrides.loadDatasetError);
@@ -163,17 +165,54 @@ describe("T-002 extension shell smoke", () => {
 
     await createOpenViewerCommand(deps)();
 
-    expect(showError).toHaveBeenCalledWith(
-      "Open a CSV file in the editor before launching Wave Viewer."
-    );
+    expect(showError).not.toHaveBeenCalled();
   });
 
-  it("shows a clear error when active editor is not csv", async () => {
+  it("does not require an active csv editor to open the viewer shell", async () => {
     const { deps, showError } = createDeps({ fileName: "/workspace/notes.md" });
 
     await createOpenViewerCommand(deps)();
 
-    expect(showError).toHaveBeenCalledWith("Wave Viewer only supports active .csv files.");
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("falls back to preferred loaded dataset path when active editor is not csv", async () => {
+    const onDatasetLoaded = vi.fn();
+    const { deps, panelFixture, showError } = createDeps({
+      fileName: "/workspace/notes.md",
+      preferredDatasetPath: "/workspace/examples/simulations/ota.spice.csv",
+      onDatasetLoaded
+    });
+
+    await createOpenViewerCommand(deps)();
+    panelFixture.emitMessage(createProtocolEnvelope("webview/ready", { ready: true }));
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(onDatasetLoaded).toHaveBeenCalledWith("/workspace/examples/simulations/ota.spice.csv", {
+      dataset: {
+        path: "/workspace/examples/simulations/ota.spice.csv",
+        rowCount: 3,
+        columns: [
+          { name: "time", values: [0, 1, 2] },
+          { name: "vin", values: [1, 2, 3] }
+        ]
+      },
+      defaultXSignal: "time"
+    });
+    expect(panelFixture.sentMessages[1]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/datasetLoaded",
+      payload: {
+        path: "/workspace/examples/simulations/ota.spice.csv",
+        fileName: "ota.spice.csv",
+        rowCount: 3,
+        columns: [
+          { name: "time", values: [0, 1, 2] },
+          { name: "vin", values: [1, 2, 3] }
+        ],
+        defaultXSignal: "time"
+      }
+    });
   });
 
   it("surfaces parser/load errors before opening the panel", async () => {
@@ -226,6 +265,22 @@ describe("T-002 extension shell smoke", () => {
     expect(datasetMessage?.type).toBe("host/datasetLoaded");
     expect(datasetMessage?.payload).not.toHaveProperty("layout");
     expect(datasetMessage?.payload).not.toHaveProperty("axes");
+  });
+
+  it("posts init only when opened without a dataset context", async () => {
+    const { deps, panelFixture, showError } = createDeps({ hasActiveDocument: false });
+
+    await createOpenViewerCommand(deps)();
+    panelFixture.emitMessage(createProtocolEnvelope("webview/ready", { ready: true }));
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/init",
+        payload: { title: "Wave Viewer" }
+      }
+    ]);
   });
 
   it("registers loaded dataset context when open viewer parses a csv", async () => {
