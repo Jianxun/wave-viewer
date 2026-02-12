@@ -16,9 +16,9 @@ T-028:
   pr: 33
   merged: true
 T-029:
-  status: review_clean
+  status: done
   pr: 34
-  merged: false
+  merged: true
 T-030:
   status: backlog
   pr: null
