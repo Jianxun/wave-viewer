@@ -136,10 +136,11 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           return;
         }
 
-        if (!isAxisId(message.payload.axisId)) {
+        const axisId = message.payload.axisId;
+        if (!isAxisId(axisId)) {
           deps.logDebug?.("Ignored invalid webview setActiveAxis message payload.", {
             payload: message.payload,
-            error: `Invalid axis id: ${message.payload.axisId}`
+            error: `Invalid axis id: ${axisId}`
           });
           return;
         }
@@ -151,7 +152,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           mutate: (workspace) => workspace,
           selectActiveAxis: () => ({
             plotId: message.payload.plotId,
-            axisId: message.payload.axisId
+            axisId
           })
         });
 
