@@ -181,6 +181,36 @@ function postDropSignal(payload: {
   );
 }
 
+function postSetActivePlot(plotId: string): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/setActivePlot", {
+      viewerId,
+      plotId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postAddPlot(xSignal: string): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/addPlot", {
+      viewerId,
+      xSignal,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postRemovePlot(plotId: string): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/removePlot", {
+      viewerId,
+      plotId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
 function postSetActiveAxis(axisId: AxisId): void {
   if (!workspace) {
     return;
@@ -353,12 +383,8 @@ async function renderWorkspace(): Promise<void> {
     container: tabsEl,
     plots: workspace.plots,
     activePlotId: workspace.activePlotId,
-    onSelect: (plotId) => dispatch({ type: "plot/setActive", payload: { plotId } }),
-    onAdd: () =>
-      dispatch({
-        type: "plot/add",
-        payload: { xSignal: activePlot.xSignal }
-      }),
+    onSelect: (plotId) => postSetActivePlot(plotId),
+    onAdd: () => postAddPlot(activePlot.xSignal),
     onRename: (plotId) => {
       const plot = workspace?.plots.find((entry) => entry.id === plotId);
       if (!plot) {
@@ -371,7 +397,7 @@ async function renderWorkspace(): Promise<void> {
       }
       dispatch({ type: "plot/rename", payload: { plotId, name: nextName } });
     },
-    onRemove: (plotId) => dispatch({ type: "plot/remove", payload: { plotId } })
+    onRemove: (plotId) => postRemovePlot(plotId)
   });
 
   renderSignalList({
