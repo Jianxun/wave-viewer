@@ -1,7 +1,7 @@
 import * as path from "node:path";
 
 import { exportPlotSpecV1 } from "../core/spec/exportSpec";
-import { importPlotSpecV1 } from "../core/spec/importSpec";
+import { importPlotSpecV1, readPlotSpecDatasetPathV1 } from "../core/spec/importSpec";
 import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from "../core/dataset/types";
 import { reduceWorkspaceState } from "../webview/state/reducer";
 import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
@@ -18,8 +18,11 @@ import type {
   ExportSpecCommandDeps,
   ImportSpecCommandDeps,
   LoadCsvFilesCommandDeps,
+  OpenLayoutCommandDeps,
   ReloadAllLoadedFilesCommandDeps,
-  RemoveLoadedFileCommandDeps
+  RemoveLoadedFileCommandDeps,
+  SaveLayoutAsCommandDeps,
+  SaveLayoutCommandDeps
 } from "./types";
 import { resolveDatasetPathFromCommandArgument } from "./signalTree";
 
@@ -929,6 +932,155 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
 
     deps.setCachedWorkspace(activeDocument.uri.fsPath, parsed.workspace);
     deps.showInformation(`Wave Viewer spec imported from ${specPath}`);
+  };
+}
+
+export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Promise<void> {
+  return async () => {
+    const activeViewerId = deps.getActiveViewerId();
+    if (!activeViewerId) {
+      deps.showError("Focus a Wave Viewer panel before running Open Layout.");
+      return;
+    }
+
+    const layoutPath = await deps.showOpenDialog();
+    if (!layoutPath) {
+      return;
+    }
+
+    let parsed: ReturnType<typeof importPlotSpecV1>;
+    let loadedDataset: { dataset: Dataset; defaultXSignal: string };
+    try {
+      const yamlText = deps.readTextFile(layoutPath);
+      const datasetPath = readPlotSpecDatasetPathV1(yamlText);
+      loadedDataset = deps.loadDataset(datasetPath);
+      parsed = importPlotSpecV1({
+        yamlText,
+        availableSignals: loadedDataset.dataset.columns.map((column) => column.name)
+      });
+    } catch (error) {
+      deps.showError(getErrorMessage(error));
+      return;
+    }
+
+    const hydratedReplay = hydrateWorkspaceReplayPayload(
+      activeViewerId,
+      parsed.datasetPath,
+      loadedDataset,
+      parsed.workspace,
+      deps.logDebug
+    );
+    const snapshot = deps.setCachedWorkspace(parsed.datasetPath, hydratedReplay.workspace);
+    deps.bindViewerToLayout(activeViewerId, layoutPath, parsed.datasetPath);
+    const panel = deps.getPanelForViewer(activeViewerId);
+    if (panel) {
+      void panel.webview.postMessage(
+        createProtocolEnvelope(
+          "host/viewerBindingUpdated",
+          createViewerBindingUpdatedPayload(activeViewerId, parsed.datasetPath)
+        )
+      );
+      if (hydratedReplay.tracePayloads.length > 0) {
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/tupleUpsert", {
+            tuples: hydratedReplay.tracePayloads
+          })
+        );
+      }
+      void panel.webview.postMessage(
+        createProtocolEnvelope("host/statePatch", {
+          revision: snapshot.revision,
+          workspace: snapshot.workspace,
+          viewerState: snapshot.viewerState,
+          reason: "openLayout:command"
+        })
+      );
+    }
+    deps.showInformation(`Wave Viewer layout opened from ${layoutPath}`);
+  };
+}
+
+type SaveLayoutContextDeps = {
+  getActiveViewerId(): string | undefined;
+  resolveViewerSessionContext(viewerId: string): { datasetPath: string; layoutUri: string } | undefined;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
+  showError(message: string): void;
+};
+
+function resolveSaveLayoutContext(deps: SaveLayoutContextDeps): {
+  viewerId: string;
+  datasetPath: string;
+  layoutUri: string;
+  workspace: WorkspaceState;
+} | undefined {
+  const viewerId = deps.getActiveViewerId();
+  if (!viewerId) {
+    deps.showError("Focus a Wave Viewer panel before running Save Layout.");
+    return undefined;
+  }
+
+  const context = deps.resolveViewerSessionContext(viewerId);
+  if (!context) {
+    deps.showError("The focused viewer is not bound to a dataset/layout session.");
+    return undefined;
+  }
+
+  let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
+  try {
+    normalizedDataset = deps.loadDataset(context.datasetPath);
+  } catch (error) {
+    deps.showError(getErrorMessage(error));
+    return undefined;
+  }
+
+  const workspace =
+    deps.getCachedWorkspace(context.datasetPath) ??
+    createWorkspaceState(normalizedDataset.defaultXSignal);
+
+  return {
+    viewerId,
+    datasetPath: context.datasetPath,
+    layoutUri: context.layoutUri,
+    workspace
+  };
+}
+
+export function createSaveLayoutCommand(deps: SaveLayoutCommandDeps): () => Promise<void> {
+  return async () => {
+    const context = resolveSaveLayoutContext(deps);
+    if (!context) {
+      return;
+    }
+
+    const yaml = exportPlotSpecV1({
+      datasetPath: context.datasetPath,
+      workspace: context.workspace
+    });
+    deps.writeTextFile(context.layoutUri, yaml);
+    deps.showInformation(`Wave Viewer layout saved to ${context.layoutUri}`);
+  };
+}
+
+export function createSaveLayoutAsCommand(deps: SaveLayoutAsCommandDeps): () => Promise<void> {
+  return async () => {
+    const context = resolveSaveLayoutContext(deps);
+    if (!context) {
+      return;
+    }
+
+    const savePath = await deps.showSaveDialog(context.layoutUri);
+    if (!savePath) {
+      return;
+    }
+
+    const yaml = exportPlotSpecV1({
+      datasetPath: context.datasetPath,
+      workspace: context.workspace
+    });
+    deps.writeTextFile(savePath, yaml);
+    deps.bindViewerToLayout(context.viewerId, savePath, context.datasetPath);
+    deps.showInformation(`Wave Viewer layout saved to ${savePath}`);
   };
 }
 

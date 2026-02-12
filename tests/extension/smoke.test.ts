@@ -6,6 +6,9 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createOpenLayoutCommand,
+  createSaveLayoutAsCommand,
+  createSaveLayoutCommand,
   createImportSpecCommand,
   createViewerSessionRegistry,
   createNoTargetViewerWarning,
@@ -17,9 +20,12 @@ import {
   isCsvFile,
   LOAD_CSV_FILES_COMMAND,
   OPEN_VIEWER_COMMAND,
+  OPEN_LAYOUT_COMMAND,
   REMOVE_LOADED_FILE_COMMAND,
   REVEAL_SIGNAL_IN_PLOT_COMMAND,
   RELOAD_ALL_FILES_COMMAND,
+  SAVE_LAYOUT_AS_COMMAND,
+  SAVE_LAYOUT_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
@@ -606,6 +612,250 @@ describe("T-030 reference-only spec import workflow", () => {
     expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer spec imported from /workspace/specs/replay.wave-viewer.yaml"
+    );
+  });
+});
+
+describe("T-046 explicit layout commands", () => {
+  it("exports explicit layout command ids", () => {
+    expect(OPEN_LAYOUT_COMMAND).toBe("waveViewer.openLayout");
+    expect(SAVE_LAYOUT_COMMAND).toBe("waveViewer.saveLayout");
+    expect(SAVE_LAYOUT_AS_COMMAND).toBe("waveViewer.saveLayoutAs");
+  });
+
+  it("opens a selected layout into the active viewer session", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const bindViewerToLayout = vi.fn();
+    const panelFixture = createPanelFixture();
+    const setCachedWorkspace = vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+      workspace,
+      revision: 3,
+      viewerState: {
+        activePlotId: workspace.activePlotId,
+        activeAxisByPlotId: { "plot-1": "y1" as const }
+      }
+    }));
+    const command = createOpenLayoutCommand({
+      getActiveViewerId: () => "viewer-1",
+      showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
+      readTextFile: () => createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv"),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      setCachedWorkspace,
+      bindViewerToLayout,
+      getPanelForViewer: () => panelFixture.panel,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(setCachedWorkspace).toHaveBeenCalledWith("/workspace/examples/simulations/ota.spice.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+    expect(bindViewerToLayout).toHaveBeenCalledWith(
+      "viewer-1",
+      "/workspace/layouts/lab.wave-viewer.yaml",
+      "/workspace/examples/simulations/ota.spice.csv"
+    );
+    expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
+      "host/viewerBindingUpdated",
+      "host/statePatch"
+    ]);
+    expect(panelFixture.sentMessages[0]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/viewerBindingUpdated",
+      payload: {
+        viewerId: "viewer-1",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+      }
+    });
+    expect(panelFixture.sentMessages[1]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/statePatch",
+      payload: {
+        revision: 3,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        },
+        reason: "openLayout:command"
+      }
+    });
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer layout opened from /workspace/layouts/lab.wave-viewer.yaml"
+    );
+  });
+
+  it("rejects malformed layout YAML on open with import validator errors", async () => {
+    const showError = vi.fn();
+    const command = createOpenLayoutCommand({
+      getActiveViewerId: () => "viewer-1",
+      showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
+      readTextFile: () => "version: nope",
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      setCachedWorkspace: vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+        workspace,
+        revision: 0,
+        viewerState: {
+          activePlotId: workspace.activePlotId,
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        }
+      })),
+      bindViewerToLayout: vi.fn(),
+      getPanelForViewer: vi.fn(),
+      showError,
+      showInformation: vi.fn()
+    });
+
+    await command();
+
+    expect(showError).toHaveBeenCalledWith("Unsupported plot spec version: nope.");
+  });
+
+  it("shows a clear error when no viewer is focused for open layout", async () => {
+    const showError = vi.fn();
+    const command = createOpenLayoutCommand({
+      getActiveViewerId: () => undefined,
+      showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
+      readTextFile: vi.fn(),
+      loadDataset: vi.fn(),
+      setCachedWorkspace: vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+        workspace,
+        revision: 0,
+        viewerState: {
+          activePlotId: workspace.activePlotId,
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        }
+      })),
+      bindViewerToLayout: vi.fn(),
+      getPanelForViewer: vi.fn(),
+      showError,
+      showInformation: vi.fn()
+    });
+
+    await command();
+
+    expect(showError).toHaveBeenCalledWith(
+      "Focus a Wave Viewer panel before running Open Layout."
+    );
+  });
+
+  it("saves active viewer workspace to its bound layout path", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const writeTextFile = vi.fn();
+    const command = createSaveLayoutCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      getCachedWorkspace: () => createWorkspaceFixture(),
+      writeTextFile,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/workspace/layouts/lab.wave-viewer.yaml",
+      expect.stringContaining("dataset:")
+    );
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer layout saved to /workspace/layouts/lab.wave-viewer.yaml"
+    );
+  });
+
+  it("save layout as updates viewer layout binding and writes to selected path", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const writeTextFile = vi.fn();
+    const bindViewerToLayout = vi.fn();
+    const command = createSaveLayoutAsCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      getCachedWorkspace: () => createWorkspaceFixture(),
+      showSaveDialog: async () => "/workspace/layouts/lab-alt.wave-viewer.yaml",
+      writeTextFile,
+      bindViewerToLayout,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/workspace/layouts/lab-alt.wave-viewer.yaml",
+      expect.stringContaining("dataset:")
+    );
+    expect(bindViewerToLayout).toHaveBeenCalledWith(
+      "viewer-1",
+      "/workspace/layouts/lab-alt.wave-viewer.yaml",
+      "/workspace/examples/simulations/ota.spice.csv"
+    );
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer layout saved to /workspace/layouts/lab-alt.wave-viewer.yaml"
     );
   });
 });

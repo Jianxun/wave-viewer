@@ -120,6 +120,9 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
         layoutUri: session.layoutUri
       };
     },
+    getPanelForViewer(viewerId: string): WebviewPanelLike | undefined {
+      return getSession(viewerId)?.panel;
+    },
     markViewerFocused(viewerId: string): void {
       const session = getSession(viewerId);
       if (!session) {

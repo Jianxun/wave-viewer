@@ -4,9 +4,9 @@ T-045:
   pr: 52
   merged: true
 T-046:
-  status: backlog
-  pr: null
-  merged: false
+  status: done
+  pr: 53
+  merged: true
 T-047:
   status: backlog
   pr: null
