@@ -4,7 +4,7 @@ T-038:
   pr: 44
   merged: true
 T-039:
-  status: review_in_progress
+  status: review_clean
   pr: 45
   merged: false
 T-040:
