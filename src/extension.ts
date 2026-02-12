@@ -4,6 +4,7 @@ import type * as VSCode from "vscode";
 
 import { exportPlotSpecV1 } from "./core/spec/exportSpec";
 import { importPlotSpecV1 } from "./core/spec/importSpec";
+import type { PlotSpecTraceTupleV1 } from "./core/spec/plotSpecV1";
 import { REFERENCE_ONLY_SPEC_MODE } from "./core/spec/plotSpecV1";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
@@ -133,7 +134,7 @@ export type CommandDeps = {
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   getCachedPortableArchiveTraceTuples?(
     documentPath: string
-  ): ReadonlyMap<string, SidePanelTraceTuplePayload> | undefined;
+  ): ReadonlyMap<string, PlotSpecTraceTupleV1> | undefined;
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): string | undefined;
   showError(message: string): void;
@@ -464,7 +465,7 @@ export type ImportSpecCommandDeps = {
   setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
   setCachedPortableArchiveTraceTuples?(
     documentPath: string,
-    tuples: ReadonlyMap<string, SidePanelTraceTuplePayload>
+    tuples: ReadonlyMap<string, PlotSpecTraceTupleV1>
   ): void;
   showError(message: string): void;
   showInformation(message: string): void;
@@ -781,7 +782,7 @@ function hydrateWorkspaceReplayPayload(
   documentPath: string,
   loadedDataset: LoadedDatasetRecord,
   workspace: WorkspaceState,
-  portableArchiveTraceTuples?: ReadonlyMap<string, SidePanelTraceTuplePayload>,
+  portableArchiveTraceTuples?: ReadonlyMap<string, PlotSpecTraceTupleV1>,
   logDebug?: (message: string, details?: unknown) => void
 ): {
   workspace: WorkspaceState;
@@ -1163,7 +1164,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const workspaceByDatasetPath = new Map<string, WorkspaceState>();
   const portableArchiveTraceTuplesByDatasetPath = new Map<
     string,
-    Map<string, SidePanelTraceTuplePayload>
+    Map<string, PlotSpecTraceTupleV1>
   >();
   const viewerSessions = createViewerSessionRegistry();
   const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
