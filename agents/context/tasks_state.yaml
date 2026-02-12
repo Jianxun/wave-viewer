@@ -8,9 +8,9 @@ T-042:
   pr: 49
   merged: true
 T-043:
-  status: ready_for_review
+  status: done
   pr: 50
-  merged: false
+  merged: true
 T-044:
   status: ready
   pr: null
