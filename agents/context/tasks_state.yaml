@@ -8,7 +8,7 @@ T-042:
   pr: 49
   merged: true
 T-043:
-  status: ready
+  status: in_progress
   pr: null
   merged: false
 T-044:
