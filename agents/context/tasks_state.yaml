@@ -1,21 +1,29 @@
 schema_version: 2
-T-020:
-  status: done
-  pr: 24
-  merged: true
-T-021:
-  status: done
-  pr: 25
-  merged: true
-T-022:
-  status: done
-  pr: 26
-  merged: true
-T-023:
-  status: done
-  pr: 27
-  merged: true
-T-024:
-  status: done
-  pr: 28
-  merged: true
+T-025:
+  status: ready
+  pr: null
+  merged: false
+T-026:
+  status: ready
+  pr: null
+  merged: false
+T-027:
+  status: ready
+  pr: null
+  merged: false
+T-028:
+  status: ready
+  pr: null
+  merged: false
+T-029:
+  status: ready
+  pr: null
+  merged: false
+T-030:
+  status: backlog
+  pr: null
+  merged: false
+T-031:
+  status: backlog
+  pr: null
+  merged: false

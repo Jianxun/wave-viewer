@@ -19,3 +19,8 @@ archive:
   - { T-017: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-017.md, pr: 21 } }
   - { T-018: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-018.md, pr: 18 } }
   - { T-019: { completed_on: 2026-02-11, owner: Executor, scratchpad: agents/scratchpads/T-019.md, pr: 22 } }
+  - { T-020: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-020.md, pr: 24 } }
+  - { T-021: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-021.md, pr: 25 } }
+  - { T-022: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-022.md, pr: 26 } }
+  - { T-023: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-023.md, pr: 27 } }
+  - { T-024: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-024.md, pr: 28 } }

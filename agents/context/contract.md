@@ -11,6 +11,9 @@ Active ADRs:
 - `ADR-0003`: Side-panel-first signal workflow with transitional in-webview fallback during migration.
 - `ADR-0004`: Host-webview protocol is explicitly typed, versioned, and runtime-validated.
 - `ADR-0005`: MVP keeps command-opened webview surface; custom editor migration is deferred until side-panel workflow stabilization.
+- `ADR-0006`: Host sends explicit `(x, y)` trace tuples using inline arrays for MVP; viewer does not infer default X from dataset columns.
+- `ADR-0007`: Spec persistence supports two modes: `reference-only` and `portable-archive`.
+- `ADR-0008`: Cross-dataset trace mixing on axes/lanes is allowed in MVP; user owns semantic consistency.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -26,7 +29,7 @@ Active ADRs:
   - `*.csv` UTF-8 text.
   - Header row required.
   - Zero or more numeric columns; at least one numeric column is required to plot.
-  - `time` is optional. If present, it is the default X signal.
+  - Default X signal is the first dataset column (source CSV header order), with no special-case signal-name heuristic.
 - Normalized in-memory structure:
   - `Dataset`:
     - `path: string`
@@ -47,7 +50,7 @@ Active ADRs:
   - `webview/dropSignal` is the normalized drop event contract for lane-targeted signal add flows.
   - Protocol rules are defined in `doc/specs/host-webview-protocol.md`.
 - User entry points:
-  - VS Code command to open the active CSV and launch viewer webview.
+  - VS Code command to open Wave Viewer webview (standalone launch allowed even without active CSV editor).
   - Side-panel signal actions (add/reveal/new-axis) as primary signal workflow.
   - Webview plotting controls and lane drop targets.
   - Export and import YAML spec for deterministic replay.
@@ -92,7 +95,9 @@ Active ADRs:
 ## Decision log
 - 2026-02-11: Plotly selected as mandatory plotting engine for waveform rendering due to mature interaction tooling and rapid webview integration.
 - 2026-02-11: MVP scope constrained to local CSV ingestion and in-editor visualization only; remote data connectors deferred.
-- 2026-02-11: CSV contract changed to optional `time`; default X is `time` when present, otherwise first numeric column.
+- 2026-02-12: Tuple-based trace payload contract accepted; host sends explicit `(x, y)` inline arrays for MVP and viewer does not infer X from dataset headers (ADR-0006).
+- 2026-02-12: Spec persistence split into `reference-only` and `portable-archive` modes to support rerun and archival workflows (ADR-0007).
+- 2026-02-12: Cross-dataset axis mixing is allowed in MVP; semantic consistency responsibility remains with user (ADR-0008).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.

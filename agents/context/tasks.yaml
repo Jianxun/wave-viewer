@@ -1,120 +1,164 @@
 schema_version: 2
 current_sprint:
-  - id: T-020
-    title: Persist single-session loaded CSV registry for side-panel signal browser
+  - id: T-025
+    title: Restore Explorer signal actions for standalone viewer launch
     owner: Executor
     dod:
-      - Replace active-editor-derived signal listing with an explicit in-memory loaded-dataset registry for one Wave Viewer session.
-      - Keep Explorer tree populated when focus moves from CSV editor to webview or other editors.
-      - Render loaded files as parent nodes with signal children so signal actions can be scoped to a concrete loaded file.
-      - Ensure existing side-panel signal actions continue to work against the selected dataset node context.
-    verify:
-      - npm run lint
-      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-020.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
-    files:
-      - src/extension.ts
-      - src/extension/signalTree.ts
-      - src/core/csv/parseCsv.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-020.md
-  - id: T-021
-    title: Add Explorer context menu actions to load CSV and reload all loaded files
-    owner: Executor
-    depends_on:
-      - T-020
-    dod:
-      - Add Explorer view context-menu command `Load CSV File...` that opens a file picker and loads one or more CSV files into the side-panel registry.
-      - Add Explorer view context-menu command `Reload All Files` that reparses all currently loaded CSV files and refreshes tree content.
-      - Surface actionable errors for parse failures while preserving already-loaded valid datasets.
-      - Keep command wiring deterministic and covered by extension smoke tests.
+      - Fix the regression where Explorer right-click `Add Signal to Plot` does nothing after launching Wave Viewer without an active CSV editor.
+      - Keep current reducer semantics unchanged (`add-to-plot`, `add-to-new-axis`, `reveal-in-plot`) for side-panel actions.
+      - Ensure host emits explicit actionable warning when no target viewer can accept a side-panel action.
+      - Add/adjust smoke tests covering standalone launch + side-panel action flow.
     verify:
       - npm run lint
       - npm test -- tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-021.md
+      scratchpad: agents/scratchpads/T-025.md
       spec: doc/specs/side-panel-workflow.md
       adr: agents/adr/ADR-0003-side-panel-first-workflow.md
     files:
-      - package.json
       - src/extension.ts
-      - src/extension/signalTree.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-021.md
-  - id: T-022
-    title: Add Explorer context menu action to remove loaded file and keep workflow stable
+      - agents/scratchpads/T-025.md
+  - id: T-026
+    title: Introduce viewer-session registry in extension host
     owner: Executor
     depends_on:
-      - T-021
+      - T-025
     dod:
-      - Add file-node context-menu command `Remove Loaded File` that removes exactly one loaded dataset from the registry and tree.
-      - Ensure removing a loaded file updates related side-panel interactions without clearing unrelated loaded datasets.
-      - If removed file has an open viewer panel, keep panel behavior predictable (show warning and block new side-panel adds for that dataset).
-      - Add regression checks for remove-file behavior and follow-up signal actions.
+      - Add explicit `viewerId` identity for each open Wave Viewer panel and maintain host-side registry (`viewerId -> panel`, `viewerId -> dataset?`).
+      - Track active/focused viewer session to route side-panel commands deterministically.
+      - Remove reliance on single-key `datasetPath -> panel` assumptions for side-panel command routing.
+      - Add regression tests for multiple-viewer routing and panel disposal cleanup.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-026.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+    files:
+      - src/extension.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-026.md
+  - id: T-027
+    title: Add explicit viewer-binding protocol messages
+    owner: Executor
+    depends_on:
+      - T-026
+    dod:
+      - Define and implement typed protocol messages for viewer binding updates (host -> webview) and side-panel trace injection using explicit tuple payloads `(x, y)` (host -> webview).
+      - Use full inline numeric arrays in payloads for MVP; do not introduce chunk/handle streaming in this task.
+      - Ensure protocol additions preserve backward-compatible reducer-level semantics for plot/lane assignment.
+      - Add/adjust protocol contract tests and extension smoke tests for the new message types.
+      - Keep runtime validation strict at host/webview boundaries.
+    verify:
+      - npm run lint
+      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-027.md
+      spec: doc/specs/host-webview-protocol.md
+      adr: agents/adr/ADR-0006-trace-payload-independent-variable-tuples.md
+    files:
+      - src/extension.ts
+      - src/webview/main.ts
+      - src/core/dataset/types.ts
+      - tests/unit/protocol/messages.test.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-027.md
+  - id: T-028
+    title: Refactor viewer signal panel to show available and per-lane assigned signals
+    owner: Executor
+    depends_on:
+      - T-027
+    dod:
+      - Replace single flat signal list UX with sections that make lane assignment explicit (available signals + per-lane assignments).
+      - Ensure UI remains deterministic and consistent with reducer state after add/remove/reassign/reorder operations.
+      - Preserve existing drag/drop and quick-add functionality while updating signal display structure.
+      - Add unit/smoke checks for new signal panel rendering and interactions.
+    verify:
+      - npm run lint
+      - npm test -- tests/unit/webview/workspaceState.test.ts tests/extension/smoke.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-028.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+    files:
+      - src/webview/components/SignalList.ts
+      - src/webview/main.ts
+      - src/webview/index.html
+      - src/webview/styles.css
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-028.md
+  - id: T-029
+    title: Implement tuple-trace ingestion path from Explorer to viewer
+    owner: Executor
+    dod:
+      - Implement host-side mapping from selected Explorer signal to explicit tuple trace payloads (`x[]`, `y[]`, metadata) for viewer delivery.
+      - Ensure viewer state stores and renders only trace tuples received from host; avoid deriving plot data from full dataset snapshots inside viewer.
+      - Keep lane assignment and reducer behavior deterministic when adding tuple traces.
+      - Add unit/smoke tests proving mixed-grid traces from different sources can coexist in one viewer session.
     verify:
       - npm run lint
       - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-022.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+      scratchpad: agents/scratchpads/T-029.md
+      spec: doc/specs/host-webview-protocol.md
+      adr: agents/adr/ADR-0006-trace-payload-independent-variable-tuples.md
     files:
-      - package.json
       - src/extension.ts
-      - src/extension/signalTree.ts
+      - src/webview/main.ts
+      - src/webview/plotly/adapter.ts
+      - src/core/dataset/types.ts
       - tests/extension/smoke.test.ts
       - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-022.md
-  - id: T-023
-    title: Fix Plotly interaction regression caused by canvas drop overlay hit-testing
+      - agents/scratchpads/T-029.md
+backlog:
+  - id: T-030
+    title: Add deterministic `reference-only` spec persistence mode
     owner: Executor
     depends_on:
-      - T-022
+      - T-029
     dod:
-      - Ensure Plotly canvas interactions remain fully functional when no drag operation is active: legend click toggles traces, hover cursor/tooltip behavior, pan/zoom interactions.
-      - Update canvas drop-overlay styling/behavior so overlay lanes never intercept pointer events outside active drag handling.
-      - If drag feedback requires interaction state, gate overlay visibility/activation to drag lifecycle events only (`dragenter`/`dragover`/`dragleave`/`drop`).
-      - Keep canvas overlay lane highlighting behavior intact during valid signal drag operations.
-      - Add regression coverage that validates overlay elements do not block normal plot interactions.
+      - Implement export/import path for `reference-only` specs that preserve plotting intent without embedding full sample arrays.
+      - Ensure rerun workflow can bind fresh source data and reconstruct plot assignments deterministically.
+      - Add validation and tests for missing/outdated references with clear actionable errors.
     verify:
       - npm run lint
-      - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/extension/smoke.test.ts
+      - npm test -- tests/unit/spec/importErrors.test.ts tests/unit/spec/roundtrip.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-023.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
+      scratchpad: agents/scratchpads/T-030.md
+      spec: doc/specs/wave-viewer-mvp.md
+      adr: agents/adr/ADR-0007-dual-spec-persistence-modes.md
     files:
-      - src/webview/styles.css
-      - src/webview/main.ts
-      - src/webview/index.html
+      - src/core/spec/importSpec.ts
+      - src/core/spec/exportSpec.ts
+      - tests/unit/spec/importErrors.test.ts
+      - tests/unit/spec/roundtrip.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-023.md
-  - id: T-024
-    title: Stabilize shared x-axis anchoring independent of lane reorder
+      - agents/scratchpads/T-030.md
+  - id: T-031
+    title: Add deterministic `portable-archive` spec mode with embedded trace tuples
     owner: Executor
+    depends_on:
+      - T-030
     dod:
-      - Decouple shared x-axis anchoring from workspace axis identity/order so x-axis ticks do not move when lanes reorder.
-      - Introduce a render-layer axis mapping strategy that preserves workspace axis ids (`y1..yN`) while assigning non-overlapping Plotly lane domains deterministically.
-      - Ensure add/remove/reorder axis operations keep lane rendering stable and preserve existing drag/drop lane targeting semantics.
-      - Add regression coverage proving x-axis tick placement remains stable across axis reorder operations.
+      - Implement export/import path for `portable-archive` specs embedding full tuple trace data needed for offline replay.
+      - Keep archive serialization deterministic (trace order, axis assignment, numeric array ordering).
+      - Add regression tests validating archive replay works without accessing original source files.
     verify:
       - npm run lint
-      - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/unit/webview/workspaceState.test.ts tests/extension/smoke.test.ts
+      - npm test -- tests/unit/spec/roundtrip.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-024.md
-      spec: doc/specs/domain-stacked-shared-x-implementation.md
-      adr: agents/adr/ADR-0002-domain-stacked-yaxes-shared-x.md
+      scratchpad: agents/scratchpads/T-031.md
+      spec: doc/specs/wave-viewer-mvp.md
+      adr: agents/adr/ADR-0007-dual-spec-persistence-modes.md
     files:
-      - src/webview/plotly/adapter.ts
-      - src/webview/plotly/renderPlot.ts
-      - src/webview/main.ts
-      - tests/unit/webview/plotly/adapter.test.ts
+      - src/core/spec/importSpec.ts
+      - src/core/spec/exportSpec.ts
+      - src/core/spec/plotSpecV1.ts
+      - tests/unit/spec/roundtrip.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-024.md
-backlog: []
+      - agents/scratchpads/T-031.md
 exploration_candidates:
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after side-panel workflow stabilization criteria are met.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.

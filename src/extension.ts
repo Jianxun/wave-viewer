@@ -99,12 +99,13 @@ export type WebviewPanelLike = {
 export type CommandDeps = {
   extensionUri: unknown;
   getActiveDocument(): ActiveDocumentLike | undefined;
+  getPreferredDatasetPath?(): string | undefined;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   createPanel(): WebviewPanelLike;
-  onPanelCreated?(documentPath: string, panel: WebviewPanelLike): void;
+  onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): void;
   showError(message: string): void;
   logDebug?(message: string, details?: unknown): void;
   buildHtml(webview: WebviewLike, extensionUri: unknown): string;
@@ -261,27 +262,23 @@ export function isCsvFile(fileName: string): boolean {
 export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> {
   return async () => {
     const activeDocument = deps.getActiveDocument();
-    if (!activeDocument) {
-      deps.showError("Open a CSV file in the editor before launching Wave Viewer.");
-      return;
-    }
+    const activeDatasetPath =
+      activeDocument && isCsvFile(activeDocument.fileName) ? activeDocument.uri.fsPath : undefined;
+    const datasetPath = activeDatasetPath ?? deps.getPreferredDatasetPath?.();
+    let normalizedDataset: { dataset: Dataset; defaultXSignal: string } | undefined;
 
-    if (!isCsvFile(activeDocument.fileName)) {
-      deps.showError("Wave Viewer only supports active .csv files.");
-      return;
+    if (datasetPath) {
+      try {
+        normalizedDataset = deps.loadDataset(datasetPath);
+      } catch (error) {
+        deps.showError(getErrorMessage(error));
+        return;
+      }
+      deps.onDatasetLoaded?.(datasetPath, normalizedDataset);
     }
-
-    let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
-    try {
-      normalizedDataset = deps.loadDataset(activeDocument.uri.fsPath);
-    } catch (error) {
-      deps.showError(getErrorMessage(error));
-      return;
-    }
-    deps.onDatasetLoaded?.(activeDocument.uri.fsPath, normalizedDataset);
 
     const panel = deps.createPanel();
-    deps.onPanelCreated?.(activeDocument.uri.fsPath, panel);
+    deps.onPanelCreated?.(datasetPath, panel);
     panel.webview.html = deps.buildHtml(panel.webview, deps.extensionUri);
 
     panel.webview.onDidReceiveMessage((rawMessage) => {
@@ -292,16 +289,22 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       }
 
       if (message.type === "webview/workspaceChanged") {
-        deps.setCachedWorkspace?.(
-          activeDocument.uri.fsPath,
-          message.payload.workspace as WorkspaceState
-        );
+        if (datasetPath) {
+          deps.setCachedWorkspace?.(datasetPath, message.payload.workspace as WorkspaceState);
+        }
         return;
       }
 
       if (message.type === "webview/dropSignal") {
+        if (!datasetPath || !normalizedDataset) {
+          deps.logDebug?.("Ignored dropSignal because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+
         const cachedWorkspace =
-          deps.getCachedWorkspace?.(activeDocument.uri.fsPath) ??
+          deps.getCachedWorkspace?.(datasetPath) ??
           createWorkspaceState(normalizedDataset.defaultXSignal);
 
         let nextWorkspace: WorkspaceState;
@@ -315,7 +318,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           return;
         }
 
-        deps.setCachedWorkspace?.(activeDocument.uri.fsPath, nextWorkspace);
+        deps.setCachedWorkspace?.(datasetPath, nextWorkspace);
         void panel.webview.postMessage(
           createProtocolEnvelope("host/workspacePatched", {
             workspace: nextWorkspace,
@@ -332,10 +335,14 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
 
       void panel.webview.postMessage(createProtocolEnvelope("host/init", { title: "Wave Viewer" }));
 
+      if (!datasetPath || !normalizedDataset) {
+        return;
+      }
+
       void panel.webview.postMessage(
         createProtocolEnvelope("host/datasetLoaded", {
-          path: activeDocument.uri.fsPath,
-          fileName: path.basename(activeDocument.fileName),
+          path: datasetPath,
+          fileName: path.basename(datasetPath),
           rowCount: normalizedDataset.dataset.rowCount,
           columns: normalizedDataset.dataset.columns.map((column) => ({
             name: column.name,
@@ -345,7 +352,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         })
       );
 
-      const cachedWorkspace = deps.getCachedWorkspace?.(activeDocument.uri.fsPath);
+      const cachedWorkspace = deps.getCachedWorkspace?.(datasetPath);
       if (cachedWorkspace) {
         void panel.webview.postMessage(
           createProtocolEnvelope("host/workspaceLoaded", { workspace: cachedWorkspace })
@@ -610,6 +617,14 @@ export function activate(context: VSCode.ExtensionContext): void {
     return undefined;
   }
 
+  function getMostRecentlyLoadedDatasetPath(): string | undefined {
+    let latest: string | undefined;
+    for (const datasetPath of loadedDatasetByPath.keys()) {
+      latest = datasetPath;
+    }
+    return latest;
+  }
+
   function removeLoadedDataset(documentPath: string): boolean {
     const existed = loadedDatasetByPath.delete(documentPath);
     if (existed) {
@@ -702,6 +717,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const command = createOpenViewerCommand({
     extensionUri: context.extensionUri,
     getActiveDocument: () => vscode.window.activeTextEditor?.document,
+    getPreferredDatasetPath: getMostRecentlyLoadedDatasetPath,
     loadDataset: (documentPath) => {
       const csvText = fs.readFileSync(documentPath, "utf8");
       const dataset = parseCsv({ path: documentPath, csvText });
@@ -721,6 +737,9 @@ export function activate(context: VSCode.ExtensionContext): void {
         retainContextWhenHidden: true
       }) as unknown as WebviewPanelLike,
     onPanelCreated: (documentPath, panel) => {
+      if (!documentPath) {
+        return;
+      }
       panelByDatasetPath.set(documentPath, panel);
       panel.onDidDispose?.(() => {
         panelByDatasetPath.delete(documentPath);
