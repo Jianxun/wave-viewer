@@ -74,7 +74,6 @@ export type WebviewToHostMessage =
         requestId: string;
       }
     >
-  | ProtocolEnvelope<"webview/workspaceChanged", { workspace: WorkspaceState; reason: string }>
   | ProtocolEnvelope<
       "webview/dropSignal",
       {

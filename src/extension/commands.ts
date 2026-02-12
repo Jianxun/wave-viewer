@@ -55,14 +55,6 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
-      if (message.type === "webview/workspaceChanged") {
-        deps.logDebug?.("Ignored webview workspaceChanged to keep host-authoritative writes.", {
-          datasetPath,
-          reason: message.payload.reason
-        });
-        return;
-      }
-
       if (message.type === "webview/dropSignal" || message.type === "webview/intent/dropSignal") {
         if (!datasetPath || !normalizedDataset) {
           deps.logDebug?.("Ignored dropSignal because no dataset is bound to this panel.", {

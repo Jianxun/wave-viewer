@@ -50,7 +50,6 @@ export type WebviewToHostMessageType =
   | "webview/intent/dropSignal"
   | "webview/intent/addSignalToActiveAxis"
   | "webview/intent/addSignalToNewAxis"
-  | "webview/workspaceChanged"
   | "webview/dropSignal"
   | "webview/command";
 
@@ -110,10 +109,6 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<
       "webview/intent/addSignalToNewAxis",
       { viewerId: string; signal: string; requestId: string }
-    >
-  | ProtocolEnvelope<
-      "webview/workspaceChanged",
-      { workspace: WorkspaceStateLike; reason: string }
     >
   | ProtocolEnvelope<
       "webview/dropSignal",
@@ -236,7 +231,6 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/dropSignal" ||
     type === "webview/intent/addSignalToActiveAxis" ||
     type === "webview/intent/addSignalToNewAxis" ||
-    type === "webview/workspaceChanged" ||
     type === "webview/dropSignal" ||
     type === "webview/command"
   );
@@ -308,10 +302,6 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
 
   if (type === "webview/ready") {
     return true;
-  }
-
-  if (type === "webview/workspaceChanged") {
-    return isWorkspaceStateLike(payload.workspace) && typeof payload.reason === "string";
   }
 
   if (
