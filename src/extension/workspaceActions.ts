@@ -116,6 +116,29 @@ export function applyDropSignalAction(
   });
 }
 
+export function applySetTraceAxisAction(
+  workspace: WorkspaceState,
+  payload: Extract<WebviewToHostMessage, { type: "webview/intent/setTraceAxis" }>["payload"]
+): WorkspaceState {
+  if (!isAxisId(payload.axisId)) {
+    throw new Error(`Invalid setTraceAxis axis id: ${payload.axisId}`);
+  }
+
+  const nextWorkspace = reduceWorkspaceState(workspace, {
+    type: "plot/setActive",
+    payload: { plotId: payload.plotId }
+  });
+
+  return reduceWorkspaceState(nextWorkspace, {
+    type: "trace/setAxis",
+    payload: {
+      plotId: payload.plotId,
+      traceId: payload.traceId,
+      axisId: payload.axisId
+    }
+  });
+}
+
 function isAxisId(value: string): value is `y${number}` {
   return /^y\d+$/.test(value);
 }

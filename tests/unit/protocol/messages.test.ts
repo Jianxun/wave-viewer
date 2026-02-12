@@ -239,12 +239,227 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview intent setTraceAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/setTraceAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "y2",
+        requestId: "req-3"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/setTraceAxis",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "y2",
+        requestId: "req-3"
+      }
+    });
+  });
+
+  it("accepts webview intent addAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/addAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        afterAxisId: "y2",
+        requestId: "req-4"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/addAxis",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        afterAxisId: "y2",
+        requestId: "req-4"
+      }
+    });
+  });
+
+  it("accepts webview intent reorderAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/reorderAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "y2",
+        toIndex: 0,
+        requestId: "req-5"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/reorderAxis",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "y2",
+        toIndex: 0,
+        requestId: "req-5"
+      }
+    });
+  });
+
+  it("accepts webview intent removeAxisAndTraces payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/removeAxisAndTraces", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "y2",
+        traceIds: ["trace-1", "trace-2"],
+        requestId: "req-6"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/removeAxisAndTraces",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "y2",
+        traceIds: ["trace-1", "trace-2"],
+        requestId: "req-6"
+      }
+    });
+  });
+
+  it("accepts webview intent setTraceVisible payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/setTraceVisible", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        visible: false,
+        requestId: "req-7"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/setTraceVisible",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        visible: false,
+        requestId: "req-7"
+      }
+    });
+  });
+
+  it("accepts webview intent removeTrace payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/removeTrace", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        requestId: "req-8"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/removeTrace",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        requestId: "req-8"
+      }
+    });
+  });
+
   it("rejects malformed webview intent setActiveAxis payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/intent/setActiveAxis", {
         viewerId: "viewer-1",
         plotId: "plot-1",
         requestId: "req-2"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent setTraceAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/setTraceAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "axis-two",
+        requestId: "req-3"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent addAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/addAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        afterAxisId: "axis-two",
+        requestId: "req-4"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent reorderAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/reorderAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "axis-two",
+        toIndex: -1,
+        requestId: "req-5"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent removeAxisAndTraces payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/removeAxisAndTraces", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "axis-two",
+        traceIds: ["trace-1", ""],
+        requestId: "req-6"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent setTraceVisible payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/setTraceVisible", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        visible: "nope",
+        requestId: "req-7"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent removeTrace payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/removeTrace", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        requestId: "req-8"
       })
     );
     expect(parsed).toBeUndefined();

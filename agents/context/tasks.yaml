@@ -1,84 +1,81 @@
 schema_version: 2
 current_sprint:
-  - id: T-038
-    title: Replace split sidebar lists with lane-aligned draggable trace-chip board
+  - id: T-041
+    title: Make plot tab lifecycle host-authoritative (+Plot/select/remove persistence)
     owner: Executor
     dod:
-      - Replace the current Signal List + Trace List composition with one lane-oriented board that renders lane containers in the same order as plot lanes.
-      - Render each chip as a trace instance keyed by `trace.id` (not signal name) so duplicate same-signal traces can coexist and be manipulated independently.
-      - Support drag-and-drop of chips between lane containers to reassign `trace.axisId` without creating/removing traces.
-      - Keep per-chip controls minimal (`visible` toggle and remove) while preserving existing reducer semantics.
-      - Add/refresh focused component tests for duplicate-trace rendering and drag-reassign behavior.
+      - Add webview intents and host handlers so plot add/select/remove actions persist via host state transactions.
+      - Replace local-only plot tab mutations in webview with host intent posting.
+      - Verify plot tabs remain stable after focus changes and reopening viewer.
     verify:
+      - npm test -- tests/extension/smoke.test.ts
       - npm run lint
-      - npm test -- tests/unit/webview/signalList.test.ts tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-038.md
-      spec: doc/specs/side-panel-workflow.md
+      scratchpad: agents/scratchpads/T-041.md
     files:
       - src/webview/main.ts
-      - src/webview/components/SignalList.ts
-      - src/webview/components/TraceList.ts
-      - src/webview/styles.css
-      - src/webview/state/reducer.ts
-      - tests/unit/webview/signalList.test.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-038.md
-  - id: T-039
-    title: Add explicit lane activation intent from lane-container click
-    owner: Executor
-    depends_on:
-      - T-038
-    dod:
-      - Add a new webview intent to set active lane/axis from sidebar lane-container click (`plotId`, `axisId`).
-      - Handle the intent in host transaction flow and update `viewerState.activeAxisByPlotId` without mutating traces.
-      - Ensure active-lane state round-trips in snapshot/patch messages and is reflected consistently in sidebar highlighting and quick-add default target.
-      - Add protocol/runtime validation updates and integration coverage for lane-click activation.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-039.md
-      spec: doc/specs/host-webview-protocol.md
-    files:
+      - src/extension/commands.ts
       - src/core/dataset/types.ts
       - src/extension/types.ts
-      - src/extension/commands.ts
-      - src/webview/main.ts
-      - src/webview/components/SignalList.ts
-      - tests/unit/protocol/messages.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-039.md
-  - id: T-040
-    title: Insert "drop to new lane" target immediately below active lane
+  - id: T-042
+    title: Route explorer quick-add to active plot + active lane in multi-plot sessions
     owner: Executor
     depends_on:
-      - T-039
+      - T-041
     dod:
-      - Move the "drop to new lane" container from fixed bottom position to render immediately below the active lane container.
-      - Extend axis creation action shape to support insertion index/anchor (`afterAxisId` or equivalent) so new lane placement matches sidebar drop target position.
-      - Ensure a drop onto the new-lane container performs one atomic operation: create axis at target position, assign dropped trace/signal, and set that new axis active.
-      - Add reducer/adapter tests for axis insertion ordering and regression coverage for existing new-axis paths.
+      - Ensure side-panel quick-add applies to viewerState active plot and its active lane, not stale/default plot.
+      - Keep tuple injection and quick-add intent ordering deterministic under multi-plot routing.
+      - Add/extend tests for multi-plot quick-add targeting correctness.
     verify:
+      - npm test -- tests/extension/smoke.test.ts
       - npm run lint
-      - npm test -- tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-040.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0011-active-axis-targeting-and-new-axis-activation.md
+      scratchpad: agents/scratchpads/T-042.md
     files:
-      - src/webview/components/SignalList.ts
+      - src/extension.ts
+      - src/extension/sidePanel.ts
+      - src/extension/hostStateStore.ts
       - src/webview/main.ts
-      - src/webview/state/workspaceState.ts
-      - src/webview/state/reducer.ts
-      - src/extension/workspaceActions.ts
-      - src/extension/commands.ts
-      - src/webview/plotly/adapter.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - tests/unit/webview/plotly/adapter.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-040.md
-backlog: []
+  - id: T-043
+    title: Persist plot rename through host intent
+    owner: Executor
+    depends_on:
+      - T-041
+    dod:
+      - Add host-backed rename intent path and remove local-only rename state mutation.
+      - Keep rename validation deterministic (trimmed non-empty names).
+      - Add test coverage for rename persistence after host patch/reload.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-043.md
+    files:
+      - src/webview/main.ts
+      - src/extension/commands.ts
+      - src/core/dataset/types.ts
+      - src/extension/types.ts
+      - tests/extension/smoke.test.ts
+backlog:
+  - id: T-044
+    title: Restore working PNG export/save flow
+    owner: Executor
+    dod:
+      - Reproduce and fix broken PNG export behavior from viewer UI.
+      - Ensure export works across multi-lane and multi-plot states.
+      - Add regression test coverage and update user-facing affordance text if needed.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-044.md
+    files:
+      - src/webview/plotly/renderPlot.ts
+      - src/webview/main.ts
+      - src/extension/commands.ts
+      - tests/extension/smoke.test.ts
 exploration_candidates:
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.

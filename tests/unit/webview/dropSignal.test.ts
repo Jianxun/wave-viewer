@@ -76,4 +76,22 @@ describe("drop signal parsing", () => {
     );
     expect(signal).toBeUndefined();
   });
+
+  it("extracts signal from readable plain text payload even when types list is incomplete", () => {
+    const transfer = {
+      types: [],
+      getData: (type: string) => (type === "text/plain" ? "vctrl" : "")
+    };
+
+    expect(hasSupportedDropSignalType(transfer)).toBe(true);
+    expect(extractSignalFromDropData(transfer)).toBe("vctrl");
+  });
+
+  it("treats empty drag type lists as potentially supported", () => {
+    const transfer = {
+      types: [],
+      getData: () => ""
+    };
+    expect(hasSupportedDropSignalType(transfer)).toBe(true);
+  });
 });

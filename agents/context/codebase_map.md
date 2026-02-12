@@ -27,7 +27,6 @@
 - Task workflow state: `agents/context/tasks_state.yaml`
 - Archived tasks: `agents/context/tasks_archived.yaml`
 - Global resume point: `agents/context/project_status.md`
-- Active task scratchpads: `agents/scratchpads/T-013.md` to `agents/scratchpads/T-016.md`
 - MVP implementation spec: `doc/specs/wave-viewer-mvp.md`
 - ADR-0002 implementation spec: `doc/specs/domain-stacked-shared-x-implementation.md`
 
@@ -39,6 +38,9 @@
   - `src/webview/state/*` (workspace reducer/types)
   - `src/webview/plotly/*` (adapter/rendering)
   - `src/webview/components/*` (UI controls)
+  - `src/webview/components/SignalList.ts` (lane-board chips, lane activation, new-lane drop target)
+  - `src/webview/main.ts` (webview wiring, plot overlay drop lifecycle)
+  - `src/webview/styles.css` (lane/chip/drop-target styling)
 - Regression tests:
   - `tests/unit/*`
   - `tests/extension/*`

@@ -86,6 +86,9 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
       session.datasetPath = datasetPath;
       addDatasetIndex(datasetPath, viewerId);
     },
+    getDatasetPathForViewer(viewerId: string): string | undefined {
+      return getSession(viewerId)?.datasetPath;
+    },
     markViewerFocused(viewerId: string): void {
       const session = getSession(viewerId);
       if (!session) {

@@ -122,19 +122,26 @@ describe("signal lane drag reassignment", () => {
     expect(source).toContain("laneSection.body.dataset.axisId = lane.axisId;");
     expect(source).toContain("props.onSetAxis(reassignment.traceId, reassignment.axisId);");
     expect(source).toContain('event.dataTransfer?.setData("text/wave-viewer-trace-id", trace.id);');
-    expect(source).toContain('body.textContent = "Drop signal here to create a new lane";');
-    expect(source).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
+    expect(source).toContain('moveUpButton.textContent = "Up";');
+    expect(source).toContain('moveDownButton.textContent = "Down";');
+    expect(source).toContain('closeButton.textContent = "Close";');
+    expect(source).toContain("props.onReorderLane({");
+    expect(source).toContain("props.onRemoveLane({");
+    expect(source).toContain("traceIds: lane.traceChips.map((trace) => trace.id)");
+    expect(source).toContain('body.textContent = "Click here to create a new lane";');
+    expect(source).toContain("options.onCreateLane(options.afterAxisId);");
+    expect(source).toContain('target: { kind: "new-axis", afterAxisId: lastLaneAxisId }');
   });
 });
 
 describe("signal panel model", () => {
-  it("adds an active-axis row marker in axis manager rendering", () => {
-    const source = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+  it("adds an active-lane row marker in lane-board rendering", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
     const css = fs.readFileSync(path.resolve("src/webview/styles.css"), "utf8");
     const main = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
 
     expect(source).toContain("activeAxisId?: AxisId");
-    expect(source).toContain('row.classList.toggle("axis-row-active", axis.id === props.activeAxisId);');
+    expect(source).toContain('laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);');
     expect(css).toContain(".axis-row-active");
     expect(main).toContain("activeAxisId: preferredDropAxisId");
   });

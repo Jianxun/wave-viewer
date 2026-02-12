@@ -9,9 +9,21 @@ type DropDataTransferLike = {
   getData(type: string): string;
 };
 
-export function hasSupportedDropSignalType(dataTransfer: DropDataTransferTypesLike): boolean {
+export function hasSupportedDropSignalType(dataTransfer: DropDataTransferLike): boolean {
   const availableTypes = new Set(dataTransfer.types);
-  return availableTypes.has(SIGNAL_TREE_DRAG_MIME) || availableTypes.has("text/plain");
+  if (availableTypes.size === 0) {
+    // VS Code drag sources can report an empty types list during hover.
+    return true;
+  }
+  if (availableTypes.has(SIGNAL_TREE_DRAG_MIME) || availableTypes.has("text/plain")) {
+    return true;
+  }
+
+  // Some environments expose payload data while reporting incomplete `types`.
+  return (
+    extractSignalForType(dataTransfer, "text/plain") !== undefined ||
+    extractSignalForType(dataTransfer, SIGNAL_TREE_DRAG_MIME) !== undefined
+  );
 }
 
 export function extractSignalFromDropData(dataTransfer: DropDataTransferLike): string | undefined {
@@ -23,15 +35,40 @@ export function extractSignalFromDropData(dataTransfer: DropDataTransferLike): s
       continue;
     }
 
-    const value = dataTransfer.getData(type);
-    const signal =
-      type === SIGNAL_TREE_DRAG_MIME ? parseSignalTreeDragPayload(value) : normalizeSignal(value);
+    const signal = extractSignalForType(dataTransfer, type);
+    if (signal) {
+      return signal;
+    }
+  }
+
+  // Fallback for cases where `types` is missing/partial but payload is still readable.
+  for (const type of preferredTypes) {
+    if (availableTypes.has(type)) {
+      continue;
+    }
+    const signal = extractSignalForType(dataTransfer, type);
     if (signal) {
       return signal;
     }
   }
 
   return undefined;
+}
+
+function extractSignalForType(dataTransfer: DropDataTransferLike, type: string): string | undefined {
+  const value = safeGetData(dataTransfer, type);
+  if (value === undefined) {
+    return undefined;
+  }
+  return type === SIGNAL_TREE_DRAG_MIME ? parseSignalTreeDragPayload(value) : normalizeSignal(value);
+}
+
+function safeGetData(dataTransfer: DropDataTransferLike, type: string): string | undefined {
+  try {
+    return dataTransfer.getData(type);
+  } catch {
+    return undefined;
+  }
 }
 
 function parseSignalTreeDragPayload(rawPayload: string): string | undefined {

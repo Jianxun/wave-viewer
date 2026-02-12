@@ -6,7 +6,6 @@ import {
   type ProtocolEnvelope,
   type SidePanelTraceTuplePayload
 } from "../core/dataset/types";
-import { renderAxisManager } from "./components/AxisManager";
 import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
 import {
@@ -67,7 +66,6 @@ const activePlotTitleEl = getRequiredElement("active-plot-title");
 const bridgeStatusEl = getRequiredElement("bridge-status");
 const datasetStatusEl = getRequiredElement("dataset-status");
 const signalListEl = getRequiredElement("signal-list");
-const axisManagerEl = getRequiredElement("axis-manager");
 const plotCanvasEl = getRequiredElement("plot-canvas");
 const plotRootEl = getRequiredElement("plot-root");
 const plotDropOverlayEl = getRequiredElement("plot-drop-overlay");
@@ -88,14 +86,14 @@ const plotRenderer = createPlotRenderer({
     }
 
     if (updates.xRange !== undefined || "xaxis.autorange" in eventData) {
-      dispatch({
+      applyRelayoutUpdate({
         type: "plot/setXRange",
         payload: { xRange: updates.xRange }
       });
     }
 
     for (const axisUpdate of updates.axisRanges) {
-      dispatch({
+      applyRelayoutUpdate({
         type: "axis/update",
         payload: {
           axisId: axisUpdate.axisId,
@@ -105,6 +103,18 @@ const plotRenderer = createPlotRenderer({
     }
   }
 });
+
+function applyRelayoutUpdate(action: WorkspaceAction): void {
+  if (!workspace) {
+    return;
+  }
+
+  try {
+    workspace = reduceWorkspaceState(workspace, action);
+  } catch (error) {
+    bridgeStatusEl.textContent = `State error: ${getErrorMessage(error)}`;
+  }
+}
 
 function getRequiredElement<TElement extends HTMLElement = HTMLElement>(id: string): TElement {
   const element = document.getElementById(id);
@@ -176,11 +186,111 @@ function postSetActiveAxis(axisId: AxisId): void {
     return;
   }
 
+  preferredDropAxisId = axisId;
+  void renderWorkspace();
+
   vscode.postMessage(
     createProtocolEnvelope("webview/intent/setActiveAxis", {
       viewerId,
       plotId: getActivePlot(workspace).id,
       axisId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postSetTraceAxis(traceId: string, axisId: AxisId): void {
+  if (!workspace) {
+    return;
+  }
+
+  preferredDropAxisId = axisId;
+  void renderWorkspace();
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/setTraceAxis", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      traceId,
+      axisId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postAddAxis(afterAxisId?: AxisId): void {
+  if (!workspace) {
+    return;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/addAxis", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      afterAxisId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postReorderAxis(axisId: AxisId, toIndex: number): void {
+  if (!workspace) {
+    return;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/reorderAxis", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      axisId,
+      toIndex,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postRemoveAxisAndTraces(axisId: AxisId, traceIds: string[]): void {
+  if (!workspace) {
+    return;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/removeAxisAndTraces", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      axisId,
+      traceIds,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postSetTraceVisible(traceId: string, visible: boolean): void {
+  if (!workspace) {
+    return;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/setTraceVisible", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      traceId,
+      visible,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postRemoveTrace(traceId: string): void {
+  if (!workspace) {
+    return;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/removeTrace", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      traceId,
       requestId: `${viewerId}:intent:${nextRequestId++}`
     })
   );
@@ -288,51 +398,40 @@ async function renderWorkspace(): Promise<void> {
         source: "axis-row"
       });
     },
-    onSetAxis: (traceId, axisId) => dispatch({ type: "trace/setAxis", payload: { traceId, axisId } }),
-    onActivateLane: (axisId) => postSetActiveAxis(axisId),
-    onSetVisible: (traceId, visible) =>
-      dispatch({ type: "trace/setVisible", payload: { traceId, visible } }),
-    onRemove: (traceId) => dispatch({ type: "trace/remove", payload: { traceId } })
-  });
+    onDropTraceToNewLane: ({ traceId, afterAxisId }) => {
+      if (!workspace) {
+        return;
+      }
 
-  renderAxisManager({
-    container: axisManagerEl,
-    axes: activePlot.axes,
-    activeAxisId: preferredDropAxisId,
-    canDropSignal: (event) => {
-      if (!event.dataTransfer) {
-        return false;
-      }
-      return hasSupportedDropSignalType(event.dataTransfer);
-    },
-    parseDroppedSignal: (event) => {
-      if (!event.dataTransfer) {
-        return undefined;
-      }
-      return extractSignalFromDropData(event.dataTransfer);
-    },
-    onDropSignal: ({ signal, target }) => {
-      postDropSignal({
-        signal,
-        target,
-        source: "axis-row"
+      const previousActivePlot = getActivePlot(workspace);
+      const previousAxisIds = new Set(previousActivePlot.axes.map((axis) => axis.id));
+      workspace = reduceWorkspaceState(workspace, {
+        type: "axis/add",
+        payload: { afterAxisId }
       });
+
+      const nextActivePlot = getActivePlot(workspace);
+      const newAxisId = nextActivePlot.axes.find((axis) => !previousAxisIds.has(axis.id))?.id;
+      if (!newAxisId) {
+        void renderWorkspace();
+        return;
+      }
+
+      workspace = reduceWorkspaceState(workspace, {
+        type: "trace/setAxis",
+        payload: { traceId, axisId: newAxisId }
+      });
+      preferredDropAxisId = newAxisId;
+      void renderWorkspace();
+      postSetActiveAxis(newAxisId);
     },
-    onAddAxis: () => dispatch({ type: "axis/add" }),
-    onReorderAxis: ({ axisId, toIndex }) =>
-      dispatch({ type: "axis/reorder", payload: { axisId, toIndex } }),
-    onRemoveAxis: ({ axisId, reassignToAxisId }) =>
-      dispatch({ type: "axis/remove", payload: { axisId, reassignToAxisId } }),
-    onReassignTraces: ({ fromAxisId, toAxisId }) =>
-      dispatch({ type: "axis/reassignTraces", payload: { fromAxisId, toAxisId } }),
-    onUpdateAxis: ({ axisId, patch }) =>
-      dispatch({
-        type: "axis/update",
-        payload: {
-          axisId,
-          patch
-        }
-      })
+    onCreateLane: (afterAxisId) => postAddAxis(afterAxisId),
+    onReorderLane: ({ axisId, toIndex }) => postReorderAxis(axisId, toIndex),
+    onRemoveLane: ({ axisId, traceIds }) => postRemoveAxisAndTraces(axisId, traceIds),
+    onSetAxis: (traceId, axisId) => postSetTraceAxis(traceId, axisId),
+    onActivateLane: (axisId) => postSetActiveAxis(axisId),
+    onSetVisible: (traceId, visible) => postSetTraceVisible(traceId, visible),
+    onRemove: (traceId) => postRemoveTrace(traceId)
   });
 
   await plotRenderer.render(activePlot, traceTuplesBySourceId);

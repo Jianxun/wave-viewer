@@ -110,7 +110,8 @@ describe("plotly adapter", () => {
 
     expect(figure.layout.xaxis).toMatchObject({
       title: { text: "time" },
-      rangeslider: { visible: false, autorange: true, range: [0, 2] },
+      anchor: "y2",
+      rangeslider: { visible: true, autorange: true, range: [0, 2] },
       autorange: true,
       fixedrange: false
     });
@@ -230,8 +231,8 @@ describe("plotly adapter", () => {
     const baseline = buildPlotlyFigure({ plot: basePlot, traceTuplesBySourceId });
     const reordered = buildPlotlyFigure({ plot: reorderedPlot, traceTuplesBySourceId });
 
-    expect(baseline.layout.xaxis).toMatchObject({ fixedrange: false });
-    expect(reordered.layout.xaxis).toMatchObject({ fixedrange: false });
+    expect(baseline.layout.xaxis).toMatchObject({ fixedrange: false, anchor: "y3" });
+    expect(reordered.layout.xaxis).toMatchObject({ fixedrange: false, anchor: "y3" });
     expect(reordered.data.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y"]);
   });
 
@@ -243,6 +244,7 @@ describe("plotly adapter", () => {
       traceTuplesBySourceId
     });
 
+    expect(figure.layout.xaxis).toMatchObject({ anchor: "y" });
     expect(figure.layout.yaxis).toMatchObject({ domain: [0, 1] });
   });
 

@@ -292,7 +292,7 @@ describe("T-002 extension shell smoke", () => {
       type: "host/viewerBindingUpdated",
       payload: {
         viewerId: "viewer-1",
-        datasetPath: undefined
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
       }
     });
   });
@@ -332,7 +332,7 @@ describe("T-002 extension shell smoke", () => {
         type: "host/viewerBindingUpdated",
         payload: {
           viewerId: "viewer-1",
-          datasetPath: undefined
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv"
         }
       }
     ]);
@@ -1011,6 +1011,143 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("handles validated setTraceAxis intent via host transaction and persists lane reassignment", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/setTraceAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "y2",
+        requestId: "req-set-trace-axis-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }, { id: "y2" }],
+                traces: [
+                  {
+                    id: "trace-1",
+                    signal: "vin",
+                    sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+                    axisId: "y2",
+                    visible: true
+                  }
+                ],
+                nextAxisNumber: 3
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y2"
+            }
+          },
+          reason: "setTraceAxis:lane-drag"
+        }
+      }
+    ]);
+  });
+
+  it("handles validated addAxis intent via host transaction and activates the new lane", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/addAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        afterAxisId: "y1",
+        requestId: "req-add-axis-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }, { id: "y3" }, { id: "y2" }],
+                traces: [],
+                nextAxisNumber: 4
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y3"
+            }
+          },
+          reason: "addAxis:lane-click"
+        }
+      }
+    ]);
+  });
+
   it("ignores invalid dropSignal payloads and does not mutate workspace", async () => {
     const { deps, panelFixture, logDebug, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -1413,7 +1550,8 @@ describe("T-027 side-panel quick-add tuple injection", () => {
     );
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/viewerBindingUpdated",
-      "host/tupleUpsert"
+      "host/tupleUpsert",
+      "host/sidePanelQuickAdd"
     ]);
     expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
@@ -1430,6 +1568,13 @@ describe("T-027 side-panel quick-add tuple injection", () => {
             y: [1, 2, 3]
           }
         ]
+      }
+    });
+    expect(panelFixture.sentMessages[2]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/sidePanelQuickAdd",
+      payload: {
+        signal: "vin"
       }
     });
   });
@@ -1493,8 +1638,12 @@ describe("T-027 side-panel quick-add tuple injection", () => {
     const tuplePayloads = panelFixture.sentMessages
       .filter((message) => message.type === "host/tupleUpsert")
       .map((message) => message.payload.tuples[0]);
+    const quickAddPayloads = panelFixture.sentMessages
+      .filter((message) => message.type === "host/sidePanelQuickAdd")
+      .map((message) => message.payload.signal);
 
     expect(tuplePayloads).toHaveLength(2);
+    expect(quickAddPayloads).toEqual(["vin", "vin"]);
     expect(tuplePayloads[0]).toMatchObject({
       sourceId: "/workspace/examples/a.csv::vin",
       xName: "time",
@@ -1789,14 +1938,33 @@ describe("T-039 lane activation intent wiring", () => {
 });
 
 describe("T-040 new-lane drop target placement and insertion anchor wiring", () => {
-  it("places the new-lane drop target in signal list and wires afterAxisId in drop intents", () => {
+  it("places the new-lane creation target in signal list and wires click creation intent", () => {
     const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
-    const axisManagerSource = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+    const htmlSource = fs.readFileSync(path.resolve("src/webview/index.html"), "utf8");
 
-    expect(signalListSource).toContain('body.textContent = "Drop signal here to create a new lane";');
-    expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
-    expect(mainSource).toContain("onDropSignal: ({ signal, target }) => {");
-    expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
+    expect(signalListSource).toContain('body.textContent = "Click here to create a new lane";');
+    expect(signalListSource).toContain("options.onCreateLane(options.afterAxisId);");
+    expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lastLaneAxisId }');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/addAxis"');
+    expect(mainSource).not.toContain("renderAxisManager({");
+    expect(htmlSource).not.toContain('id="axis-manager"');
+  });
+});
+
+describe("lane-board lane controls", () => {
+  it("wires lane up/down controls and close-removes-lane-with-traces", () => {
+    const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(signalListSource).toContain('moveUpButton.textContent = "Up";');
+    expect(signalListSource).toContain('moveDownButton.textContent = "Down";');
+    expect(signalListSource).toContain('closeButton.textContent = "Close";');
+    expect(signalListSource).toContain("props.onReorderLane({");
+    expect(signalListSource).toContain("props.onRemoveLane({");
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/reorderAxis"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/removeAxisAndTraces"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/setTraceVisible"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/removeTrace"');
   });
 });

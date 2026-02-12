@@ -73,6 +73,64 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/setTraceAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        traceId: string;
+        axisId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/addAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        afterAxisId?: `y${number}`;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/reorderAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        axisId: string;
+        toIndex: number;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removeAxisAndTraces",
+      {
+        viewerId: string;
+        plotId: string;
+        axisId: string;
+        traceIds: string[];
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/setTraceVisible",
+      {
+        viewerId: string;
+        plotId: string;
+        traceId: string;
+        visible: boolean;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removeTrace",
+      {
+        viewerId: string;
+        plotId: string;
+        traceId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/dropSignal",
       {
         viewerId: string;
@@ -116,6 +174,7 @@ export type ViewerSessionRoute = {
 export type ViewerSessionRegistry = {
   registerPanel(panel: WebviewPanelLike, datasetPath?: string): string;
   bindViewerToDataset(viewerId: string, datasetPath: string): void;
+  getDatasetPathForViewer(viewerId: string): string | undefined;
   markViewerFocused(viewerId: string): void;
   removeViewer(viewerId: string): void;
   resolveTargetViewerSession(datasetPath: string): ViewerSessionRoute | undefined;
@@ -130,6 +189,7 @@ export type CommandDeps = {
   getPreferredDatasetPath?(): string | undefined;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
+  resolveDatasetPathForViewer?(viewerId: string): string | undefined;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   getHostStateSnapshot?(documentPath: string): HostStateSnapshot | undefined;

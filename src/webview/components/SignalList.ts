@@ -11,6 +11,10 @@ export type SignalListProps = {
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
   onDropSignal(payload: { signal: string; target: DropSignalTarget }): void;
+  onDropTraceToNewLane(payload: { traceId: string; afterAxisId: AxisId }): void;
+  onCreateLane(afterAxisId?: AxisId): void;
+  onReorderLane(payload: { axisId: AxisId; toIndex: number }): void;
+  onRemoveLane(payload: { axisId: AxisId; traceIds: string[] }): void;
   onSetAxis(traceId: string, axisId: AxisId): void;
   onActivateLane(axisId: AxisId): void;
   onSetVisible(traceId: string, visible: boolean): void;
@@ -75,19 +79,57 @@ export function renderSignalList(props: SignalListProps): void {
     axes: props.axes,
     traces: props.traces
   });
-  const activeLaneAxisId = resolveActiveLaneAxisId(model.lanes, props.activeAxisId);
-
-  for (const lane of model.lanes) {
+  for (const [laneIndex, lane] of model.lanes.entries()) {
     const laneSection = createSection(lane.axisLabel);
     laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);
     laneSection.body.classList.add("trace-lane-body", "drop-target");
     laneSection.body.dataset.axisId = lane.axisId;
-    laneSection.body.addEventListener("click", (event) => {
+    laneSection.section.addEventListener("click", (event) => {
       if (shouldIgnoreLaneActivation(event.target)) {
         return;
       }
       props.onActivateLane(lane.axisId);
     });
+
+    const moveUpButton = document.createElement("button");
+    moveUpButton.type = "button";
+    moveUpButton.className = "chip-button lane-action-button";
+    moveUpButton.textContent = "Up";
+    moveUpButton.title = "Move lane up";
+    moveUpButton.disabled = laneIndex === 0;
+    moveUpButton.addEventListener("click", () => {
+      props.onReorderLane({
+        axisId: lane.axisId,
+        toIndex: laneIndex - 1
+      });
+    });
+
+    const moveDownButton = document.createElement("button");
+    moveDownButton.type = "button";
+    moveDownButton.className = "chip-button lane-action-button";
+    moveDownButton.textContent = "Down";
+    moveDownButton.title = "Move lane down";
+    moveDownButton.disabled = laneIndex >= model.lanes.length - 1;
+    moveDownButton.addEventListener("click", () => {
+      props.onReorderLane({
+        axisId: lane.axisId,
+        toIndex: laneIndex + 1
+      });
+    });
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "chip-button lane-action-button";
+    closeButton.textContent = "Close";
+    closeButton.title = "Remove lane and all traces assigned to it";
+    closeButton.disabled = model.lanes.length <= 1;
+    closeButton.addEventListener("click", () => {
+      props.onRemoveLane({
+        axisId: lane.axisId,
+        traceIds: lane.traceChips.map((trace) => trace.id)
+      });
+    });
+    laneSection.actions.append(moveUpButton, moveDownButton, closeButton);
 
     laneSection.body.addEventListener("dragover", (event) => {
       if (!event.dataTransfer) {
@@ -173,20 +215,25 @@ export function renderSignalList(props: SignalListProps): void {
     }
     props.container.appendChild(laneSection.section);
 
-    if (lane.axisId === activeLaneAxisId) {
-      props.container.appendChild(
-        createDropToNewLaneSection({
-          canDropSignal: props.canDropSignal,
-          parseDroppedSignal: props.parseDroppedSignal,
-          onDropSignal: (signal) =>
-            props.onDropSignal({
-              signal,
-              target: { kind: "new-axis", afterAxisId: lane.axisId }
-            })
-        })
-      );
-    }
   }
+
+  const lastLaneAxisId = model.lanes[model.lanes.length - 1]?.axisId;
+  props.container.appendChild(
+    createDropToNewLaneSection({
+      traces: props.traces,
+      afterAxisId: lastLaneAxisId,
+      canDropSignal: props.canDropSignal,
+      parseDroppedSignal: props.parseDroppedSignal,
+      onDropTraceToNewLane: (traceId, afterAxisId) =>
+        props.onDropTraceToNewLane({ traceId, afterAxisId }),
+      onCreateLane: (afterAxisId) => props.onCreateLane(afterAxisId),
+      onDropSignal: (signal) =>
+        props.onDropSignal({
+          signal,
+          target: { kind: "new-axis", afterAxisId: lastLaneAxisId }
+        })
+    })
+  );
 
   if (props.traces.length === 0) {
     props.container.prepend(createMutedText("No traces yet. Add signals from the Explorer side panel."));
@@ -207,32 +254,87 @@ function createMutedText(text: string): HTMLParagraphElement {
   return paragraph;
 }
 
-function createSection(titleText: string): { section: HTMLElement; body: HTMLElement } {
+function createSection(titleText: string): { section: HTMLElement; body: HTMLElement; actions: HTMLElement } {
   const section = document.createElement("section");
   section.className = "signal-panel-section";
+
+  const header = document.createElement("div");
+  header.className = "signal-panel-section-header";
 
   const title = document.createElement("h3");
   title.className = "signal-panel-section-title";
   title.textContent = `Lane ${titleText}`;
 
+  const actions = document.createElement("div");
+  actions.className = "signal-panel-actions";
+  header.append(title, actions);
+
   const body = document.createElement("div");
   body.className = "list-stack";
 
-  section.append(title, body);
-  return { section, body };
+  section.append(header, body);
+  return { section, body, actions };
 }
 
 function createDropToNewLaneSection(options: {
+  traces: TraceState[];
+  afterAxisId?: AxisId;
+  onCreateLane(afterAxisId?: AxisId): void;
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
+  onDropTraceToNewLane(traceId: string, afterAxisId: AxisId): void;
   onDropSignal(signal: string): void;
 }): HTMLElement {
   const section = document.createElement("section");
   section.className = "signal-panel-section";
 
-  const body = document.createElement("div");
-  body.className = "list-row axis-row-new-target drop-target";
-  body.textContent = "Drop signal here to create a new lane";
+  const body = document.createElement("button");
+  body.type = "button";
+  body.className = "list-row axis-row-new-target drop-target chip-button";
+  body.textContent = "Click here to create a new lane";
+  body.addEventListener("click", () => {
+    options.onCreateLane(options.afterAxisId);
+  });
+  body.addEventListener("dragenter", (event) => {
+    if (!event.dataTransfer) {
+      return;
+    }
+    event.preventDefault();
+    body.classList.add("drop-active");
+  });
+  body.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = hasTraceChipDrop(event.dataTransfer) ? "move" : "copy";
+    body.classList.add("drop-active");
+  });
+  body.addEventListener("dragleave", (event) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && body.contains(nextTarget)) {
+      return;
+    }
+    body.classList.remove("drop-active");
+  });
+  body.addEventListener("drop", (event) => {
+    body.classList.remove("drop-active");
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    const traceId = event.dataTransfer.getData("text/wave-viewer-trace-id");
+    if (!options.afterAxisId) {
+      return;
+    }
+    const trace = options.traces.find((entry) => entry.id === traceId);
+    if (trace) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      options.onDropTraceToNewLane(trace.id, options.afterAxisId);
+      return;
+    }
+  });
   addDropHandlers({
     target: body,
     canDropSignal: options.canDropSignal,
@@ -244,19 +346,8 @@ function createDropToNewLaneSection(options: {
   return section;
 }
 
-function resolveActiveLaneAxisId(
-  lanes: Array<{ axisId: AxisId }>,
-  activeAxisId: AxisId | undefined
-): AxisId | undefined {
-  if (lanes.length === 0) {
-    return undefined;
-  }
-
-  if (activeAxisId && lanes.some((lane) => lane.axisId === activeAxisId)) {
-    return activeAxisId;
-  }
-
-  return lanes[0]?.axisId;
+function hasTraceChipDrop(dataTransfer: DataTransfer): boolean {
+  return dataTransfer.types.includes("text/wave-viewer-trace-id");
 }
 
 function addDropHandlers(options: {
@@ -296,6 +387,11 @@ function addDropHandlers(options: {
     const signal = options.parseDroppedSignal(event);
     setActive(false);
     if (!signal) {
+      if (event.dataTransfer) {
+        console.debug("[wave-viewer] Ignored drop on new-lane target: no signal payload resolved.", {
+          types: Array.from(event.dataTransfer.types)
+        });
+      }
       return;
     }
     event.preventDefault();
