@@ -18,13 +18,13 @@ describe("T-006 spec import errors", () => {
         yamlText,
         availableSignals: ["time", "vin"]
       })
-    ).toThrow("Plot spec mode must be explicitly set to 'reference-only'.");
+    ).toThrow("Plot spec mode must be explicitly set to 'reference-only' or 'portable-archive'.");
   });
 
   it("throws explicit error for unsupported mode", () => {
     const yamlText = [
       "version: 1",
-      "mode: portable-archive",
+      "mode: legacy-inline",
       "dataset:",
       "  path: /workspace/examples/simulations/ota.spice.csv",
       "workspace:",
@@ -37,9 +37,7 @@ describe("T-006 spec import errors", () => {
         yamlText,
         availableSignals: ["time", "vin"]
       })
-    ).toThrow(
-      "Plot spec mode 'portable-archive' is not supported by this Wave Viewer version. Re-export as 'reference-only'."
-    );
+    ).toThrow("Unsupported plot spec mode: legacy-inline.");
   });
 
   it("throws explicit error for missing plots", () => {

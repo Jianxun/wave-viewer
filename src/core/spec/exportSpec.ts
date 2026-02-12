@@ -5,14 +5,24 @@ import type {
   PlotSpecAxisV1,
   PlotSpecPlotV1,
   PlotSpecTraceV1,
+  PlotSpecTraceTupleV1,
   PlotSpecV1
 } from "./plotSpecV1";
-import { PLOT_SPEC_V1_VERSION, REFERENCE_ONLY_SPEC_MODE } from "./plotSpecV1";
+import {
+  PLOT_SPEC_V1_VERSION,
+  PORTABLE_ARCHIVE_SPEC_MODE,
+  REFERENCE_ONLY_SPEC_MODE
+} from "./plotSpecV1";
 
 export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
+  const mode = input.mode ?? REFERENCE_ONLY_SPEC_MODE;
+  const traceTupleBySourceId = input.traceTupleBySourceId ?? new Map<string, PlotSpecTraceTupleV1>();
+  const archiveTraceSourceIds: string[] = [];
+  const archiveTraceSourceIdSet = new Set<string>();
+
   const spec: PlotSpecV1 = {
     version: PLOT_SPEC_V1_VERSION,
-    mode: REFERENCE_ONLY_SPEC_MODE,
+    mode,
     dataset: {
       path: input.datasetPath
     },
@@ -41,6 +51,7 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
             return specAxis;
           }),
           traces: plot.traces.map((trace) => {
+            const sourceId = trace.sourceId ?? `${input.datasetPath}::${trace.signal}`;
             const specTrace: PlotSpecTraceV1 = {
               id: trace.id,
               signal: trace.signal,
@@ -48,11 +59,18 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
               visible: trace.visible
             };
 
+            if (trace.sourceId !== undefined || mode === PORTABLE_ARCHIVE_SPEC_MODE) {
+              specTrace.sourceId = sourceId;
+            }
             if (trace.color !== undefined) {
               specTrace.color = trace.color;
             }
             if (trace.lineWidth !== undefined) {
               specTrace.lineWidth = trace.lineWidth;
+            }
+            if (mode === PORTABLE_ARCHIVE_SPEC_MODE && !archiveTraceSourceIdSet.has(sourceId)) {
+              archiveTraceSourceIdSet.add(sourceId);
+              archiveTraceSourceIds.push(sourceId);
             }
 
             return specTrace;
@@ -67,6 +85,27 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
       })
     }
   };
+
+  if (mode === PORTABLE_ARCHIVE_SPEC_MODE) {
+    spec.archive = {
+      traces: archiveTraceSourceIds.map((sourceId) => {
+        const tuple = traceTupleBySourceId.get(sourceId);
+        if (!tuple) {
+          throw new Error(
+            `Portable archive export is missing tuple payload for sourceId '${sourceId}'.`
+          );
+        }
+        return {
+          sourceId,
+          datasetPath: tuple.datasetPath,
+          xName: tuple.xName,
+          yName: tuple.yName,
+          x: tuple.x,
+          y: tuple.y
+        };
+      })
+    };
+  }
 
   return stringify(spec, {
     indent: 2,
