@@ -190,6 +190,15 @@ export type RunResolvedSidePanelSignalActionDeps = {
   showWarning(message: string): void;
 };
 
+export type RunResolvedSidePanelQuickAddDeps = {
+  documentPath: string;
+  loadedDataset: LoadedDatasetRecord;
+  signal: string;
+  targetViewer: ViewerSessionRoute;
+  bindViewerToDataset(viewerId: string, datasetPath: string): void;
+  showError(message: string): void;
+};
+
 export function createViewerSessionRegistry(): ViewerSessionRegistry {
   type ViewerSession = {
     panel: WebviewPanelLike;
@@ -777,6 +786,44 @@ export function runResolvedSidePanelSignalAction(
   return nextWorkspace;
 }
 
+export function runResolvedSidePanelQuickAdd(deps: RunResolvedSidePanelQuickAddDeps): boolean {
+  if (deps.targetViewer.bindDataset) {
+    deps.bindViewerToDataset(deps.targetViewer.viewerId, deps.documentPath);
+    void deps.targetViewer.panel.webview.postMessage(
+      createProtocolEnvelope(
+        "host/datasetLoaded",
+        createDatasetLoadedPayload(deps.documentPath, deps.loadedDataset)
+      )
+    );
+    void deps.targetViewer.panel.webview.postMessage(
+      createProtocolEnvelope(
+        "host/viewerBindingUpdated",
+        createViewerBindingUpdatedPayload(deps.targetViewer.viewerId, deps.documentPath)
+      )
+    );
+  }
+
+  let traceInjectionPayload:
+    | Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]
+    | undefined;
+  try {
+    traceInjectionPayload = createSidePanelTraceInjectedPayload(
+      deps.targetViewer.viewerId,
+      deps.documentPath,
+      deps.loadedDataset,
+      deps.signal
+    );
+  } catch (error) {
+    deps.showError(getErrorMessage(error));
+    return false;
+  }
+
+  void deps.targetViewer.panel.webview.postMessage(
+    createProtocolEnvelope("host/sidePanelTraceInjected", traceInjectionPayload)
+  );
+  return true;
+}
+
 export function createExportSpecCommand(deps: ExportSpecCommandDeps): () => Promise<void> {
   return async () => {
     const activeDocument = deps.getActiveDocument();
@@ -1033,40 +1080,18 @@ export function activate(context: VSCode.ExtensionContext): void {
       return;
     }
 
-    if (targetViewer.bindDataset) {
-      viewerSessions.bindViewerToDataset(targetViewer.viewerId, selection.documentPath);
-      void targetViewer.panel.webview.postMessage(
-        createProtocolEnvelope(
-          "host/datasetLoaded",
-          createDatasetLoadedPayload(selection.documentPath, selection.loadedDataset)
-        )
-      );
-      void targetViewer.panel.webview.postMessage(
-        createProtocolEnvelope(
-          "host/viewerBindingUpdated",
-          createViewerBindingUpdatedPayload(targetViewer.viewerId, selection.documentPath)
-        )
-      );
-    }
-
-    let traceInjectionPayload:
-      | Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]
-      | undefined;
-    try {
-      traceInjectionPayload = createSidePanelTraceInjectedPayload(
-        targetViewer.viewerId,
-        selection.documentPath,
-        selection.loadedDataset,
-        selection.signal
-      );
-    } catch (error) {
-      void vscode.window.showErrorMessage(getErrorMessage(error));
-      return;
-    }
-
-    void targetViewer.panel.webview.postMessage(
-      createProtocolEnvelope("host/sidePanelTraceInjected", traceInjectionPayload)
-    );
+    runResolvedSidePanelQuickAdd({
+      documentPath: selection.documentPath,
+      loadedDataset: selection.loadedDataset,
+      signal: selection.signal,
+      targetViewer,
+      bindViewerToDataset: (viewerId, datasetPath) => {
+        viewerSessions.bindViewerToDataset(viewerId, datasetPath);
+      },
+      showError: (message) => {
+        void vscode.window.showErrorMessage(message);
+      }
+    });
   };
 
   const command = createOpenViewerCommand({
