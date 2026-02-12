@@ -218,6 +218,7 @@ export type ViewerSessionRegistry = {
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
   getDatasetPathForViewer(viewerId: string): string | undefined;
   getViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
+  getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
   markViewerFocused(viewerId: string): void;
   removeViewer(viewerId: string): void;
   resolveTargetViewerSession(datasetPath: string): ViewerSessionRoute | undefined;
@@ -335,8 +336,10 @@ export type OpenLayoutCommandDeps = {
   showOpenDialog(): Promise<string | undefined>;
   readTextFile(filePath: string): string;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
-  setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
+  setCachedWorkspace(documentPath: string, workspace: WorkspaceState): HostStateSnapshot;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
+  getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
+  logDebug?(message: string, details?: unknown): void;
   showError(message: string): void;
   showInformation(message: string): void;
 };

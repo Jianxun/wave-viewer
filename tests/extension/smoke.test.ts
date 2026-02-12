@@ -627,7 +627,15 @@ describe("T-046 explicit layout commands", () => {
     const showError = vi.fn();
     const showInformation = vi.fn();
     const bindViewerToLayout = vi.fn();
-    const setCachedWorkspace = vi.fn();
+    const panelFixture = createPanelFixture();
+    const setCachedWorkspace = vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+      workspace,
+      revision: 3,
+      viewerState: {
+        activePlotId: workspace.activePlotId,
+        activeAxisByPlotId: { "plot-1": "y1" as const }
+      }
+    }));
     const command = createOpenLayoutCommand({
       getActiveViewerId: () => "viewer-1",
       showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
@@ -642,6 +650,7 @@ describe("T-046 explicit layout commands", () => {
       }),
       setCachedWorkspace,
       bindViewerToLayout,
+      getPanelForViewer: () => panelFixture.panel,
       showError,
       showInformation
     });
@@ -667,6 +676,43 @@ describe("T-046 explicit layout commands", () => {
       "/workspace/layouts/lab.wave-viewer.yaml",
       "/workspace/examples/simulations/ota.spice.csv"
     );
+    expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
+      "host/viewerBindingUpdated",
+      "host/statePatch"
+    ]);
+    expect(panelFixture.sentMessages[0]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/viewerBindingUpdated",
+      payload: {
+        viewerId: "viewer-1",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+      }
+    });
+    expect(panelFixture.sentMessages[1]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/statePatch",
+      payload: {
+        revision: 3,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        },
+        reason: "openLayout:command"
+      }
+    });
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer layout opened from /workspace/layouts/lab.wave-viewer.yaml"
     );
@@ -686,8 +732,16 @@ describe("T-046 explicit layout commands", () => {
         },
         defaultXSignal: "time"
       }),
-      setCachedWorkspace: vi.fn(),
+      setCachedWorkspace: vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+        workspace,
+        revision: 0,
+        viewerState: {
+          activePlotId: workspace.activePlotId,
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        }
+      })),
       bindViewerToLayout: vi.fn(),
+      getPanelForViewer: vi.fn(),
       showError,
       showInformation: vi.fn()
     });
@@ -704,8 +758,16 @@ describe("T-046 explicit layout commands", () => {
       showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
       readTextFile: vi.fn(),
       loadDataset: vi.fn(),
-      setCachedWorkspace: vi.fn(),
+      setCachedWorkspace: vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+        workspace,
+        revision: 0,
+        viewerState: {
+          activePlotId: workspace.activePlotId,
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        }
+      })),
       bindViewerToLayout: vi.fn(),
+      getPanelForViewer: vi.fn(),
       showError,
       showInformation: vi.fn()
     });

@@ -948,22 +948,54 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
       return;
     }
 
-    let parsed;
+    let parsed: ReturnType<typeof importPlotSpecV1>;
+    let loadedDataset: { dataset: Dataset; defaultXSignal: string };
     try {
       const yamlText = deps.readTextFile(layoutPath);
       const datasetPath = readPlotSpecDatasetPathV1(yamlText);
-      const loaded = deps.loadDataset(datasetPath);
+      loadedDataset = deps.loadDataset(datasetPath);
       parsed = importPlotSpecV1({
         yamlText,
-        availableSignals: loaded.dataset.columns.map((column) => column.name)
+        availableSignals: loadedDataset.dataset.columns.map((column) => column.name)
       });
     } catch (error) {
       deps.showError(getErrorMessage(error));
       return;
     }
 
-    deps.setCachedWorkspace(parsed.datasetPath, parsed.workspace);
+    const hydratedReplay = hydrateWorkspaceReplayPayload(
+      activeViewerId,
+      parsed.datasetPath,
+      loadedDataset,
+      parsed.workspace,
+      deps.logDebug
+    );
+    const snapshot = deps.setCachedWorkspace(parsed.datasetPath, hydratedReplay.workspace);
     deps.bindViewerToLayout(activeViewerId, layoutPath, parsed.datasetPath);
+    const panel = deps.getPanelForViewer(activeViewerId);
+    if (panel) {
+      void panel.webview.postMessage(
+        createProtocolEnvelope(
+          "host/viewerBindingUpdated",
+          createViewerBindingUpdatedPayload(activeViewerId, parsed.datasetPath)
+        )
+      );
+      if (hydratedReplay.tracePayloads.length > 0) {
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/tupleUpsert", {
+            tuples: hydratedReplay.tracePayloads
+          })
+        );
+      }
+      void panel.webview.postMessage(
+        createProtocolEnvelope("host/statePatch", {
+          revision: snapshot.revision,
+          workspace: snapshot.workspace,
+          viewerState: snapshot.viewerState,
+          reason: "openLayout:command"
+        })
+      );
+    }
     deps.showInformation(`Wave Viewer layout opened from ${layoutPath}`);
   };
 }

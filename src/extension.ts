@@ -368,10 +368,14 @@ export function activate(context: VSCode.ExtensionContext): void {
     readTextFile: (filePath) => fs.readFileSync(filePath, "utf8"),
     loadDataset,
     setCachedWorkspace: (documentPath, workspace) => {
-      hostStateStore.setWorkspace(documentPath, workspace);
+      return hostStateStore.setWorkspace(documentPath, workspace);
     },
     bindViewerToLayout: (viewerId, layoutUri, datasetPath) => {
       viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
+    },
+    getPanelForViewer: (viewerId) => viewerSessions.getPanelForViewer(viewerId),
+    logDebug: (message, details) => {
+      console.debug(`[wave-viewer] ${message}`, details);
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
