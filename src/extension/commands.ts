@@ -63,7 +63,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
-      if (message.type === "webview/dropSignal") {
+      if (message.type === "webview/dropSignal" || message.type === "webview/intent/dropSignal") {
         if (!datasetPath || !normalizedDataset) {
           deps.logDebug?.("Ignored dropSignal because no dataset is bound to this panel.", {
             payload: message.payload
@@ -73,12 +73,15 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
 
         let previousWorkspace: WorkspaceState;
         let nextWorkspace: WorkspaceState;
+        let revision: number;
+        let viewerState: { activePlotId: string; activeAxisByPlotId: Record<string, `y${number}`> };
+        const patchReason = `dropSignal:${message.payload.source}`;
         try {
           if (deps.commitHostStateTransaction) {
             const transaction = deps.commitHostStateTransaction({
               datasetPath,
               defaultXSignal: normalizedDataset.defaultXSignal,
-              reason: `dropSignal:${message.payload.source}`,
+              reason: patchReason,
               mutate: (workspace) =>
                 applyDropSignalAction(workspace, message.payload, {
                   sourceId: toTraceSourceId(datasetPath, message.payload.signal)
@@ -86,6 +89,8 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
             });
             previousWorkspace = transaction.previous.workspace;
             nextWorkspace = transaction.next.workspace;
+            revision = transaction.next.revision;
+            viewerState = transaction.next.viewerState;
           } else {
             const cachedWorkspace =
               deps.getCachedWorkspace?.(datasetPath) ??
@@ -95,6 +100,8 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
               sourceId: toTraceSourceId(datasetPath, message.payload.signal)
             });
             deps.setCachedWorkspace?.(datasetPath, nextWorkspace);
+            revision = 0;
+            viewerState = deriveViewerState(nextWorkspace);
           }
         } catch (error) {
           deps.logDebug?.("Ignored invalid webview dropSignal message payload.", {
@@ -104,27 +111,25 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           return;
         }
 
-        for (const trace of getAddedTraces(previousWorkspace, nextWorkspace)) {
+        const tuples = getAddedTraces(previousWorkspace, nextWorkspace).map((trace) =>
+          createSidePanelTraceInjectedPayload(viewerId, datasetPath, normalizedDataset, trace.signal, {
+            traceId: trace.id,
+            sourceId: trace.sourceId
+          }).trace
+        );
+        if (tuples.length > 0) {
           void panel.webview.postMessage(
-            createProtocolEnvelope(
-              "host/sidePanelTraceInjected",
-              createSidePanelTraceInjectedPayload(
-                viewerId,
-                datasetPath,
-                normalizedDataset,
-                trace.signal,
-                {
-                  traceId: trace.id,
-                  sourceId: trace.sourceId
-                }
-              )
-            )
+            createProtocolEnvelope("host/tupleUpsert", {
+              tuples
+            })
           );
         }
         void panel.webview.postMessage(
-          createProtocolEnvelope("host/workspacePatched", {
+          createProtocolEnvelope("host/statePatch", {
+            revision,
             workspace: nextWorkspace,
-            reason: `dropSignal:${message.payload.source}`
+            viewerState,
+            reason: patchReason
           })
         );
         return;
@@ -161,17 +166,40 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         }
         for (const tracePayload of hydratedReplay.tracePayloads) {
           void panel.webview.postMessage(
-            createProtocolEnvelope("host/sidePanelTraceInjected", {
-              viewerId,
-              trace: tracePayload
+            createProtocolEnvelope("host/tupleUpsert", {
+              tuples: [tracePayload]
             })
           );
         }
+        const snapshot = deps.getHostStateSnapshot?.(datasetPath);
+        const revision = snapshot?.revision ?? 0;
+        const viewerState = snapshot?.viewerState ?? deriveViewerState(hydratedReplay.workspace);
         void panel.webview.postMessage(
-          createProtocolEnvelope("host/workspaceLoaded", { workspace: hydratedReplay.workspace })
+          createProtocolEnvelope("host/stateSnapshot", {
+            revision,
+            workspace: hydratedReplay.workspace,
+            viewerState
+          })
         );
       }
     });
+  };
+}
+
+function deriveViewerState(workspace: WorkspaceState): {
+  activePlotId: string;
+  activeAxisByPlotId: Record<string, `y${number}`>;
+} {
+  const activeAxisByPlotId: Record<string, `y${number}`> = {};
+  for (const plot of workspace.plots) {
+    const firstAxis = plot.axes[0]?.id;
+    if (firstAxis) {
+      activeAxisByPlotId[plot.id] = firstAxis;
+    }
+  }
+  return {
+    activePlotId: workspace.activePlotId,
+    activeAxisByPlotId
   };
 }
 

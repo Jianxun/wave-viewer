@@ -19,9 +19,10 @@ describe("protocol envelope validators", () => {
     });
   });
 
-  it("accepts host workspacePatched with reason and workspace payload", () => {
+  it("accepts host statePatch with revision, viewer state, reason, and workspace payload", () => {
     const parsed = parseHostToWebviewMessage(
-      createProtocolEnvelope("host/workspacePatched", {
+      createProtocolEnvelope("host/statePatch", {
+        revision: 3,
         workspace: {
           activePlotId: "plot-1",
           plots: [
@@ -35,13 +36,19 @@ describe("protocol envelope validators", () => {
             }
           ]
         },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: { "plot-1": "y1" }
+        },
         reason: "sidePanel:add-to-plot"
       })
     );
+
     expect(parsed).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/workspacePatched",
+      type: "host/statePatch",
       payload: {
+        revision: 3,
         workspace: {
           activePlotId: "plot-1",
           plots: [
@@ -54,28 +61,81 @@ describe("protocol envelope validators", () => {
               nextAxisNumber: 2
             }
           ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: { "plot-1": "y1" }
         },
         reason: "sidePanel:add-to-plot"
       }
     });
   });
 
-  it("accepts host viewerBindingUpdated with explicit viewer identity", () => {
+  it("rejects host statePatch without non-negative integer revision", () => {
     const parsed = parseHostToWebviewMessage(
-      createProtocolEnvelope("host/viewerBindingUpdated", {
-        viewerId: "viewer-2",
-        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+      createProtocolEnvelope("host/statePatch", {
+        revision: -1,
+        workspace: { activePlotId: "plot-1", plots: [] },
+        viewerState: { activePlotId: "plot-1", activeAxisByPlotId: {} },
+        reason: "sync"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("accepts host tupleUpsert with finite tuple arrays", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/tupleUpsert", {
+        tuples: [
+          {
+            traceId: "viewer-2:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ]
       })
     );
 
     expect(parsed).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/viewerBindingUpdated",
+      type: "host/tupleUpsert",
       payload: {
-        viewerId: "viewer-2",
-        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+        tuples: [
+          {
+            traceId: "viewer-2:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ]
       }
     });
+  });
+
+  it("rejects host tupleUpsert when tuple lengths are mismatched", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/tupleUpsert", {
+        tuples: [
+          {
+            traceId: "viewer-2:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1],
+            y: [1, 2, 3]
+          }
+        ]
+      })
+    );
+    expect(parsed).toBeUndefined();
   });
 
   it("rejects host messages with invalid envelope version", () => {
@@ -94,58 +154,6 @@ describe("protocol envelope validators", () => {
     expect(parsed).toBeUndefined();
   });
 
-  it("accepts host sidePanelTraceInjected with finite tuple arrays", () => {
-    const parsed = parseHostToWebviewMessage(
-      createProtocolEnvelope("host/sidePanelTraceInjected", {
-        viewerId: "viewer-2",
-        trace: {
-          traceId: "viewer-2:vin:3",
-          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-          xName: "time",
-          yName: "vin",
-          x: [0, 1, 2],
-          y: [1, 2, 3]
-        }
-      })
-    );
-
-    expect(parsed).toEqual({
-      version: PROTOCOL_VERSION,
-      type: "host/sidePanelTraceInjected",
-      payload: {
-        viewerId: "viewer-2",
-        trace: {
-          traceId: "viewer-2:vin:3",
-          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-          xName: "time",
-          yName: "vin",
-          x: [0, 1, 2],
-          y: [1, 2, 3]
-        }
-      }
-    });
-  });
-
-  it("rejects host sidePanelTraceInjected when tuple lengths are mismatched", () => {
-    const parsed = parseHostToWebviewMessage(
-      createProtocolEnvelope("host/sidePanelTraceInjected", {
-        viewerId: "viewer-2",
-        trace: {
-          traceId: "viewer-2:vin:3",
-          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-          xName: "time",
-          yName: "vin",
-          x: [0, 1],
-          y: [1, 2, 3]
-        }
-      })
-    );
-    expect(parsed).toBeUndefined();
-  });
-
   it("accepts known webview messages wrapped in versioned envelopes", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/ready", { ready: true })
@@ -157,50 +165,51 @@ describe("protocol envelope validators", () => {
     });
   });
 
-  it("accepts webview dropSignal payloads for axis targets", () => {
+  it("accepts webview intent dropSignal payloads for axis targets", () => {
     const parsed = parseWebviewToHostMessage(
-      createProtocolEnvelope("webview/dropSignal", {
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
         signal: "vin",
         plotId: "plot-1",
         target: { kind: "axis", axisId: "y1" },
-        source: "axis-row"
+        source: "axis-row",
+        requestId: "req-1"
       })
     );
+
     expect(parsed).toEqual({
       version: PROTOCOL_VERSION,
-      type: "webview/dropSignal",
+      type: "webview/intent/dropSignal",
       payload: {
+        viewerId: "viewer-1",
         signal: "vin",
         plotId: "plot-1",
         target: { kind: "axis", axisId: "y1" },
-        source: "axis-row"
+        source: "axis-row",
+        requestId: "req-1"
       }
     });
   });
 
-  it("rejects malformed workspaceChanged payloads", () => {
+  it("rejects malformed webview intent dropSignal payloads", () => {
     const parsed = parseWebviewToHostMessage(
-      createProtocolEnvelope("webview/workspaceChanged", { workspace: null, reason: "sync" })
-    );
-    expect(parsed).toBeUndefined();
-  });
-
-  it("rejects workspaceChanged payloads without reason", () => {
-    const parsed = parseWebviewToHostMessage(
-      createProtocolEnvelope("webview/workspaceChanged", {
-        workspace: { activePlotId: "plot-1", plots: [] }
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis" },
+        source: "axis-row",
+        requestId: "req-1"
       })
     );
     expect(parsed).toBeUndefined();
   });
 
-  it("rejects malformed webview dropSignal payloads", () => {
+  it("rejects webview intent addSignalToActiveAxis without requestId", () => {
     const parsed = parseWebviewToHostMessage(
-      createProtocolEnvelope("webview/dropSignal", {
-        signal: "vin",
-        plotId: "plot-1",
-        target: { kind: "axis" },
-        source: "axis-row"
+      createProtocolEnvelope("webview/intent/addSignalToActiveAxis", {
+        viewerId: "viewer-1",
+        signal: "vin"
       })
     );
     expect(parsed).toBeUndefined();

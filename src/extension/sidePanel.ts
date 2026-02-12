@@ -120,13 +120,10 @@ export function hydrateWorkspaceReplayPayload(
   logDebug?: (message: string, details?: unknown) => void
 ): {
   workspace: WorkspaceState;
-  tracePayloads: Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]["trace"][];
+  tracePayloads: Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"];
 } {
-  const tracePayloads: Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]["trace"][] = [];
-  const tracePayloadBySourceId = new Map<
-    string,
-    Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]["trace"]
-  >();
+  const tracePayloads: Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"] = [];
+  const tracePayloadBySourceId = new Map<string, Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"][number]>();
   let hasHydratedTrace = false;
 
   const nextPlots = workspace.plots.map((plot) => {
@@ -197,7 +194,7 @@ export function createSidePanelTraceInjectedPayload(
   loadedDataset: LoadedDatasetRecord,
   signal: string,
   options?: { traceId?: string; sourceId?: string }
-): Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"] {
+): { viewerId: string; trace: Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"][number] } {
   const xColumn = loadedDataset.dataset.columns.find(
     (column) => column.name === loadedDataset.defaultXSignal
   );
@@ -287,27 +284,32 @@ export function runResolvedSidePanelSignalAction(
     )
   );
 
-  for (const trace of getAddedTraces(workspace, nextWorkspace)) {
+  const tuples = getAddedTraces(workspace, nextWorkspace).map((trace) =>
+    createSidePanelTraceInjectedPayload(
+      viewerId,
+      deps.documentPath,
+      deps.loadedDataset,
+      trace.signal,
+      {
+        traceId: trace.id,
+        sourceId: trace.sourceId
+      }
+    ).trace
+  );
+
+  if (tuples.length > 0) {
     void panel.webview.postMessage(
-      createProtocolEnvelope(
-        "host/sidePanelTraceInjected",
-        createSidePanelTraceInjectedPayload(
-          viewerId,
-          deps.documentPath,
-          deps.loadedDataset,
-          trace.signal,
-          {
-            traceId: trace.id,
-            sourceId: trace.sourceId
-          }
-        )
-      )
+      createProtocolEnvelope("host/tupleUpsert", {
+        tuples
+      })
     );
   }
 
   void panel.webview.postMessage(
-    createProtocolEnvelope("host/workspacePatched", {
+    createProtocolEnvelope("host/statePatch", {
+      revision: transaction.next.revision,
       workspace: nextWorkspace,
+      viewerState: transaction.next.viewerState,
       reason: transaction.reason
     })
   );
@@ -328,7 +330,7 @@ export function runResolvedSidePanelQuickAdd(deps: RunResolvedSidePanelQuickAddD
   );
 
   let traceInjectionPayload:
-    | Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]
+    | Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"][number]
     | undefined;
   try {
     traceInjectionPayload = createSidePanelTraceInjectedPayload(
@@ -336,14 +338,16 @@ export function runResolvedSidePanelQuickAdd(deps: RunResolvedSidePanelQuickAddD
       deps.documentPath,
       deps.loadedDataset,
       deps.signal
-    );
+    ).trace;
   } catch (error) {
     deps.showError(getErrorMessage(error));
     return false;
   }
 
   void deps.targetViewer.panel.webview.postMessage(
-    createProtocolEnvelope("host/sidePanelTraceInjected", traceInjectionPayload)
+    createProtocolEnvelope("host/tupleUpsert", {
+      tuples: [traceInjectionPayload]
+    })
   );
   return true;
 }

@@ -28,29 +28,40 @@ import { extractSignalFromDropData, hasSupportedDropSignalType } from "./dropSig
 type HostMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
   | ProtocolEnvelope<"host/viewerBindingUpdated", { viewerId: string; datasetPath?: string }>
-  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>
-  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
   | ProtocolEnvelope<
-      "host/sidePanelTraceInjected",
+      "host/stateSnapshot",
       {
-        viewerId: string;
-        trace: {
-          traceId: string;
-          sourceId: string;
-          datasetPath: string;
-          xName: string;
-          yName: string;
-          x: number[];
-          y: number[];
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: {
+          activePlotId: string;
+          activeAxisByPlotId: Record<string, AxisId>;
         };
       }
-    >;
+    >
+  | ProtocolEnvelope<
+      "host/statePatch",
+      {
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: {
+          activePlotId: string;
+          activeAxisByPlotId: Record<string, AxisId>;
+        };
+        reason: string;
+      }
+    >
+  | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
+  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
+  | ProtocolEnvelope<"host/sidePanelTraceInjected", { viewerId: string; trace: SidePanelTraceTuplePayload }>;
 
 const vscode = acquireVsCodeApi();
 
 let workspace: WorkspaceState | undefined;
 const traceTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>();
+let viewerId = "viewer-unknown";
+let nextRequestId = 1;
+let lastAppliedRevision = -1;
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
@@ -151,11 +162,13 @@ function postDropSignal(payload: {
   }
 
   vscode.postMessage(
-    createProtocolEnvelope("webview/dropSignal", {
+    createProtocolEnvelope("webview/intent/dropSignal", {
+      viewerId,
       signal: payload.signal,
       plotId: getActivePlot(workspace).id,
       target: payload.target,
-      source: payload.source
+      source: payload.source,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
     })
   );
 }
@@ -295,12 +308,6 @@ async function renderWorkspace(): Promise<void> {
 
   await plotRenderer.render(activePlot, traceTuplesBySourceId);
   renderCanvasDropOverlay(activePlot.axes);
-  vscode.postMessage(
-    createProtocolEnvelope("webview/workspaceChanged", {
-      workspace,
-      reason: "reducer-dispatch"
-    })
-  );
 }
 
 function getErrorMessage(error: unknown): string {
@@ -379,18 +386,39 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
 
   if (message.type === "host/viewerBindingUpdated") {
+    viewerId = message.payload.viewerId;
     bridgeStatusEl.textContent = `Viewer ${message.payload.viewerId} ready for tuple traces.`;
     return;
   }
 
-  if (message.type === "host/workspaceLoaded") {
+  if (message.type === "host/stateSnapshot") {
+    if (message.payload.revision <= lastAppliedRevision) {
+      console.debug("[wave-viewer] Ignored stale host snapshot revision.", {
+        revision: message.payload.revision,
+        lastAppliedRevision
+      });
+      return;
+    }
+    lastAppliedRevision = message.payload.revision;
     workspace = message.payload.workspace;
+    preferredDropAxisId =
+      message.payload.viewerState.activeAxisByPlotId[message.payload.viewerState.activePlotId];
     void renderWorkspace();
     return;
   }
 
-  if (message.type === "host/workspacePatched") {
+  if (message.type === "host/statePatch") {
+    if (message.payload.revision <= lastAppliedRevision) {
+      console.debug("[wave-viewer] Ignored stale host patch revision.", {
+        revision: message.payload.revision,
+        lastAppliedRevision
+      });
+      return;
+    }
+    lastAppliedRevision = message.payload.revision;
     workspace = message.payload.workspace;
+    preferredDropAxisId =
+      message.payload.viewerState.activeAxisByPlotId[message.payload.viewerState.activePlotId];
     bridgeStatusEl.textContent = `Patched: ${message.payload.reason}`;
     void renderWorkspace();
     return;
@@ -405,36 +433,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
     return;
   }
 
+  if (message.type === "host/tupleUpsert") {
+    for (const tuple of message.payload.tuples) {
+      traceTuplesBySourceId.set(tuple.sourceId, tuple);
+    }
+    return;
+  }
+
   if (message.type === "host/sidePanelTraceInjected") {
-    const tuple = message.payload.trace;
-    traceTuplesBySourceId.set(tuple.sourceId, tuple);
-    if (!workspace) {
-      workspace = createWorkspaceState(tuple.xName);
-    }
-    const activePlot = getActivePlot(workspace);
-    if (activePlot.traces.some((trace) => trace.sourceId === tuple.sourceId)) {
-      return;
-    }
-
-    const target = resolvePreferredDropTarget();
-    if (target.kind === "new-axis") {
-      dispatch({ type: "axis/add" });
-      const refreshed = workspace ? getActivePlot(workspace) : undefined;
-      const newestAxis = refreshed?.axes[refreshed.axes.length - 1]?.id;
-      if (!newestAxis) {
-        return;
-      }
-      dispatch({
-        type: "trace/add",
-        payload: { signal: tuple.yName, sourceId: tuple.sourceId, axisId: newestAxis }
-      });
-      return;
-    }
-
-    dispatch({
-      type: "trace/add",
-      payload: { signal: tuple.yName, sourceId: tuple.sourceId, axisId: target.axisId }
-    });
+    traceTuplesBySourceId.set(message.payload.trace.sourceId, message.payload.trace);
   }
 });
 

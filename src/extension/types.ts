@@ -31,8 +31,30 @@ export type HostToWebviewMessage =
         defaultXSignal: string;
       }
     >
-  | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
-  | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>
+  | ProtocolEnvelope<
+      "host/stateSnapshot",
+      {
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: {
+          activePlotId: string;
+          activeAxisByPlotId: Record<string, `y${number}`>;
+        };
+      }
+    >
+  | ProtocolEnvelope<
+      "host/statePatch",
+      {
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: {
+          activePlotId: string;
+          activeAxisByPlotId: Record<string, `y${number}`>;
+        };
+        reason: string;
+      }
+    >
+  | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
   | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
   | ProtocolEnvelope<
       "host/sidePanelTraceInjected",
@@ -41,6 +63,17 @@ export type HostToWebviewMessage =
 
 export type WebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
+  | ProtocolEnvelope<
+      "webview/intent/dropSignal",
+      {
+        viewerId: string;
+        signal: string;
+        plotId: string;
+        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
+        source: "axis-row" | "canvas-overlay";
+        requestId: string;
+      }
+    >
   | ProtocolEnvelope<"webview/workspaceChanged", { workspace: WorkspaceState; reason: string }>
   | ProtocolEnvelope<
       "webview/dropSignal",
