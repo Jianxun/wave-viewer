@@ -12,7 +12,7 @@ T-027:
   pr: 32
   merged: true
 T-028:
-  status: ready_for_review
+  status: review_clean
   pr: 33
   merged: false
 T-029:
