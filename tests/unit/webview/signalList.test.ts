@@ -135,13 +135,13 @@ describe("signal lane drag reassignment", () => {
 });
 
 describe("signal panel model", () => {
-  it("adds an active-axis row marker in axis manager rendering", () => {
-    const source = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+  it("adds an active-lane row marker in lane-board rendering", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
     const css = fs.readFileSync(path.resolve("src/webview/styles.css"), "utf8");
     const main = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
 
     expect(source).toContain("activeAxisId?: AxisId");
-    expect(source).toContain('row.classList.toggle("axis-row-active", axis.id === props.activeAxisId);');
+    expect(source).toContain('laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);');
     expect(css).toContain(".axis-row-active");
     expect(main).toContain("activeAxisId: preferredDropAxisId");
   });

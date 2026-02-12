@@ -1929,13 +1929,14 @@ describe("T-040 new-lane drop target placement and insertion anchor wiring", () 
   it("places the new-lane creation target in signal list and wires click creation intent", () => {
     const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
-    const axisManagerSource = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+    const htmlSource = fs.readFileSync(path.resolve("src/webview/index.html"), "utf8");
 
     expect(signalListSource).toContain('body.textContent = "Click here to create a new lane";');
     expect(signalListSource).toContain("options.onCreateLane(options.afterAxisId);");
     expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lastLaneAxisId }');
     expect(mainSource).toContain('createProtocolEnvelope("webview/intent/addAxis"');
-    expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
+    expect(mainSource).not.toContain("renderAxisManager({");
+    expect(htmlSource).not.toContain('id="axis-manager"');
   });
 });
 
@@ -1949,9 +1950,9 @@ describe("lane-board lane controls", () => {
     expect(signalListSource).toContain('closeButton.textContent = "Close";');
     expect(signalListSource).toContain("props.onReorderLane({");
     expect(signalListSource).toContain("props.onRemoveLane({");
-    expect(mainSource).toContain("onReorderLane: ({ axisId, toIndex }) =>");
-    expect(mainSource).toContain('type: "axis/reorder"');
-    expect(mainSource).toContain('type: "trace/remove"');
-    expect(mainSource).toContain('type: "axis/remove"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/reorderAxis"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/removeAxisAndTraces"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/setTraceVisible"');
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/removeTrace"');
   });
 });

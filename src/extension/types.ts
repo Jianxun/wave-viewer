@@ -92,6 +92,45 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/reorderAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        axisId: string;
+        toIndex: number;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removeAxisAndTraces",
+      {
+        viewerId: string;
+        plotId: string;
+        axisId: string;
+        traceIds: string[];
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/setTraceVisible",
+      {
+        viewerId: string;
+        plotId: string;
+        traceId: string;
+        visible: boolean;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removeTrace",
+      {
+        viewerId: string;
+        plotId: string;
+        traceId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/dropSignal",
       {
         viewerId: string;

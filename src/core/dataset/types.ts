@@ -49,6 +49,10 @@ export type WebviewToHostMessageType =
   | "webview/intent/setActiveAxis"
   | "webview/intent/setTraceAxis"
   | "webview/intent/addAxis"
+  | "webview/intent/reorderAxis"
+  | "webview/intent/removeAxisAndTraces"
+  | "webview/intent/setTraceVisible"
+  | "webview/intent/removeTrace"
   | "webview/intent/dropSignal"
   | "webview/intent/addSignalToActiveAxis"
   | "webview/intent/addSignalToNewAxis";
@@ -98,6 +102,22 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<
       "webview/intent/addAxis",
       { viewerId: string; plotId: string; afterAxisId?: `y${number}`; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/reorderAxis",
+      { viewerId: string; plotId: string; axisId: string; toIndex: number; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removeAxisAndTraces",
+      { viewerId: string; plotId: string; axisId: string; traceIds: string[]; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/setTraceVisible",
+      { viewerId: string; plotId: string; traceId: string; visible: boolean; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removeTrace",
+      { viewerId: string; plotId: string; traceId: string; requestId: string }
     >
   | ProtocolEnvelope<
       "webview/intent/dropSignal",
@@ -224,6 +244,10 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/setActiveAxis" ||
     type === "webview/intent/setTraceAxis" ||
     type === "webview/intent/addAxis" ||
+    type === "webview/intent/reorderAxis" ||
+    type === "webview/intent/removeAxisAndTraces" ||
+    type === "webview/intent/setTraceVisible" ||
+    type === "webview/intent/removeTrace" ||
     type === "webview/intent/dropSignal" ||
     type === "webview/intent/addSignalToActiveAxis" ||
     type === "webview/intent/addSignalToNewAxis"
@@ -334,6 +358,46 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
       isNonEmptyString(payload.viewerId) &&
       isNonEmptyString(payload.plotId) &&
       (payload.afterAxisId === undefined || isAxisId(payload.afterAxisId)) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/reorderAxis") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isAxisId(payload.axisId) &&
+      isNonNegativeInteger(payload.toIndex) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/removeAxisAndTraces") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isAxisId(payload.axisId) &&
+      Array.isArray(payload.traceIds) &&
+      payload.traceIds.every((traceId) => isNonEmptyString(traceId)) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/setTraceVisible") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.traceId) &&
+      typeof payload.visible === "boolean" &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/removeTrace") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.traceId) &&
       isNonEmptyString(payload.requestId)
     );
   }

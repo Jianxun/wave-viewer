@@ -301,6 +301,245 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
+      if (message.type === "webview/intent/reorderAxis") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored reorderAxis because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        const axisId = message.payload.axisId;
+        if (!isAxisId(axisId)) {
+          deps.logDebug?.("Ignored invalid webview reorderAxis message payload.", {
+            payload: message.payload,
+            error: `Invalid axis id: ${axisId}`
+          });
+          return;
+        }
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "reorderAxis:lane-controls",
+            mutate: (workspace) =>
+              reduceWorkspaceState(
+                reduceWorkspaceState(workspace, {
+                  type: "plot/setActive",
+                  payload: { plotId: message.payload.plotId }
+                }),
+                {
+                  type: "axis/reorder",
+                  payload: {
+                    plotId: message.payload.plotId,
+                    axisId,
+                    toIndex: message.payload.toIndex
+                  }
+                }
+              )
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview reorderAxis message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
+      if (message.type === "webview/intent/removeAxisAndTraces") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored removeAxisAndTraces because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        const axisId = message.payload.axisId;
+        if (!isAxisId(axisId)) {
+          deps.logDebug?.("Ignored invalid webview removeAxisAndTraces message payload.", {
+            payload: message.payload,
+            error: `Invalid axis id: ${axisId}`
+          });
+          return;
+        }
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "removeAxisAndTraces:lane-controls",
+            mutate: (workspace) => {
+              let nextWorkspace = reduceWorkspaceState(workspace, {
+                type: "plot/setActive",
+                payload: { plotId: message.payload.plotId }
+              });
+              const targetPlot = nextWorkspace.plots.find((plot) => plot.id === message.payload.plotId);
+              const removableTraceIds = new Set(message.payload.traceIds);
+              for (const trace of targetPlot?.traces ?? []) {
+                if (!removableTraceIds.has(trace.id) || trace.axisId !== axisId) {
+                  continue;
+                }
+                nextWorkspace = reduceWorkspaceState(nextWorkspace, {
+                  type: "trace/remove",
+                  payload: { plotId: message.payload.plotId, traceId: trace.id }
+                });
+              }
+              return reduceWorkspaceState(nextWorkspace, {
+                type: "axis/remove",
+                payload: { plotId: message.payload.plotId, axisId }
+              });
+            },
+            selectActiveAxis: ({ previous, nextWorkspace }) => {
+              const previousPlot = previous.workspace.plots.find((plot) => plot.id === message.payload.plotId);
+              const nextPlot = nextWorkspace.plots.find((plot) => plot.id === message.payload.plotId);
+              if (!nextPlot) {
+                return undefined;
+              }
+              if (!previousPlot) {
+                return { plotId: nextPlot.id, axisId: nextPlot.axes[0]?.id ?? axisId };
+              }
+              const removedAxisIndex = previousPlot.axes.findIndex((axis) => axis.id === axisId);
+              if (removedAxisIndex < 0) {
+                return undefined;
+              }
+              const fallbackIndex = Math.max(0, Math.min(removedAxisIndex, nextPlot.axes.length - 1));
+              const fallbackAxisId = nextPlot.axes[fallbackIndex]?.id;
+              if (!fallbackAxisId) {
+                return undefined;
+              }
+              return { plotId: nextPlot.id, axisId: fallbackAxisId };
+            }
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview removeAxisAndTraces message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
+      if (message.type === "webview/intent/setTraceVisible") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored setTraceVisible because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "setTraceVisible:lane-chip",
+            mutate: (workspace) =>
+              reduceWorkspaceState(
+                reduceWorkspaceState(workspace, {
+                  type: "plot/setActive",
+                  payload: { plotId: message.payload.plotId }
+                }),
+                {
+                  type: "trace/setVisible",
+                  payload: {
+                    plotId: message.payload.plotId,
+                    traceId: message.payload.traceId,
+                    visible: message.payload.visible
+                  }
+                }
+              )
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview setTraceVisible message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
+      if (message.type === "webview/intent/removeTrace") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored removeTrace because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "removeTrace:lane-chip",
+            mutate: (workspace) =>
+              reduceWorkspaceState(
+                reduceWorkspaceState(workspace, {
+                  type: "plot/setActive",
+                  payload: { plotId: message.payload.plotId }
+                }),
+                {
+                  type: "trace/remove",
+                  payload: {
+                    plotId: message.payload.plotId,
+                    traceId: message.payload.traceId
+                  }
+                }
+              )
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview removeTrace message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
       if (message.type !== "webview/ready") {
         deps.logDebug?.("Ignored unsupported webview message type.", message.type);
         return;
