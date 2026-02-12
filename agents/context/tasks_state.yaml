@@ -12,8 +12,8 @@ T-047:
   pr: 54
   merged: true
 T-048:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 56
   merged: false
 T-049:
   status: backlog
