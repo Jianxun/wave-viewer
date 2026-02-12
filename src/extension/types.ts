@@ -5,6 +5,11 @@ import type {
   ProtocolEnvelope,
   SidePanelTraceTuplePayload
 } from "../core/dataset/types";
+import type {
+  HostStateSnapshot,
+  HostStateTransaction,
+  HostStateTransactionResult
+} from "./hostStateStore";
 import type { resolveSignalFromCommandArgument } from "./signalTree";
 import type { WorkspaceState } from "../webview/state/workspaceState";
 
@@ -93,6 +98,9 @@ export type CommandDeps = {
   onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
+  getHostStateSnapshot?(documentPath: string): HostStateSnapshot | undefined;
+  ensureHostStateSnapshot?(documentPath: string, defaultXSignal: string): HostStateSnapshot;
+  commitHostStateTransaction?(transaction: HostStateTransaction): HostStateTransactionResult;
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): string | undefined;
   showError(message: string): void;
@@ -144,8 +152,7 @@ export type RunResolvedSidePanelSignalActionDeps = {
   documentPath: string;
   loadedDataset: LoadedDatasetRecord;
   signal: string;
-  getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
-  setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
+  commitHostStateTransaction(transaction: HostStateTransaction): HostStateTransactionResult;
   getBoundPanel(documentPath: string): WebviewPanelLike | undefined;
   getStandalonePanel(): WebviewPanelLike | undefined;
   bindPanelToDataset(documentPath: string, panel: WebviewPanelLike): string | undefined;
