@@ -1468,7 +1468,7 @@ describe("T-026 viewer session registry", () => {
 });
 
 describe("T-032 host-authoritative workspace state store", () => {
-  it("ignores webview/workspaceChanged writes to keep host as the single state writer", async () => {
+  it("rejects removed webview/workspaceChanged messages as invalid webview input", async () => {
     const { deps, panelFixture, setCachedWorkspace, logDebug } = createDeps({
       initialWorkspace: createWorkspaceFixture()
     });
@@ -1483,11 +1483,8 @@ describe("T-032 host-authoritative workspace state store", () => {
 
     expect(setCachedWorkspace).not.toHaveBeenCalled();
     expect(logDebug).toHaveBeenCalledWith(
-      "Ignored webview workspaceChanged to keep host-authoritative writes.",
-      {
-        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-        reason: "webview-sync"
-      }
+      "Ignored invalid or unknown webview message.",
+      expect.objectContaining({ type: "webview/workspaceChanged" })
     );
   });
 

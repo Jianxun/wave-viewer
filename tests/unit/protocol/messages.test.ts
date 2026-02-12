@@ -214,4 +214,14 @@ describe("protocol envelope validators", () => {
     );
     expect(parsed).toBeUndefined();
   });
+
+  it("rejects removed webview/workspaceChanged payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/workspaceChanged", {
+        workspace: { activePlotId: "plot-1", plots: [] },
+        reason: "webview-sync"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
 });
