@@ -1,8 +1,8 @@
 schema_version: 2
 T-045:
-  status: review_clean
+  status: done
   pr: 52
-  merged: false
+  merged: true
 T-046:
   status: backlog
   pr: null
