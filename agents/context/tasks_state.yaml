@@ -16,8 +16,8 @@ T-028:
   pr: 33
   merged: true
 T-029:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 34
   merged: false
 T-030:
   status: backlog
