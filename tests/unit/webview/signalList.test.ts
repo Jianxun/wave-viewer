@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 import { buildSignalPanelModel } from "../../../src/webview/components/SignalList";
 import {
@@ -55,5 +57,16 @@ describe("signal panel model", () => {
       { axisId: "y1", axisLabel: "Y1 (Lane 2)", assignedSignals: [] },
       { axisId: "y3", axisLabel: "Y3 (Lane 3)", assignedSignals: [] }
     ]);
+  });
+
+  it("adds an active-axis row marker in axis manager rendering", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+    const css = fs.readFileSync(path.resolve("src/webview/styles.css"), "utf8");
+    const main = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain("activeAxisId?: AxisId");
+    expect(source).toContain('row.classList.toggle("axis-row-active", axis.id === props.activeAxisId);');
+    expect(css).toContain(".axis-row-active");
+    expect(main).toContain("activeAxisId: preferredDropAxisId");
   });
 });

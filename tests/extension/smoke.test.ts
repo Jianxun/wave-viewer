@@ -34,6 +34,7 @@ import {
   type WebviewPanelLike
 } from "../../src/extension";
 import { toDeterministicSignalOrder } from "../../src/extension/signalTree";
+import { reduceWorkspaceState } from "../../src/webview/state/reducer";
 import type { WorkspaceState } from "../../src/webview/state/workspaceState";
 
 type PanelFixture = {
@@ -1534,6 +1535,123 @@ describe("T-032 host-authoritative workspace state store", () => {
     expect(second.previous.revision).toBe(1);
     expect(second.next.revision).toBe(2);
     expect(second.next.workspace.plots[0]?.traces.map((trace) => trace.signal)).toEqual(["vin", "vout"]);
+  });
+});
+
+describe("T-035 active-axis targeting semantics", () => {
+  it("targets active axis by default for add-to-plot mutations", () => {
+    const store = createHostStateStore();
+    const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
+
+    store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "seed:add-axis",
+      mutate: (workspace) => applySidePanelSignalAction(workspace, { type: "add-to-new-axis", signal: "seed" }),
+      selectActiveAxis: ({ nextWorkspace }) => ({ plotId: nextWorkspace.activePlotId, axisId: "y2" })
+    });
+
+    const result = store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "sidePanel:add-to-plot",
+      mutate: (workspace, viewerState) =>
+        applySidePanelSignalAction(workspace, { type: "add-to-plot", signal: "vin" }, {
+          axisId: viewerState.activeAxisByPlotId[workspace.activePlotId]
+        })
+    });
+
+    expect(result.next.workspace.plots[0]?.traces.map((trace) => ({ signal: trace.signal, axisId: trace.axisId }))).toEqual([
+      { signal: "seed", axisId: "y2" },
+      { signal: "vin", axisId: "y2" }
+    ]);
+    expect(result.next.viewerState.activeAxisByPlotId["plot-1"]).toBe("y2");
+  });
+
+  it("activates newly created axis in the same add-to-new-axis transaction", () => {
+    const store = createHostStateStore();
+    const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
+
+    const result = store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "sidePanel:add-to-new-axis",
+      mutate: (workspace) => applySidePanelSignalAction(workspace, { type: "add-to-new-axis", signal: "vin" }),
+      selectActiveAxis: ({ previous, nextWorkspace }) => {
+        const previousPlot = previous.workspace.plots.find((plot) => plot.id === nextWorkspace.activePlotId);
+        const nextPlot = nextWorkspace.plots.find((plot) => plot.id === nextWorkspace.activePlotId);
+        if (!nextPlot) {
+          return undefined;
+        }
+        const previousAxisIds = new Set(previousPlot?.axes.map((axis) => axis.id) ?? []);
+        const newAxis = nextPlot.axes.find((axis) => !previousAxisIds.has(axis.id));
+        if (!newAxis) {
+          return undefined;
+        }
+        return { plotId: nextPlot.id, axisId: newAxis.id };
+      }
+    });
+
+    expect(result.next.workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(result.next.viewerState.activeAxisByPlotId["plot-1"]).toBe("y2");
+  });
+
+  it("falls back to the first axis when prior active axis no longer exists", () => {
+    const store = createHostStateStore();
+    const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
+
+    store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "seed:add-axis",
+      mutate: (workspace) =>
+        reduceWorkspaceState(workspace, {
+          type: "axis/add"
+        }),
+      selectActiveAxis: ({ nextWorkspace }) => ({ plotId: nextWorkspace.activePlotId, axisId: "y2" })
+    });
+
+    const result = store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "axis:remove-no-reassign",
+      mutate: (workspace) =>
+        reduceWorkspaceState(workspace, {
+          type: "axis/remove",
+          payload: { axisId: "y2" }
+        })
+    });
+
+    expect(result.next.workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1"]);
+    expect(result.next.viewerState.activeAxisByPlotId["plot-1"]).toBe("y1");
+  });
+
+  it("reassigns active axis to the remove-axis reassignment target when traces move", () => {
+    const store = createHostStateStore();
+    const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
+
+    store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "seed:add-axis",
+      mutate: (workspace) => applySidePanelSignalAction(workspace, { type: "add-to-new-axis", signal: "vin" }),
+      selectActiveAxis: ({ nextWorkspace }) => ({ plotId: nextWorkspace.activePlotId, axisId: "y2" })
+    });
+
+    const result = store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "axis:remove-with-reassign",
+      mutate: (workspace) =>
+        reduceWorkspaceState(workspace, {
+          type: "axis/remove",
+          payload: { axisId: "y2", reassignToAxisId: "y1" }
+        })
+    });
+
+    expect(result.next.workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1"]);
+    expect(result.next.workspace.plots[0]?.traces.map((trace) => trace.axisId)).toEqual(["y1"]);
+    expect(result.next.viewerState.activeAxisByPlotId["plot-1"]).toBe("y1");
   });
 });
 

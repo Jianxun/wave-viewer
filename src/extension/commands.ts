@@ -70,6 +70,10 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         const patchReason = `dropSignal:${message.payload.source}`;
         try {
           if (deps.commitHostStateTransaction) {
+            const requestedAxisId =
+              message.payload.target.kind === "axis" && isAxisId(message.payload.target.axisId)
+                ? message.payload.target.axisId
+                : undefined;
             const transaction = deps.commitHostStateTransaction({
               datasetPath,
               defaultXSignal: normalizedDataset.defaultXSignal,
@@ -77,7 +81,17 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
               mutate: (workspace) =>
                 applyDropSignalAction(workspace, message.payload, {
                   sourceId: toTraceSourceId(datasetPath, message.payload.signal)
-                })
+                }),
+              selectActiveAxis: ({ previous, nextWorkspace }) => {
+                if (requestedAxisId) {
+                  return { plotId: message.payload.plotId, axisId: requestedAxisId };
+                }
+                const newAxisId = findNewAxisId(previous.workspace, nextWorkspace, message.payload.plotId);
+                if (!newAxisId) {
+                  return undefined;
+                }
+                return { plotId: message.payload.plotId, axisId: newAxisId };
+              }
             });
             previousWorkspace = transaction.previous.workspace;
             nextWorkspace = transaction.next.workspace;
@@ -176,6 +190,23 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       }
     });
   };
+}
+
+function findNewAxisId(
+  previousWorkspace: WorkspaceState,
+  nextWorkspace: WorkspaceState,
+  plotId: string
+): `y${number}` | undefined {
+  const previousAxisIds = new Set(
+    previousWorkspace.plots.find((plot) => plot.id === plotId)?.axes.map((axis) => axis.id) ?? []
+  );
+  return nextWorkspace.plots
+    .find((plot) => plot.id === plotId)
+    ?.axes.find((axis) => !previousAxisIds.has(axis.id))?.id;
+}
+
+function isAxisId(value: string): value is `y${number}` {
+  return /^y\d+$/.test(value);
 }
 
 function deriveViewerState(workspace: WorkspaceState): {

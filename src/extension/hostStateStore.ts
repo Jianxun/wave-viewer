@@ -15,7 +15,12 @@ export type HostStateTransaction = {
   datasetPath: string;
   defaultXSignal: string;
   reason: string;
-  mutate(workspace: WorkspaceState): WorkspaceState;
+  mutate(workspace: WorkspaceState, viewerState: ViewerInteractionState): WorkspaceState;
+  selectActiveAxis?(params: {
+    previous: HostStateSnapshot;
+    nextWorkspace: WorkspaceState;
+    nextViewerState: ViewerInteractionState;
+  }): { plotId: string; axisId: `y${number}` } | undefined;
 };
 
 export type HostStateTransactionResult = {
@@ -92,8 +97,30 @@ export function createHostStateStore(): HostStateStore {
     setWorkspace,
     commitTransaction: (transaction: HostStateTransaction): HostStateTransactionResult => {
       const previous = ensureSnapshot(transaction.datasetPath, transaction.defaultXSignal);
-      const nextWorkspace = transaction.mutate(previous.workspace);
-      const nextViewerState = deriveViewerInteractionState(nextWorkspace, previous.viewerState);
+      const nextWorkspace = transaction.mutate(previous.workspace, previous.viewerState);
+      let nextViewerState = deriveViewerInteractionState(
+        nextWorkspace,
+        previous.viewerState,
+        previous.workspace
+      );
+      const selectedAxis = transaction.selectActiveAxis?.({
+        previous,
+        nextWorkspace,
+        nextViewerState
+      });
+      if (selectedAxis) {
+        const plot = nextWorkspace.plots.find((entry) => entry.id === selectedAxis.plotId);
+        const axisExists = plot?.axes.some((axis) => axis.id === selectedAxis.axisId) ?? false;
+        if (axisExists) {
+          nextViewerState = {
+            ...nextViewerState,
+            activeAxisByPlotId: {
+              ...nextViewerState.activeAxisByPlotId,
+              [selectedAxis.plotId]: selectedAxis.axisId
+            }
+          };
+        }
+      }
       const nextRecord = {
         workspace: nextWorkspace,
         viewerState: nextViewerState,
@@ -115,7 +142,8 @@ export function createHostStateStore(): HostStateStore {
 
 function deriveViewerInteractionState(
   workspace: WorkspaceState,
-  previous?: ViewerInteractionState
+  previous?: ViewerInteractionState,
+  previousWorkspace?: WorkspaceState
 ): ViewerInteractionState {
   const activeAxisByPlotId: Record<string, `y${number}`> = {};
   for (const plot of workspace.plots) {
@@ -123,7 +151,35 @@ function deriveViewerInteractionState(
     const axisStillExists = preferredAxisId
       ? plot.axes.some((axis) => axis.id === preferredAxisId)
       : false;
-    const resolvedAxisId = axisStillExists ? preferredAxisId : plot.axes[0]?.id;
+    let resolvedAxisId = axisStillExists ? preferredAxisId : undefined;
+
+    if (!resolvedAxisId && preferredAxisId) {
+      const previousPlot = previousWorkspace?.plots.find((entry) => entry.id === plot.id);
+      if (previousPlot) {
+        const previousTraceIdsOnPreferredAxis = new Set(
+          previousPlot.traces
+            .filter((trace) => trace.axisId === preferredAxisId)
+            .map((trace) => trace.id)
+        );
+        if (previousTraceIdsOnPreferredAxis.size > 0) {
+          const reassignedAxisVotes = new Map<`y${number}`, number>();
+          for (const trace of plot.traces) {
+            if (!previousTraceIdsOnPreferredAxis.has(trace.id)) {
+              continue;
+            }
+            reassignedAxisVotes.set(trace.axisId, (reassignedAxisVotes.get(trace.axisId) ?? 0) + 1);
+          }
+          const reassignedAxisId = [...reassignedAxisVotes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+          if (reassignedAxisId && plot.axes.some((axis) => axis.id === reassignedAxisId)) {
+            resolvedAxisId = reassignedAxisId;
+          }
+        }
+      }
+    }
+
+    if (!resolvedAxisId) {
+      resolvedAxisId = plot.axes[0]?.id;
+    }
     if (resolvedAxisId) {
       activeAxisByPlotId[plot.id] = resolvedAxisId;
     }

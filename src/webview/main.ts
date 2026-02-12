@@ -270,6 +270,7 @@ async function renderWorkspace(): Promise<void> {
   renderAxisManager({
     container: axisManagerEl,
     axes: activePlot.axes,
+    activeAxisId: preferredDropAxisId,
     canDropSignal: (event) => {
       if (!event.dataTransfer) {
         return false;

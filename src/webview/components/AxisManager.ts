@@ -4,6 +4,7 @@ import { formatAxisLaneLabel, formatAxisOptionLabel } from "./axisLabels";
 export type AxisManagerProps = {
   container: HTMLElement;
   axes: AxisState[];
+  activeAxisId?: AxisId;
   onAddAxis(): void;
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
@@ -21,10 +22,20 @@ export function renderAxisManager(props: AxisManagerProps): void {
     const row = document.createElement("div");
     row.className = "list-row axis-row drop-target";
     row.setAttribute("aria-label", `Drop signal on axis ${axis.id}`);
+    row.classList.toggle("axis-row-active", axis.id === props.activeAxisId);
 
     const label = document.createElement("span");
     label.className = "signal-name";
     label.textContent = formatAxisLaneLabel(props.axes, axis);
+
+    if (axis.id === props.activeAxisId) {
+      const activeBadge = document.createElement("span");
+      activeBadge.className = "axis-active-chip";
+      activeBadge.textContent = "Active";
+      row.append(label, activeBadge);
+    } else {
+      row.append(label);
+    }
 
     const titleInput = document.createElement("input");
     titleInput.type = "text";
@@ -89,7 +100,6 @@ export function renderAxisManager(props: AxisManagerProps): void {
     });
 
     row.append(
-      label,
       moveUpButton,
       moveDownButton,
       titleInput,

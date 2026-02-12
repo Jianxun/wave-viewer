@@ -209,6 +209,23 @@ body {
   grid-template-columns: minmax(150px, 220px) auto auto minmax(80px, 1fr) minmax(160px, 1fr) auto auto;
 }
 
+.axis-row-active {
+  border-color: #84a8ff;
+  background: color-mix(in srgb, #27437d 40%, transparent);
+}
+
+.axis-active-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #7ea7ff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #dfe9ff;
+  background: color-mix(in srgb, #2f4f9b 65%, transparent);
+}
+
 .drop-target {
   border: 1px dashed transparent;
   border-radius: 8px;
