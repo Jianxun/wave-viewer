@@ -170,6 +170,116 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
+      if (message.type === "webview/intent/setActivePlot") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored setActivePlot because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "setActivePlot:tab-select",
+            mutate: (workspace) =>
+              reduceWorkspaceState(workspace, {
+                type: "plot/setActive",
+                payload: { plotId: message.payload.plotId }
+              })
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview setActivePlot message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
+      if (message.type === "webview/intent/addPlot") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored addPlot because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        const transaction = deps.commitHostStateTransaction({
+          datasetPath: resolvedDatasetPath,
+          defaultXSignal: resolvedDataset.defaultXSignal,
+          reason: "addPlot:tab-add",
+          mutate: (workspace) =>
+            reduceWorkspaceState(workspace, {
+              type: "plot/add",
+              payload: { xSignal: message.payload.xSignal }
+            })
+        });
+
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/statePatch", {
+            revision: transaction.next.revision,
+            workspace: transaction.next.workspace,
+            viewerState: transaction.next.viewerState,
+            reason: transaction.reason
+          })
+        );
+        return;
+      }
+
+      if (message.type === "webview/intent/removePlot") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored removePlot because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "removePlot:tab-remove",
+            mutate: (workspace) =>
+              reduceWorkspaceState(workspace, {
+                type: "plot/remove",
+                payload: { plotId: message.payload.plotId }
+              })
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview removePlot message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
       if (message.type === "webview/intent/setActiveAxis") {
         const context = resolveDatasetContext(message.payload.viewerId);
         if (!context) {

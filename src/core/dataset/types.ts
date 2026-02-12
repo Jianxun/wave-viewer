@@ -46,6 +46,8 @@ export type HostToWebviewMessageType =
 export type WebviewToHostMessageType =
   | "webview/ready"
   | "webview/intent/setActivePlot"
+  | "webview/intent/addPlot"
+  | "webview/intent/removePlot"
   | "webview/intent/setActiveAxis"
   | "webview/intent/setTraceAxis"
   | "webview/intent/addAxis"
@@ -89,6 +91,14 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
   | ProtocolEnvelope<
       "webview/intent/setActivePlot",
+      { viewerId: string; plotId: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/addPlot",
+      { viewerId: string; xSignal: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removePlot",
       { viewerId: string; plotId: string; requestId: string }
     >
   | ProtocolEnvelope<
@@ -241,6 +251,8 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
   return (
     type === "webview/ready" ||
     type === "webview/intent/setActivePlot" ||
+    type === "webview/intent/addPlot" ||
+    type === "webview/intent/removePlot" ||
     type === "webview/intent/setActiveAxis" ||
     type === "webview/intent/setTraceAxis" ||
     type === "webview/intent/addAxis" ||
@@ -322,15 +334,27 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
     return true;
   }
 
-  if (
-    type === "webview/intent/setActivePlot" ||
-    type === "webview/intent/addSignalToActiveAxis" ||
-    type === "webview/intent/addSignalToNewAxis"
-  ) {
+  if (type === "webview/intent/setActivePlot" || type === "webview/intent/removePlot") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/addSignalToActiveAxis" || type === "webview/intent/addSignalToNewAxis") {
     return (
       isNonEmptyString(payload.viewerId) &&
       isNonEmptyString(payload.requestId) &&
-      (type === "webview/intent/setActivePlot" ? isNonEmptyString(payload.plotId) : isNonEmptyString(payload.signal))
+      isNonEmptyString(payload.signal)
+    );
+  }
+
+  if (type === "webview/intent/addPlot") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.xSignal) &&
+      isNonEmptyString(payload.requestId)
     );
   }
 

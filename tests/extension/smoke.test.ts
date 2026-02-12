@@ -1148,6 +1148,204 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("handles validated setActivePlot intent via host transaction and posts statePatch", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        },
+        {
+          id: "plot-2",
+          name: "Plot 2",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/setActivePlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-2",
+        requestId: "req-set-plot-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-2",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              },
+              {
+                id: "plot-2",
+                name: "Plot 2",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-2",
+            activeAxisByPlotId: {
+              "plot-1": "y1",
+              "plot-2": "y1"
+            }
+          },
+          reason: "setActivePlot:tab-select"
+        }
+      }
+    ]);
+  });
+
+  it("handles validated addPlot intent via host transaction and posts statePatch", async () => {
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/addPlot", {
+        viewerId: "viewer-1",
+        xSignal: "time",
+        requestId: "req-add-plot-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-2",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              },
+              {
+                id: "plot-2",
+                name: "Plot 2",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-2",
+            activeAxisByPlotId: {
+              "plot-1": "y1",
+              "plot-2": "y1"
+            }
+          },
+          reason: "addPlot:tab-add"
+        }
+      }
+    ]);
+  });
+
+  it("handles validated removePlot intent via host transaction and posts statePatch", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-2",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        },
+        {
+          id: "plot-2",
+          name: "Plot 2",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/removePlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-2",
+        requestId: "req-remove-plot-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y1"
+            }
+          },
+          reason: "removePlot:tab-remove"
+        }
+      }
+    ]);
+  });
+
   it("ignores invalid dropSignal payloads and does not mutate workspace", async () => {
     const { deps, panelFixture, logDebug, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -1966,5 +2164,20 @@ describe("lane-board lane controls", () => {
     expect(mainSource).toContain('createProtocolEnvelope("webview/intent/removeAxisAndTraces"');
     expect(mainSource).toContain('createProtocolEnvelope("webview/intent/setTraceVisible"');
     expect(mainSource).toContain('createProtocolEnvelope("webview/intent/removeTrace"');
+  });
+});
+
+describe("T-041 plot tab lifecycle host intents", () => {
+  it("wires tab add/select/remove actions to host intents from webview", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain('createProtocolEnvelope("webview/intent/setActivePlot"');
+    expect(source).toContain('createProtocolEnvelope("webview/intent/addPlot"');
+    expect(source).toContain('createProtocolEnvelope("webview/intent/removePlot"');
+    expect(source).toContain("onSelect: (plotId) => postSetActivePlot(plotId)");
+    expect(source).toContain("onAdd: () => postAddPlot(activePlot.xSignal)");
+    expect(source).toContain("onRemove: (plotId) => postRemovePlot(plotId)");
+    expect(source).not.toContain('onAdd: () =>\n      dispatch({\n        type: "plot/add"');
+    expect(source).not.toContain('onRemove: (plotId) => dispatch({ type: "plot/remove", payload: { plotId } })');
   });
 });

@@ -64,6 +64,30 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
   | ProtocolEnvelope<
+      "webview/intent/setActivePlot",
+      {
+        viewerId: string;
+        plotId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/addPlot",
+      {
+        viewerId: string;
+        xSignal: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/removePlot",
+      {
+        viewerId: string;
+        plotId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/setActiveAxis",
       {
         viewerId: string;
