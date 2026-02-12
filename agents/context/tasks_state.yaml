@@ -8,7 +8,7 @@ T-046:
   pr: 53
   merged: true
 T-047:
-  status: ready_for_review
+  status: review_clean
   pr: 54
   merged: false
 T-048:
