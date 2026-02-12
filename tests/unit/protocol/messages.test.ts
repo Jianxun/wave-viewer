@@ -269,6 +269,28 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview intent renamePlot payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/renamePlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        name: "Scope A",
+        requestId: "req-rename-1"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/renamePlot",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        name: "Scope A",
+        requestId: "req-rename-1"
+      }
+    });
+  });
+
   it("accepts webview intent setTraceAxis payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/intent/setTraceAxis", {
@@ -415,6 +437,18 @@ describe("protocol envelope validators", () => {
         viewerId: "viewer-1",
         plotId: "plot-1",
         requestId: "req-2"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent renamePlot payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/renamePlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        name: "   ",
+        requestId: "req-rename-1"
       })
     );
     expect(parsed).toBeUndefined();
