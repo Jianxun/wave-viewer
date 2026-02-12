@@ -1,7 +1,7 @@
 schema_version: 2
 T-025:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 30
   merged: false
 T-026:
   status: ready
