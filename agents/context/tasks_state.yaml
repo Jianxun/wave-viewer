@@ -4,9 +4,9 @@ T-038:
   pr: 44
   merged: true
 T-039:
-  status: review_clean
+  status: done
   pr: 45
-  merged: false
+  merged: true
 T-040:
   status: ready
   pr: null
