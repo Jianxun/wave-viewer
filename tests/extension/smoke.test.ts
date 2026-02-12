@@ -10,6 +10,7 @@ import {
   createViewerSessionRegistry,
   createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
+  createHostStateStore,
   createOpenViewerCommand,
   createRemoveLoadedFileCommand,
   createReloadAllLoadedFilesCommand,
@@ -1140,18 +1141,15 @@ describe("T-025 standalone viewer side-panel routing", () => {
     const panelFixture = createPanelFixture();
     const showWarning = vi.fn();
     const bindPanelToDataset = vi.fn();
+    const store = createHostStateStore();
     let standalonePanel: WebviewPanelLike | undefined = panelFixture.panel;
-    let cachedWorkspace: WorkspaceState | undefined;
 
     const nextWorkspace = runResolvedSidePanelSignalAction({
       actionType: "add-to-plot",
       documentPath: "/workspace/examples/simulations/ota.spice.csv",
       loadedDataset: createLoadedDatasetFixture(),
       signal: "vin",
-      getCachedWorkspace: () => cachedWorkspace,
-      setCachedWorkspace: (_documentPath, workspace) => {
-        cachedWorkspace = workspace;
-      },
+      commitHostStateTransaction: (transaction) => store.commitTransaction(transaction),
       getBoundPanel: () => undefined,
       getStandalonePanel: () => standalonePanel,
       bindPanelToDataset: (_documentPath, panel) => {
@@ -1220,13 +1218,13 @@ describe("T-025 standalone viewer side-panel routing", () => {
 
   it("shows actionable warning when no viewer target can accept the action", () => {
     const showWarning = vi.fn();
+    const store = createHostStateStore();
     const nextWorkspace = runResolvedSidePanelSignalAction({
       actionType: "add-to-plot",
       documentPath: "/workspace/examples/simulations/ota.spice.csv",
       loadedDataset: createLoadedDatasetFixture(),
       signal: "vin",
-      getCachedWorkspace: () => undefined,
-      setCachedWorkspace: () => undefined,
+      commitHostStateTransaction: (transaction) => store.commitTransaction(transaction),
       getBoundPanel: () => undefined,
       getStandalonePanel: () => undefined,
       bindPanelToDataset: () => undefined,
@@ -1427,5 +1425,78 @@ describe("T-026 viewer session registry", () => {
     registry.removeViewer(viewerB);
     expect(registry.hasOpenPanelForDataset("/workspace/examples/a.csv")).toBe(false);
     expect(registry.getActiveViewerId()).toBeUndefined();
+  });
+});
+
+describe("T-032 host-authoritative workspace state store", () => {
+  it("ignores webview/workspaceChanged writes to keep host as the single state writer", async () => {
+    const { deps, panelFixture, setCachedWorkspace, logDebug } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/workspaceChanged", {
+        workspace: createWorkspaceFixture(),
+        reason: "webview-sync"
+      })
+    );
+
+    expect(setCachedWorkspace).not.toHaveBeenCalled();
+    expect(logDebug).toHaveBeenCalledWith(
+      "Ignored webview workspaceChanged to keep host-authoritative writes.",
+      {
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        reason: "webview-sync"
+      }
+    );
+  });
+
+  it("commits add-to-new-axis atomically under a single revision increment", () => {
+    const store = createHostStateStore();
+
+    const initial = store.ensureSnapshot("/workspace/examples/simulations/ota.spice.csv", "time");
+    const result = store.commitTransaction({
+      datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+      defaultXSignal: "time",
+      reason: "sidePanel:add-to-new-axis",
+      mutate: (workspace) => applySidePanelSignalAction(workspace, { type: "add-to-new-axis", signal: "vin" })
+    });
+
+    expect(initial.revision).toBe(0);
+    expect(result.previous.revision).toBe(0);
+    expect(result.next.revision).toBe(1);
+    expect(result.next.workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(result.next.workspace.plots[0]?.traces).toEqual([
+      {
+        id: "trace-1",
+        signal: "vin",
+        axisId: "y2",
+        visible: true
+      }
+    ]);
+  });
+
+  it("increments revision monotonically for sequential host transactions", () => {
+    const store = createHostStateStore();
+    const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
+
+    const first = store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "sidePanel:add-to-plot",
+      mutate: (workspace) => applySidePanelSignalAction(workspace, { type: "add-to-plot", signal: "vin" })
+    });
+    const second = store.commitTransaction({
+      datasetPath,
+      defaultXSignal: "time",
+      reason: "sidePanel:add-to-plot",
+      mutate: (workspace) => applySidePanelSignalAction(workspace, { type: "add-to-plot", signal: "vout" })
+    });
+
+    expect(first.next.revision).toBe(1);
+    expect(second.previous.revision).toBe(1);
+    expect(second.next.revision).toBe(2);
+    expect(second.next.workspace.plots[0]?.traces.map((trace) => trace.signal)).toEqual(["vin", "vout"]);
   });
 });

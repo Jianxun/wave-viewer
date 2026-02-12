@@ -56,9 +56,10 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       }
 
       if (message.type === "webview/workspaceChanged") {
-        if (datasetPath) {
-          deps.setCachedWorkspace?.(datasetPath, message.payload.workspace as WorkspaceState);
-        }
+        deps.logDebug?.("Ignored webview workspaceChanged to keep host-authoritative writes.", {
+          datasetPath,
+          reason: message.payload.reason
+        });
         return;
       }
 
@@ -70,15 +71,31 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           return;
         }
 
-        const cachedWorkspace =
-          deps.getCachedWorkspace?.(datasetPath) ??
-          createWorkspaceState(normalizedDataset.defaultXSignal);
-
+        let previousWorkspace: WorkspaceState;
         let nextWorkspace: WorkspaceState;
         try {
-          nextWorkspace = applyDropSignalAction(cachedWorkspace, message.payload, {
-            sourceId: toTraceSourceId(datasetPath, message.payload.signal)
-          });
+          if (deps.commitHostStateTransaction) {
+            const transaction = deps.commitHostStateTransaction({
+              datasetPath,
+              defaultXSignal: normalizedDataset.defaultXSignal,
+              reason: `dropSignal:${message.payload.source}`,
+              mutate: (workspace) =>
+                applyDropSignalAction(workspace, message.payload, {
+                  sourceId: toTraceSourceId(datasetPath, message.payload.signal)
+                })
+            });
+            previousWorkspace = transaction.previous.workspace;
+            nextWorkspace = transaction.next.workspace;
+          } else {
+            const cachedWorkspace =
+              deps.getCachedWorkspace?.(datasetPath) ??
+              createWorkspaceState(normalizedDataset.defaultXSignal);
+            previousWorkspace = cachedWorkspace;
+            nextWorkspace = applyDropSignalAction(cachedWorkspace, message.payload, {
+              sourceId: toTraceSourceId(datasetPath, message.payload.signal)
+            });
+            deps.setCachedWorkspace?.(datasetPath, nextWorkspace);
+          }
         } catch (error) {
           deps.logDebug?.("Ignored invalid webview dropSignal message payload.", {
             payload: message.payload,
@@ -87,8 +104,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
           return;
         }
 
-        deps.setCachedWorkspace?.(datasetPath, nextWorkspace);
-        for (const trace of getAddedTraces(cachedWorkspace, nextWorkspace)) {
+        for (const trace of getAddedTraces(previousWorkspace, nextWorkspace)) {
           void panel.webview.postMessage(
             createProtocolEnvelope(
               "host/sidePanelTraceInjected",

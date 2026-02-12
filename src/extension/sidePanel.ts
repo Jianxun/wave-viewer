@@ -1,7 +1,7 @@
 import * as path from "node:path";
 
 import { createProtocolEnvelope } from "../core/dataset/types";
-import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
+import type { WorkspaceState } from "../webview/state/workspaceState";
 import { applySidePanelSignalAction } from "./workspaceActions";
 import type {
   HostToWebviewMessage,
@@ -246,19 +246,24 @@ export function createNoTargetViewerWarning(
 export function runResolvedSidePanelSignalAction(
   deps: RunResolvedSidePanelSignalActionDeps
 ): WorkspaceState {
-  const workspace =
-    deps.getCachedWorkspace(deps.documentPath) ?? createWorkspaceState(deps.loadedDataset.defaultXSignal);
-  const nextWorkspace = applySidePanelSignalAction(
-    workspace,
-    {
-      type: deps.actionType,
-      signal: deps.signal
-    },
-    {
-      sourceId: toTraceSourceId(deps.documentPath, deps.signal)
-    }
-  );
-  deps.setCachedWorkspace(deps.documentPath, nextWorkspace);
+  const transaction = deps.commitHostStateTransaction({
+    datasetPath: deps.documentPath,
+    defaultXSignal: deps.loadedDataset.defaultXSignal,
+    reason: `sidePanel:${deps.actionType}`,
+    mutate: (workspace) =>
+      applySidePanelSignalAction(
+        workspace,
+        {
+          type: deps.actionType,
+          signal: deps.signal
+        },
+        {
+          sourceId: toTraceSourceId(deps.documentPath, deps.signal)
+        }
+      )
+  });
+  const workspace = transaction.previous.workspace;
+  const nextWorkspace = transaction.next.workspace;
 
   const boundPanel = deps.getBoundPanel(deps.documentPath);
   const standalonePanel = deps.getStandalonePanel();
@@ -303,7 +308,7 @@ export function runResolvedSidePanelSignalAction(
   void panel.webview.postMessage(
     createProtocolEnvelope("host/workspacePatched", {
       workspace: nextWorkspace,
-      reason: `sidePanel:${deps.actionType}`
+      reason: transaction.reason
     })
   );
 

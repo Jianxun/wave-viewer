@@ -25,6 +25,7 @@ import {
   runResolvedSidePanelQuickAdd,
   runResolvedSidePanelSignalAction
 } from "./extension/sidePanel";
+import { createHostStateStore } from "./extension/hostStateStore";
 import {
   createExportSpecCommand,
   createImportSpecCommand,
@@ -37,7 +38,6 @@ import {
 import { buildWebviewHtml } from "./extension/webviewHtml";
 import { createViewerSessionRegistry } from "./extension/viewerSessions";
 import { applyDropSignalAction, applySidePanelSignalAction } from "./extension/workspaceActions";
-import { createWorkspaceState, type WorkspaceState } from "./webview/state/workspaceState";
 import type { LoadedDatasetRecord, WebviewPanelLike } from "./extension/types";
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
@@ -57,6 +57,7 @@ export {
   applyDropSignalAction,
   applySidePanelSignalAction,
   buildWebviewHtml,
+  createHostStateStore,
   createExportSpecCommand,
   createImportSpecCommand,
   createLoadCsvFilesCommand,
@@ -87,7 +88,7 @@ function loadVscode(): typeof VSCode {
 
 export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
-  const workspaceByDatasetPath = new Map<string, WorkspaceState>();
+  const hostStateStore = createHostStateStore();
   const viewerSessions = createViewerSessionRegistry();
   const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
   const removedDatasetPathSet = new Set<string>();
@@ -158,10 +159,7 @@ export function activate(context: VSCode.ExtensionContext): void {
         documentPath: selection.documentPath,
         loadedDataset: selection.loadedDataset,
         signal: selection.signal,
-        getCachedWorkspace: (documentPath) => workspaceByDatasetPath.get(documentPath),
-        setCachedWorkspace: (documentPath, workspace) => {
-          workspaceByDatasetPath.set(documentPath, workspace);
-        },
+        commitHostStateTransaction: (transaction) => hostStateStore.commitTransaction(transaction),
         getBoundPanel: () => {
           const target = viewerSessions.resolveTargetViewerSession(selection.documentPath);
           return target && !target.bindDataset ? target.panel : undefined;
@@ -209,14 +207,16 @@ export function activate(context: VSCode.ExtensionContext): void {
 
     const targetViewer = viewerSessions.resolveTargetViewerSession(selection.documentPath);
     if (!targetViewer) {
-      const workspace =
-        workspaceByDatasetPath.get(selection.documentPath) ??
-        createWorkspaceState(selection.loadedDataset.defaultXSignal);
-      const nextWorkspace = applySidePanelSignalAction(workspace, {
-        type: "add-to-plot",
-        signal: selection.signal
+      hostStateStore.commitTransaction({
+        datasetPath: selection.documentPath,
+        defaultXSignal: selection.loadedDataset.defaultXSignal,
+        reason: "sidePanel:quick-add",
+        mutate: (workspace) =>
+          applySidePanelSignalAction(workspace, {
+            type: "add-to-plot",
+            signal: selection.signal
+          })
       });
-      workspaceByDatasetPath.set(selection.documentPath, nextWorkspace);
       return;
     }
 
@@ -247,10 +247,14 @@ export function activate(context: VSCode.ExtensionContext): void {
     onDatasetLoaded: (documentPath, loaded) => {
       registerLoadedDataset(documentPath, loaded);
     },
-    getCachedWorkspace: (documentPath) => workspaceByDatasetPath.get(documentPath),
+    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     setCachedWorkspace: (documentPath, workspace) => {
-      workspaceByDatasetPath.set(documentPath, workspace);
+      hostStateStore.setWorkspace(documentPath, workspace);
     },
+    getHostStateSnapshot: (documentPath) => hostStateStore.getSnapshot(documentPath),
+    ensureHostStateSnapshot: (documentPath, defaultXSignal) =>
+      hostStateStore.ensureSnapshot(documentPath, defaultXSignal),
+    commitHostStateTransaction: (transaction) => hostStateStore.commitTransaction(transaction),
     createPanel: () =>
       vscode.window.createWebviewPanel("waveViewer.main", "Wave Viewer", vscode.ViewColumn.Beside, {
         enableScripts: true,
@@ -270,7 +274,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const exportSpecCommand = createExportSpecCommand({
     getActiveDocument: () => vscode.window.activeTextEditor?.document,
     loadDataset,
-    getCachedWorkspace: (documentPath) => workspaceByDatasetPath.get(documentPath),
+    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     },
@@ -294,7 +298,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     getActiveDocument: () => vscode.window.activeTextEditor?.document,
     loadDataset,
     setCachedWorkspace: (documentPath, workspace) => {
-      workspaceByDatasetPath.set(documentPath, workspace);
+      hostStateStore.setWorkspace(documentPath, workspace);
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
