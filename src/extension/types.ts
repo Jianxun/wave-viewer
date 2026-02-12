@@ -212,6 +212,43 @@ export type ViewerSessionContext = {
   layoutUri: string;
 };
 
+export type LayoutSelfWriteMetadata = {
+  layoutUri: string;
+  tempUri: string;
+  nonce: string;
+  revision: number;
+  writtenAtMs: number;
+  mtimeMs: number;
+  sizeBytes: number;
+  contentHash: string;
+};
+
+export type LayoutAutosaveSnapshot = {
+  datasetPath: string;
+  workspace: WorkspaceState;
+  revision: number;
+};
+
+export type LayoutAutosavePersistInput = LayoutAutosaveSnapshot & {
+  layoutUri: string;
+};
+
+export type LayoutAutosaveControllerDeps = {
+  debounceMs?: number;
+  resolveLayoutBinding(
+    datasetPath: string
+  ): { layoutUri: string } | undefined;
+  persistLayout(input: LayoutAutosavePersistInput): LayoutSelfWriteMetadata;
+  logDebug?(message: string, details?: unknown): void;
+};
+
+export type LayoutAutosaveController = {
+  schedule(snapshot: LayoutAutosaveSnapshot): void;
+  flush(datasetPath?: string): void;
+  getLastSelfWriteMetadata(layoutUri: string): LayoutSelfWriteMetadata | undefined;
+  dispose(): void;
+};
+
 export type ViewerSessionRegistry = {
   registerPanel(panel: WebviewPanelLike, datasetPath?: string): string;
   bindViewerToDataset(viewerId: string, datasetPath: string): void;

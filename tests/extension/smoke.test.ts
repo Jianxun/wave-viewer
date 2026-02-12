@@ -15,8 +15,10 @@ import {
   createLoadCsvFilesCommand,
   createHostStateStore,
   createOpenViewerCommand,
+  createLayoutAutosaveController,
   createRemoveLoadedFileCommand,
   createReloadAllLoadedFilesCommand,
+  writeLayoutFileAtomically,
   isCsvFile,
   LOAD_CSV_FILES_COMMAND,
   OPEN_VIEWER_COMMAND,
@@ -857,6 +859,85 @@ describe("T-046 explicit layout commands", () => {
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer layout saved to /workspace/layouts/lab-alt.wave-viewer.yaml"
     );
+  });
+});
+
+describe("T-047 layout autosave persistence", () => {
+  it("debounces autosave writes and persists the latest workspace revision", () => {
+    vi.useFakeTimers();
+    try {
+      const persistLayout = vi.fn(() => ({
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml",
+        tempUri: "/workspace/layouts/lab.wave-viewer.yaml.tmp-1",
+        nonce: "nonce-1",
+        revision: 0,
+        writtenAtMs: Date.now(),
+        mtimeMs: Date.now(),
+        sizeBytes: 128,
+        contentHash: "hash"
+      }));
+      const autosave = createLayoutAutosaveController({
+        debounceMs: 100,
+        resolveLayoutBinding: () => ({
+          layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+        }),
+        persistLayout
+      });
+
+      const workspaceOne = createWorkspaceFixture();
+      const workspaceTwo = reduceWorkspaceState(workspaceOne, {
+        type: "plot/rename",
+        payload: { plotId: "plot-1", name: "Renamed Plot" }
+      });
+
+      autosave.schedule({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        workspace: workspaceOne,
+        revision: 1
+      });
+      autosave.schedule({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        workspace: workspaceTwo,
+        revision: 2
+      });
+
+      vi.advanceTimersByTime(99);
+      expect(persistLayout).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(persistLayout).toHaveBeenCalledTimes(1);
+      expect(persistLayout).toHaveBeenCalledWith({
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml",
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        workspace: workspaceTwo,
+        revision: 2
+      });
+      expect(
+        autosave.getLastSelfWriteMetadata("/workspace/layouts/lab.wave-viewer.yaml")?.revision
+      ).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("writes layout files atomically through temp-then-rename", () => {
+    const tempDir = fs.mkdtempSync(path.join(process.cwd(), ".tmp-layout-atomic-"));
+    const layoutPath = path.join(tempDir, "lab.wave-viewer.yaml");
+
+    try {
+      const metadata = writeLayoutFileAtomically(layoutPath, "version: 1");
+
+      expect(fs.existsSync(layoutPath)).toBe(true);
+      expect(fs.readFileSync(layoutPath, "utf8")).toBe("version: 1\n");
+      expect(metadata.layoutUri).toBe(layoutPath);
+      expect(metadata.tempUri).toContain(`${layoutPath}.tmp-`);
+      expect(metadata.sizeBytes).toBeGreaterThan(0);
+      expect(metadata.contentHash.length).toBeGreaterThan(0);
+      const siblingNames = fs.readdirSync(tempDir);
+      expect(siblingNames).toEqual(["lab.wave-viewer.yaml"]);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 

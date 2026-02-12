@@ -1,8 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import type * as VSCode from "vscode";
 
 import type { Dataset } from "./core/dataset/types";
+import { exportPlotSpecV1 } from "./core/spec/exportSpec";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
 import {
@@ -45,7 +47,16 @@ import {
   applySetTraceAxisAction,
   applySidePanelSignalAction
 } from "./extension/workspaceActions";
-import type { LoadedDatasetRecord, WebviewPanelLike } from "./extension/types";
+import type { WorkspaceState } from "./webview/state/workspaceState";
+import type {
+  LayoutAutosaveController,
+  LayoutAutosaveControllerDeps,
+  LayoutAutosavePersistInput,
+  LayoutAutosaveSnapshot,
+  LayoutSelfWriteMetadata,
+  LoadedDatasetRecord,
+  WebviewPanelLike
+} from "./extension/types";
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
 export const OPEN_LAYOUT_COMMAND = "waveViewer.openLayout";
@@ -89,12 +100,125 @@ export {
 export type {
   CommandDeps,
   HostToWebviewMessage,
+  LayoutAutosaveController,
+  LayoutAutosaveControllerDeps,
+  LayoutAutosavePersistInput,
+  LayoutAutosaveSnapshot,
+  LayoutSelfWriteMetadata,
   LoadedDatasetRecord,
   SidePanelSignalAction,
   ViewerSessionRegistry,
   WebviewLike,
   WebviewPanelLike
 } from "./extension/types";
+
+const DEFAULT_LAYOUT_AUTOSAVE_DEBOUNCE_MS = 200;
+
+export function toDeterministicLayoutYaml(datasetPath: string, workspace: WorkspaceState): string {
+  const yamlText = exportPlotSpecV1({ datasetPath, workspace });
+  return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
+}
+
+export function writeLayoutFileAtomically(
+  layoutUri: string,
+  yamlText: string,
+  revision = 0
+): LayoutSelfWriteMetadata {
+  const normalizedYamlText = yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
+  const nonce = randomUUID();
+  const tempUri = `${layoutUri}.tmp-${process.pid}-${nonce}`;
+  fs.writeFileSync(tempUri, normalizedYamlText, "utf8");
+  try {
+    fs.renameSync(tempUri, layoutUri);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempUri);
+    } catch {
+      // Ignore cleanup failures because the original write error is primary.
+    }
+    throw error;
+  }
+  const stats = fs.statSync(layoutUri);
+  return {
+    layoutUri,
+    tempUri,
+    nonce,
+    revision,
+    writtenAtMs: Date.now(),
+    mtimeMs: stats.mtimeMs,
+    sizeBytes: stats.size,
+    contentHash: createHash("sha256").update(normalizedYamlText).digest("hex")
+  };
+}
+
+export function createLayoutAutosaveController(
+  deps: LayoutAutosaveControllerDeps
+): LayoutAutosaveController {
+  const debounceMs = deps.debounceMs ?? DEFAULT_LAYOUT_AUTOSAVE_DEBOUNCE_MS;
+  const pendingByDatasetPath = new Map<
+    string,
+    {
+      timer: ReturnType<typeof setTimeout>;
+      payload: LayoutAutosavePersistInput;
+    }
+  >();
+  const lastSelfWriteByLayoutUri = new Map<string, LayoutSelfWriteMetadata>();
+
+  const flushDatasetPath = (datasetPath: string): void => {
+    const pending = pendingByDatasetPath.get(datasetPath);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    pendingByDatasetPath.delete(datasetPath);
+    const metadata = deps.persistLayout(pending.payload);
+    lastSelfWriteByLayoutUri.set(metadata.layoutUri, metadata);
+  };
+
+  return {
+    schedule(snapshot) {
+      const binding = deps.resolveLayoutBinding(snapshot.datasetPath);
+      if (!binding) {
+        deps.logDebug?.("Skipped layout autosave because no bound layout was resolved.", {
+          datasetPath: snapshot.datasetPath,
+          revision: snapshot.revision
+        });
+        return;
+      }
+
+      const existingPending = pendingByDatasetPath.get(snapshot.datasetPath);
+      if (existingPending) {
+        clearTimeout(existingPending.timer);
+      }
+      const payload: LayoutAutosavePersistInput = {
+        layoutUri: binding.layoutUri,
+        datasetPath: snapshot.datasetPath,
+        workspace: snapshot.workspace,
+        revision: snapshot.revision
+      };
+      const timer = setTimeout(() => flushDatasetPath(snapshot.datasetPath), debounceMs);
+      pendingByDatasetPath.set(snapshot.datasetPath, { timer, payload });
+    },
+    flush(datasetPath) {
+      if (datasetPath) {
+        flushDatasetPath(datasetPath);
+        return;
+      }
+      for (const pathKey of Array.from(pendingByDatasetPath.keys())) {
+        flushDatasetPath(pathKey);
+      }
+    },
+    getLastSelfWriteMetadata(layoutUri) {
+      return lastSelfWriteByLayoutUri.get(layoutUri);
+    },
+    dispose() {
+      for (const pending of pendingByDatasetPath.values()) {
+        clearTimeout(pending.timer);
+      }
+      pendingByDatasetPath.clear();
+    }
+  };
+}
 
 function loadVscode(): typeof VSCode {
   return require("vscode") as typeof VSCode;
@@ -104,10 +228,44 @@ export function activate(context: VSCode.ExtensionContext): void {
   const vscode = loadVscode();
   const hostStateStore = createHostStateStore();
   const viewerSessions = createViewerSessionRegistry();
+  const layoutAutosave = createLayoutAutosaveController({
+    resolveLayoutBinding: (datasetPath) => {
+      const target = viewerSessions.resolveTargetViewerSession(datasetPath);
+      if (!target || target.bindDataset) {
+        return undefined;
+      }
+      const sessionContext = viewerSessions.getViewerSessionContext(target.viewerId);
+      if (!sessionContext) {
+        return undefined;
+      }
+      return { layoutUri: sessionContext.layoutUri };
+    },
+    persistLayout: (input) =>
+      writeLayoutFileAtomically(
+        input.layoutUri,
+        toDeterministicLayoutYaml(input.datasetPath, input.workspace),
+        input.revision
+      ),
+    logDebug: (message, details) => {
+      console.debug(`[wave-viewer] ${message}`, details);
+    }
+  });
   const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
   const removedDatasetPathSet = new Set<string>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
   const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
+
+  const commitHostStateTransaction = (
+    transaction: Parameters<typeof hostStateStore.commitTransaction>[0]
+  ) => {
+    const result = hostStateStore.commitTransaction(transaction);
+    layoutAutosave.schedule({
+      datasetPath: transaction.datasetPath,
+      workspace: result.next.workspace,
+      revision: result.next.revision
+    });
+    return result;
+  };
 
   function refreshSignalTree(): void {
     const loadedDatasets = Array.from(loadedDatasetByPath.entries()).map(([datasetPath, loaded]) => ({
@@ -173,7 +331,7 @@ export function activate(context: VSCode.ExtensionContext): void {
         documentPath: selection.documentPath,
         loadedDataset: selection.loadedDataset,
         signal: selection.signal,
-        commitHostStateTransaction: (transaction) => hostStateStore.commitTransaction(transaction),
+        commitHostStateTransaction,
         getBoundPanel: () => {
           const target = viewerSessions.resolveTargetViewerSession(selection.documentPath);
           return target && !target.bindDataset ? target.panel : undefined;
@@ -224,7 +382,7 @@ export function activate(context: VSCode.ExtensionContext): void {
 
     const targetViewer = viewerSessions.resolveTargetViewerSession(selection.documentPath);
     if (!targetViewer) {
-      hostStateStore.commitTransaction({
+      commitHostStateTransaction({
         datasetPath: selection.documentPath,
         defaultXSignal: selection.loadedDataset.defaultXSignal,
         reason: "sidePanel:quick-add",
@@ -290,7 +448,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     getHostStateSnapshot: (documentPath) => hostStateStore.getSnapshot(documentPath),
     ensureHostStateSnapshot: (documentPath, defaultXSignal) =>
       hostStateStore.ensureSnapshot(documentPath, defaultXSignal),
-    commitHostStateTransaction: (transaction) => hostStateStore.commitTransaction(transaction),
+    commitHostStateTransaction,
     createPanel: () =>
       vscode.window.createWebviewPanel("waveViewer.main", "Wave Viewer", vscode.ViewColumn.Beside, {
         enableScripts: true,
@@ -391,7 +549,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     loadDataset,
     getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     writeTextFile: (filePath, text) => {
-      fs.writeFileSync(filePath, text, "utf8");
+      writeLayoutFileAtomically(filePath, text);
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
@@ -415,7 +573,7 @@ export function activate(context: VSCode.ExtensionContext): void {
       return result?.fsPath;
     },
     writeTextFile: (filePath, text) => {
-      fs.writeFileSync(filePath, text, "utf8");
+      writeLayoutFileAtomically(filePath, text);
     },
     bindViewerToLayout: (viewerId, layoutUri, datasetPath) => {
       viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
@@ -473,6 +631,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     dragAndDropController: createSignalTreeDragAndDropController(vscode)
   });
 
+  context.subscriptions.push({ dispose: () => layoutAutosave.dispose() });
   context.subscriptions.push(signalTreeView);
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_LAYOUT_COMMAND, openLayoutCommand));

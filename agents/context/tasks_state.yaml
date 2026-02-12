@@ -8,8 +8,8 @@ T-046:
   pr: 53
   merged: true
 T-047:
-  status: backlog
-  pr: null
+  status: review_clean
+  pr: 54
   merged: false
 T-048:
   status: backlog
