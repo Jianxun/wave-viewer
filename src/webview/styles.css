@@ -205,6 +205,22 @@ body {
   grid-template-columns: 1fr;
 }
 
+.trace-lane-body {
+  min-height: 36px;
+}
+
+.trace-chip-row {
+  grid-template-columns: minmax(80px, 1fr) auto auto;
+  padding: 6px 8px;
+  border: 1px solid #314768;
+  border-radius: 8px;
+  background: color-mix(in srgb, #1a2740 90%, #111826 10%);
+}
+
+.trace-chip-dragging {
+  opacity: 0.6;
+}
+
 .axis-row {
   grid-template-columns: minmax(150px, 220px) auto auto minmax(80px, 1fr) minmax(160px, 1fr) auto auto;
 }
