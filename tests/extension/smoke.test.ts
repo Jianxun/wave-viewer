@@ -879,6 +879,63 @@ describe("T-022 follow-up signal actions after remove", () => {
 });
 
 describe("T-018 normalized protocol handling", () => {
+  it("handles validated setActiveAxis intent via host transaction without mutating traces", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+    const { deps, panelFixture, setCachedWorkspace } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/setActiveAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        axisId: "y2",
+        requestId: "req-set-axis-1"
+      })
+    );
+
+    expect(setCachedWorkspace).not.toHaveBeenCalled();
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: initialWorkspace,
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y2"
+            }
+          },
+          reason: "setActiveAxis:lane-click"
+        }
+      }
+    ]);
+  });
+
   it("handles validated dropSignal intent via host transaction and posts statePatch", async () => {
     const { deps, panelFixture, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -1694,5 +1751,18 @@ describe("T-033 revisioned protocol semantics", () => {
     expect(source).toContain('if (message.type === "host/stateSnapshot")');
     expect(source).toContain('if (message.type === "host/statePatch")');
     expect(source).toContain('if (message.type === "host/tupleUpsert")');
+  });
+});
+
+describe("T-039 lane activation intent wiring", () => {
+  it("wires lane click activation from signal board to setActiveAxis intent", () => {
+    const webviewSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+    const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
+
+    expect(webviewSource).toContain('createProtocolEnvelope("webview/intent/setActiveAxis"');
+    expect(webviewSource).toContain("onActivateLane: (axisId) => postSetActiveAxis(axisId)");
+    expect(webviewSource).toContain("activeAxisId: preferredDropAxisId");
+    expect(signalListSource).toContain("props.onActivateLane(lane.axisId);");
+    expect(signalListSource).toContain('laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);');
   });
 });
