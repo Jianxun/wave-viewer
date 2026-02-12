@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createViewerSessionRegistry,
   createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
   createOpenViewerCommand,
@@ -25,6 +26,7 @@ import {
   type CommandDeps,
   type HostToWebviewMessage,
   type LoadedDatasetRecord,
+  type ViewerSessionRegistry,
   type WebviewLike,
   type WebviewPanelLike
 } from "../../src/extension";
@@ -59,6 +61,42 @@ function createPanelFixture(): PanelFixture {
     sentMessages,
     emitMessage: (message) => {
       listener?.(message);
+    }
+  };
+}
+
+function createRegistryPanelFixture(): {
+  panel: WebviewPanelLike;
+  emitDispose(): void;
+  emitFocus(active?: boolean): void;
+} {
+  let disposeListener: (() => void) | undefined;
+  let focusListener:
+    | ((event: { webviewPanel: WebviewPanelLike; active: boolean; visible: boolean }) => void)
+    | undefined;
+  const panel: WebviewPanelLike = {
+    webview: {
+      html: "",
+      cspSource: "vscode-resource:",
+      asWebviewUri: () => "vscode-resource:/dist/webview/main.js",
+      postMessage: async () => true,
+      onDidReceiveMessage: () => undefined
+    },
+    onDidDispose: (listener) => {
+      disposeListener = listener;
+    },
+    onDidChangeViewState: (listener) => {
+      focusListener = listener;
+    }
+  };
+
+  return {
+    panel,
+    emitDispose: () => {
+      disposeListener?.();
+    },
+    emitFocus: (active = true) => {
+      focusListener?.({ webviewPanel: panel, active, visible: true });
     }
   };
 }
@@ -940,5 +978,61 @@ describe("T-025 standalone viewer side-panel routing", () => {
     );
     expect(createNoTargetViewerWarning("add-to-plot", "/workspace/examples/simulations/ota.spice.csv"))
       .toContain("Open Wave Viewer for that CSV and retry.");
+  });
+});
+
+describe("T-026 viewer session registry", () => {
+  function selectTarget(registry: ViewerSessionRegistry, datasetPath: string): string | undefined {
+    return registry.resolveTargetViewerSession(datasetPath)?.viewerId;
+  }
+
+  it("routes to focused viewer for a dataset when multiple viewers are bound", () => {
+    const registry = createViewerSessionRegistry();
+    const panelA = createRegistryPanelFixture();
+    const panelB = createRegistryPanelFixture();
+    const viewerA = registry.registerPanel(panelA.panel, "/workspace/examples/a.csv");
+    const viewerB = registry.registerPanel(panelB.panel, "/workspace/examples/a.csv");
+
+    expect(selectTarget(registry, "/workspace/examples/a.csv")).toBe(viewerB);
+
+    registry.markViewerFocused(viewerA);
+    expect(selectTarget(registry, "/workspace/examples/a.csv")).toBe(viewerA);
+  });
+
+  it("uses focused standalone viewer as deterministic bind target before dataset-bound fallback", () => {
+    const registry = createViewerSessionRegistry();
+    const boundPanel = createRegistryPanelFixture();
+    const standalonePanel = createRegistryPanelFixture();
+    const boundViewer = registry.registerPanel(boundPanel.panel, "/workspace/examples/a.csv");
+    const standaloneViewer = registry.registerPanel(standalonePanel.panel);
+
+    registry.markViewerFocused(standaloneViewer);
+    const target = registry.resolveTargetViewerSession("/workspace/examples/a.csv");
+
+    expect(target?.viewerId).toBe(standaloneViewer);
+    expect(target?.bindDataset).toBe(true);
+
+    registry.markViewerFocused(boundViewer);
+    const rebound = registry.resolveTargetViewerSession("/workspace/examples/a.csv");
+    expect(rebound?.viewerId).toBe(boundViewer);
+    expect(rebound?.bindDataset).toBe(false);
+  });
+
+  it("cleans dataset and active-session indexes when a viewer is disposed", () => {
+    const registry = createViewerSessionRegistry();
+    const panelA = createRegistryPanelFixture();
+    const panelB = createRegistryPanelFixture();
+    const viewerA = registry.registerPanel(panelA.panel, "/workspace/examples/a.csv");
+    const viewerB = registry.registerPanel(panelB.panel, "/workspace/examples/a.csv");
+
+    registry.markViewerFocused(viewerA);
+    expect(registry.hasOpenPanelForDataset("/workspace/examples/a.csv")).toBe(true);
+
+    registry.removeViewer(viewerA);
+    expect(selectTarget(registry, "/workspace/examples/a.csv")).toBe(viewerB);
+
+    registry.removeViewer(viewerB);
+    expect(registry.hasOpenPanelForDataset("/workspace/examples/a.csv")).toBe(false);
+    expect(registry.getActiveViewerId()).toBeUndefined();
   });
 });
