@@ -1346,6 +1346,104 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("handles validated renamePlot intent via host transaction and trims the name", async () => {
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/renamePlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        name: "  Scope A  ",
+        requestId: "req-rename-plot-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Scope A",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y1"
+            }
+          },
+          reason: "renamePlot:tab-rename"
+        }
+      }
+    ]);
+  });
+
+  it("persists renamePlot after host patch and subsequent webview ready snapshot", async () => {
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/renamePlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        name: "Persistent Name",
+        requestId: "req-rename-plot-2"
+      })
+    );
+    panelFixture.emitMessage(createProtocolEnvelope("webview/ready", { ready: true }));
+
+    let latestSnapshot: HostToWebviewMessage | undefined;
+    for (const message of panelFixture.sentMessages) {
+      if (message.type === "host/stateSnapshot") {
+        latestSnapshot = message;
+      }
+    }
+    expect(latestSnapshot).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/stateSnapshot",
+      payload: {
+        revision: 1,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Persistent Name",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: {
+            "plot-1": "y1"
+          }
+        }
+      }
+    });
+  });
+
   it("ignores invalid dropSignal payloads and does not mutate workspace", async () => {
     const { deps, panelFixture, logDebug, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -2194,5 +2292,16 @@ describe("T-042 multi-plot quick-add targeting", () => {
 
     expect(source).toContain("message.payload.plotId && message.payload.axisId");
     expect(source).toContain("plotId: message.payload.plotId");
+  });
+});
+
+describe("T-043 plot rename host intent", () => {
+  it("routes tab rename through host intent posting and removes local-only rename dispatch", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain('createProtocolEnvelope("webview/intent/renamePlot"');
+    expect(source).toContain("onRename: (plotId) =>");
+    expect(source).toContain("postRenamePlot(plotId, nextName)");
+    expect(source).not.toContain('dispatch({ type: "plot/rename"');
   });
 });
