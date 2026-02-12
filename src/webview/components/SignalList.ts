@@ -5,13 +5,16 @@ export type SignalListProps = {
   container: HTMLElement;
   axes: AxisState[];
   traces: TraceState[];
+  onSetAxis(traceId: string, axisId: AxisId): void;
+  onSetVisible(traceId: string, visible: boolean): void;
+  onRemove(traceId: string): void;
 };
 
 export type SignalPanelModel = {
   lanes: Array<{
     axisId: AxisId;
     axisLabel: string;
-    assignedSignals: string[];
+    traceChips: TraceState[];
   }>;
 };
 
@@ -19,25 +22,43 @@ export function buildSignalPanelModel(payload: {
   axes: AxisState[];
   traces: TraceState[];
 }): SignalPanelModel {
-  const signalsByAxis = new Map<AxisId, string[]>();
+  const tracesByAxis = new Map<AxisId, TraceState[]>();
   for (const axis of payload.axes) {
-    signalsByAxis.set(axis.id, []);
+    tracesByAxis.set(axis.id, []);
   }
 
   for (const trace of payload.traces) {
-    const assignedSignals = signalsByAxis.get(trace.axisId);
-    if (!assignedSignals) {
+    const assignedTraces = tracesByAxis.get(trace.axisId);
+    if (!assignedTraces) {
       continue;
     }
-    assignedSignals.push(trace.signal);
+    assignedTraces.push(trace);
   }
 
   return {
     lanes: payload.axes.map((axis) => ({
       axisId: axis.id,
       axisLabel: formatAxisOptionLabel(payload.axes, axis.id),
-      assignedSignals: signalsByAxis.get(axis.id) ?? []
+      traceChips: tracesByAxis.get(axis.id) ?? []
     }))
+  };
+}
+
+export function resolveTraceLaneReassignment(payload: {
+  traces: TraceState[];
+  traceId: string;
+  targetAxisId: AxisId;
+}): { traceId: string; axisId: AxisId } | undefined {
+  const trace = payload.traces.find((entry) => entry.id === payload.traceId);
+  if (!trace) {
+    return undefined;
+  }
+  if (trace.axisId === payload.targetAxisId) {
+    return undefined;
+  }
+  return {
+    traceId: trace.id,
+    axisId: payload.targetAxisId
   };
 }
 
@@ -49,18 +70,90 @@ export function renderSignalList(props: SignalListProps): void {
   });
 
   for (const lane of model.lanes) {
-    const laneSection = createSection(`Assigned to ${lane.axisLabel}`);
-    if (lane.assignedSignals.length === 0) {
-      laneSection.body.appendChild(createMutedText("No signals assigned to this lane."));
+    const laneSection = createSection(lane.axisLabel);
+    laneSection.body.classList.add("trace-lane-body", "drop-target");
+    laneSection.body.dataset.axisId = lane.axisId;
+
+    laneSection.body.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer) {
+        return;
+      }
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      laneSection.body.classList.add("drop-active");
+    });
+
+    laneSection.body.addEventListener("dragleave", (event) => {
+      const nextTarget = event.relatedTarget as Node | null;
+      if (nextTarget && laneSection.body.contains(nextTarget)) {
+        return;
+      }
+      laneSection.body.classList.remove("drop-active");
+    });
+
+    laneSection.body.addEventListener("drop", (event) => {
+      laneSection.body.classList.remove("drop-active");
+      if (!event.dataTransfer) {
+        return;
+      }
+
+      const traceId = event.dataTransfer.getData("text/wave-viewer-trace-id");
+      const reassignment = resolveTraceLaneReassignment({
+        traces: props.traces,
+        traceId,
+        targetAxisId: lane.axisId
+      });
+      if (!reassignment) {
+        return;
+      }
+
+      event.preventDefault();
+      props.onSetAxis(reassignment.traceId, reassignment.axisId);
+    });
+
+    if (lane.traceChips.length === 0) {
+      laneSection.body.appendChild(createMutedText("No traces assigned."));
     } else {
-      for (const signal of lane.assignedSignals) {
-        const row = document.createElement("div");
-        row.className = "list-row signal-assigned-row";
+      for (const trace of lane.traceChips) {
+        const chip = document.createElement("div");
+        chip.className = "list-row trace-chip-row";
+        chip.draggable = true;
+        chip.dataset.traceId = trace.id;
+        chip.addEventListener("dragstart", (event) => {
+          event.dataTransfer?.setData("text/wave-viewer-trace-id", trace.id);
+          event.dataTransfer?.setData("text/plain", trace.id);
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+          }
+          chip.classList.add("trace-chip-dragging");
+        });
+        chip.addEventListener("dragend", () => {
+          chip.classList.remove("trace-chip-dragging");
+          laneSection.body.classList.remove("drop-active");
+        });
+
         const name = document.createElement("span");
         name.className = "signal-name";
-        name.textContent = signal;
-        row.appendChild(name);
-        laneSection.body.appendChild(row);
+        name.textContent = trace.signal;
+
+        const visibleToggle = document.createElement("label");
+        visibleToggle.className = "inline-toggle";
+        const toggleInput = document.createElement("input");
+        toggleInput.type = "checkbox";
+        toggleInput.checked = trace.visible;
+        toggleInput.addEventListener("change", () => props.onSetVisible(trace.id, toggleInput.checked));
+        const toggleText = document.createElement("span");
+        toggleText.textContent = "Visible";
+        visibleToggle.append(toggleInput, toggleText);
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "chip-button";
+        removeButton.textContent = "Remove";
+        removeButton.addEventListener("click", () => props.onRemove(trace.id));
+
+        chip.append(name, visibleToggle, removeButton);
+        laneSection.body.appendChild(chip);
       }
     }
     props.container.appendChild(laneSection.section);
@@ -84,7 +177,7 @@ function createSection(titleText: string): { section: HTMLElement; body: HTMLEle
 
   const title = document.createElement("h3");
   title.className = "signal-panel-section-title";
-  title.textContent = titleText;
+  title.textContent = `Lane ${titleText}`;
 
   const body = document.createElement("div");
   body.className = "list-stack";

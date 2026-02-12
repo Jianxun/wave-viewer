@@ -9,7 +9,6 @@ import {
 import { renderAxisManager } from "./components/AxisManager";
 import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
-import { renderTraceList } from "./components/TraceList";
 import {
   getAxisLaneDomains,
   parseRelayoutRanges,
@@ -68,7 +67,6 @@ const activePlotTitleEl = getRequiredElement("active-plot-title");
 const bridgeStatusEl = getRequiredElement("bridge-status");
 const datasetStatusEl = getRequiredElement("dataset-status");
 const signalListEl = getRequiredElement("signal-list");
-const traceListEl = getRequiredElement("trace-list");
 const axisManagerEl = getRequiredElement("axis-manager");
 const plotCanvasEl = getRequiredElement("plot-canvas");
 const plotRootEl = getRequiredElement("plot-root");
@@ -254,13 +252,7 @@ async function renderWorkspace(): Promise<void> {
   renderSignalList({
     container: signalListEl,
     axes: activePlot.axes,
-    traces: activePlot.traces
-  });
-
-  renderTraceList({
-    container: traceListEl,
     traces: activePlot.traces,
-    axes: activePlot.axes,
     onSetAxis: (traceId, axisId) => dispatch({ type: "trace/setAxis", payload: { traceId, axisId } }),
     onSetVisible: (traceId, visible) =>
       dispatch({ type: "trace/setVisible", payload: { traceId, visible } }),

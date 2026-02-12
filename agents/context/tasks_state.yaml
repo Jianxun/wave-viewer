@@ -1,8 +1,8 @@
 schema_version: 2
 T-038:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 44
+  merged: true
 T-039:
   status: ready
   pr: null

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { buildSignalPanelModel } from "../../../src/webview/components/SignalList";
+import {
+  buildSignalPanelModel,
+  resolveTraceLaneReassignment
+} from "../../../src/webview/components/SignalList";
 import {
   addAxis,
   addTrace,
@@ -12,24 +15,41 @@ import {
   removeTrace
 } from "../../../src/webview/state/workspaceState";
 
-describe("signal panel model", () => {
-  it("groups assigned signals by lane order", () => {
+describe("signal lane board model", () => {
+  it("groups trace chips by lane order and preserves duplicate signal instances by trace id", () => {
     let workspace = createWorkspaceState("time");
     workspace = addAxis(workspace, {});
-    workspace = addTrace(workspace, { signal: "vin", axisId: "y2" });
-    workspace = addTrace(workspace, { signal: "vout", axisId: "y1" });
-    workspace = addTrace(workspace, { signal: "vin", axisId: "y2" });
+    workspace = addTrace(workspace, {
+      signal: "vin",
+      sourceId: "/workspace/examples/a.csv::vin",
+      axisId: "y2"
+    });
+    workspace = addTrace(workspace, {
+      signal: "vout",
+      sourceId: "/workspace/examples/a.csv::vout",
+      axisId: "y1"
+    });
+    workspace = addTrace(workspace, {
+      signal: "vin",
+      sourceId: "/workspace/examples/b.csv::vin",
+      axisId: "y2"
+    });
 
     const activePlot = workspace.plots[0]!;
     const model = buildSignalPanelModel({
       axes: activePlot.axes,
       traces: activePlot.traces
     });
+    const [y1, y2] = model.lanes;
 
-    expect(model.lanes).toEqual([
-      { axisId: "y1", axisLabel: "Y1 (Lane 1)", assignedSignals: ["vout"] },
-      { axisId: "y2", axisLabel: "Y2 (Lane 2)", assignedSignals: ["vin", "vin"] }
-    ]);
+    expect(y1?.axisId).toBe("y1");
+    expect(y1?.traceChips).toHaveLength(1);
+    expect(y1?.traceChips[0]).toMatchObject({ signal: "vout", axisId: "y1", visible: true });
+    expect(y2?.axisId).toBe("y2");
+    expect(y2?.traceChips).toHaveLength(2);
+    expect(y2?.traceChips[0]?.signal).toBe("vin");
+    expect(y2?.traceChips[1]?.signal).toBe("vin");
+    expect(y2?.traceChips[0]?.id).not.toBe(y2?.traceChips[1]?.id);
   });
 
   it("remains deterministic across reassign, reorder, and remove operations", () => {
@@ -51,14 +71,61 @@ describe("signal panel model", () => {
       axes: activePlot.axes,
       traces: activePlot.traces
     });
+    const [lane0, lane1, lane2] = model.lanes;
 
-    expect(model.lanes).toEqual([
-      { axisId: "y2", axisLabel: "Y2 (Lane 1)", assignedSignals: ["vout", "vref"] },
-      { axisId: "y1", axisLabel: "Y1 (Lane 2)", assignedSignals: [] },
-      { axisId: "y3", axisLabel: "Y3 (Lane 3)", assignedSignals: [] }
-    ]);
+    expect(lane0).toMatchObject({ axisId: "y2", axisLabel: "Y2 (Lane 1)" });
+    expect(lane0?.traceChips.map((trace) => trace.signal)).toEqual(["vout", "vref"]);
+    expect(lane1).toMatchObject({ axisId: "y1", axisLabel: "Y1 (Lane 2)" });
+    expect(lane1?.traceChips).toEqual([]);
+    expect(lane2).toMatchObject({ axisId: "y3", axisLabel: "Y3 (Lane 3)" });
+    expect(lane2?.traceChips).toEqual([]);
+  });
+});
+
+describe("signal lane drag reassignment", () => {
+  it("returns trace axis reassignment payload only when dropping onto a new lane", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, { signal: "vin", axisId: "y1" });
+    const activePlot = workspace.plots[0]!;
+    const traceId = activePlot.traces[0]!.id;
+
+    expect(
+      resolveTraceLaneReassignment({
+        traces: activePlot.traces,
+        traceId,
+        targetAxisId: "y2"
+      })
+    ).toEqual({ traceId, axisId: "y2" });
+
+    expect(
+      resolveTraceLaneReassignment({
+        traces: activePlot.traces,
+        traceId,
+        targetAxisId: "y1"
+      })
+    ).toBeUndefined();
+
+    expect(
+      resolveTraceLaneReassignment({
+        traces: activePlot.traces,
+        traceId: "trace-missing",
+        targetAxisId: "y2"
+      })
+    ).toBeUndefined();
   });
 
+  it("wires draggable trace chips and lane drop targets in signal list rendering", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
+
+    expect(source).toContain("chip.draggable = true;");
+    expect(source).toContain("laneSection.body.dataset.axisId = lane.axisId;");
+    expect(source).toContain("props.onSetAxis(reassignment.traceId, reassignment.axisId);");
+    expect(source).toContain('event.dataTransfer?.setData("text/wave-viewer-trace-id", trace.id);');
+  });
+});
+
+describe("signal panel model", () => {
   it("adds an active-axis row marker in axis manager rendering", () => {
     const source = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
     const css = fs.readFileSync(path.resolve("src/webview/styles.css"), "utf8");
