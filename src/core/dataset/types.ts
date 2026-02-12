@@ -15,6 +15,16 @@ export type DatasetMetadata = {
   columns: Array<{ name: string }>;
 };
 
+export type SidePanelTraceTuplePayload = {
+  traceId: string;
+  sourceId: string;
+  datasetPath: string;
+  xName: string;
+  yName: string;
+  x: number[];
+  y: number[];
+};
+
 export const PROTOCOL_VERSION = 1 as const;
 
 export type ProtocolEnvelope<TType extends string, TPayload> = {
@@ -25,10 +35,12 @@ export type ProtocolEnvelope<TType extends string, TPayload> = {
 
 export type HostToWebviewMessageType =
   | "host/init"
+  | "host/viewerBindingUpdated"
   | "host/datasetLoaded"
   | "host/workspaceLoaded"
   | "host/workspacePatched"
-  | "host/sidePanelQuickAdd";
+  | "host/sidePanelQuickAdd"
+  | "host/sidePanelTraceInjected";
 
 export type WebviewToHostMessageType =
   | "webview/ready"
@@ -38,6 +50,7 @@ export type WebviewToHostMessageType =
 
 export type ParsedHostToWebviewMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
+  | ProtocolEnvelope<"host/viewerBindingUpdated", { viewerId: string; datasetPath?: string }>
   | ProtocolEnvelope<
       "host/datasetLoaded",
       {
@@ -50,7 +63,11 @@ export type ParsedHostToWebviewMessage =
     >
   | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceStateLike }>
   | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceStateLike; reason: string }>
-  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>;
+  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
+  | ProtocolEnvelope<
+      "host/sidePanelTraceInjected",
+      { viewerId: string; trace: SidePanelTraceTuplePayload }
+    >;
 
 export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<"webview/ready", Record<string, unknown>>
@@ -155,10 +172,12 @@ function isEnvelope(value: unknown): value is ProtocolEnvelope<string, unknown> 
 function isHostMessageType(type: string): type is HostToWebviewMessageType {
   return (
     type === "host/init" ||
+    type === "host/viewerBindingUpdated" ||
     type === "host/datasetLoaded" ||
     type === "host/workspaceLoaded" ||
     type === "host/workspacePatched" ||
-    type === "host/sidePanelQuickAdd"
+    type === "host/sidePanelQuickAdd" ||
+    type === "host/sidePanelTraceInjected"
   );
 }
 
@@ -177,7 +196,14 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
   }
 
   if (type === "host/init") {
-    return typeof payload.title === "string";
+    return isNonEmptyString(payload.title);
+  }
+
+  if (type === "host/viewerBindingUpdated") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      (payload.datasetPath === undefined || isNonEmptyString(payload.datasetPath))
+    );
   }
 
   if (type === "host/datasetLoaded") {
@@ -203,7 +229,11 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
   }
 
   if (type === "host/sidePanelQuickAdd") {
-    return typeof payload.signal === "string" && payload.signal.trim().length > 0;
+    return isNonEmptyString(payload.signal);
+  }
+
+  if (type === "host/sidePanelTraceInjected") {
+    return isNonEmptyString(payload.viewerId) && isSidePanelTraceTuplePayload(payload.trace);
   }
 
   return isWorkspaceStateLike(payload.workspace);
@@ -249,6 +279,36 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isFiniteNumericArray(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
+  );
+}
+
+function isSidePanelTraceTuplePayload(value: unknown): value is SidePanelTraceTuplePayload {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    !isNonEmptyString(value.traceId) ||
+    !isNonEmptyString(value.sourceId) ||
+    !isNonEmptyString(value.datasetPath) ||
+    !isNonEmptyString(value.xName) ||
+    !isNonEmptyString(value.yName) ||
+    !isFiniteNumericArray(value.x) ||
+    !isFiniteNumericArray(value.y)
+  ) {
+    return false;
+  }
+
+  return value.x.length === value.y.length;
 }
 
 function isWorkspaceStateLike(value: unknown): value is WorkspaceStateLike {
