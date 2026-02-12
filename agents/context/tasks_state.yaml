@@ -24,6 +24,6 @@ T-030:
   pr: 35
   merged: true
 T-031:
-  status: ready_for_review
+  status: review_in_progress
   pr: 37
   merged: false
