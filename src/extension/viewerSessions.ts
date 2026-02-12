@@ -1,9 +1,14 @@
 import type { ViewerSessionRegistry, WebviewPanelLike, ViewerSessionRoute } from "./types";
 
+function toFallbackLayoutUri(datasetPath: string): string {
+  return `${datasetPath}.wave-viewer.yaml`;
+}
+
 export function createViewerSessionRegistry(): ViewerSessionRegistry {
   type ViewerSession = {
     panel: WebviewPanelLike;
     datasetPath?: string;
+    layoutUri?: string;
     focusOrder: number;
   };
 
@@ -56,6 +61,7 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
       viewerById.set(viewerId, {
         panel,
         datasetPath,
+        layoutUri: datasetPath ? toFallbackLayoutUri(datasetPath) : undefined,
         focusOrder: nextFocusOrder++
       });
       if (datasetPath) {
@@ -84,10 +90,35 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
         removeDatasetIndex(session.datasetPath, viewerId);
       }
       session.datasetPath = datasetPath;
+      session.layoutUri = toFallbackLayoutUri(datasetPath);
       addDatasetIndex(datasetPath, viewerId);
+    },
+    bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void {
+      const session = getSession(viewerId);
+      if (!session) {
+        return;
+      }
+      if (session.datasetPath !== datasetPath) {
+        if (session.datasetPath) {
+          removeDatasetIndex(session.datasetPath, viewerId);
+        }
+        session.datasetPath = datasetPath;
+        addDatasetIndex(datasetPath, viewerId);
+      }
+      session.layoutUri = layoutUri;
     },
     getDatasetPathForViewer(viewerId: string): string | undefined {
       return getSession(viewerId)?.datasetPath;
+    },
+    getViewerSessionContext(viewerId: string) {
+      const session = getSession(viewerId);
+      if (!session?.datasetPath || !session.layoutUri) {
+        return undefined;
+      }
+      return {
+        datasetPath: session.datasetPath,
+        layoutUri: session.layoutUri
+      };
     },
     markViewerFocused(viewerId: string): void {
       const session = getSession(viewerId);

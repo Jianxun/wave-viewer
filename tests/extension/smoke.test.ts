@@ -114,6 +114,7 @@ function createDeps(overrides?: {
   loadDatasetError?: string;
   initialWorkspace?: WorkspaceState;
   onDatasetLoaded?: ReturnType<typeof vi.fn>;
+  resolveViewerSessionContext?: ReturnType<typeof vi.fn>;
 }): {
   deps: CommandDeps;
   panelFixture: PanelFixture;
@@ -180,6 +181,9 @@ function createDeps(overrides?: {
     logDebug,
     buildHtml: () => overrides?.buildHtml ?? "<html>shell</html>"
   };
+  if (overrides?.resolveViewerSessionContext) {
+    deps.resolveViewerSessionContext = overrides.resolveViewerSessionContext;
+  }
   if (overrides?.onDatasetLoaded) {
     deps.onDatasetLoaded = overrides.onDatasetLoaded;
   }
@@ -495,6 +499,36 @@ describe("T-002 extension shell smoke", () => {
       },
       defaultXSignal: "time"
     });
+  });
+
+  it("resolves viewer dataset context via host session resolver", async () => {
+    const resolveViewerSessionContext = vi.fn(() => ({
+      datasetPath: "/workspace/examples/simulations/alternate.csv",
+      layoutUri: "/workspace/layouts/alternate.wave-viewer.yaml"
+    }));
+    const { deps, panelFixture, logDebug } = createDeps({
+      hasActiveDocument: false,
+      preferredDatasetPath: undefined,
+      resolveViewerSessionContext
+    });
+
+    await createOpenViewerCommand(deps)();
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "axis", axisId: "y1" },
+        source: "axis-row",
+        requestId: "req-1"
+      })
+    );
+
+    expect(resolveViewerSessionContext).toHaveBeenCalledWith("viewer-1");
+    expect(logDebug).not.toHaveBeenCalledWith(
+      "Ignored dropSignal because no dataset is bound to this panel.",
+      expect.anything()
+    );
   });
 
   it("ignores unknown inbound messages without posting responses", async () => {
@@ -2023,6 +2057,35 @@ describe("T-026 viewer session registry", () => {
     registry.removeViewer(viewerB);
     expect(registry.hasOpenPanelForDataset("/workspace/examples/a.csv")).toBe(false);
     expect(registry.getActiveViewerId()).toBeUndefined();
+  });
+
+  it("uses <csv>.wave-viewer.yaml fallback identity for dataset-bound viewers", () => {
+    const registry = createViewerSessionRegistry();
+    const panel = createRegistryPanelFixture();
+    const viewerId = registry.registerPanel(panel.panel, "/workspace/examples/a.csv");
+
+    expect(registry.getViewerSessionContext(viewerId)).toEqual({
+      datasetPath: "/workspace/examples/a.csv",
+      layoutUri: "/workspace/examples/a.csv.wave-viewer.yaml"
+    });
+  });
+
+  it("supports explicit layout binding and resolves dataset from that layout context", () => {
+    const registry = createViewerSessionRegistry();
+    const panel = createRegistryPanelFixture();
+    const viewerId = registry.registerPanel(panel.panel);
+
+    registry.bindViewerToLayout(
+      viewerId,
+      "/workspace/layouts/shared-lab.wave-viewer.yaml",
+      "/workspace/examples/b.csv"
+    );
+
+    expect(registry.getViewerSessionContext(viewerId)).toEqual({
+      datasetPath: "/workspace/examples/b.csv",
+      layoutUri: "/workspace/layouts/shared-lab.wave-viewer.yaml"
+    });
+    expect(registry.resolveTargetViewerSession("/workspace/examples/b.csv")?.viewerId).toBe(viewerId);
   });
 });
 

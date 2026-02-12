@@ -273,7 +273,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     onDatasetLoaded: (documentPath, loaded) => {
       registerLoadedDataset(documentPath, loaded);
     },
-    resolveDatasetPathForViewer: (viewerId) => viewerSessions.getDatasetPathForViewer(viewerId),
+    resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
     getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     setCachedWorkspace: (documentPath, workspace) => {
       hostStateStore.setWorkspace(documentPath, workspace);
