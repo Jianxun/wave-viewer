@@ -49,9 +49,7 @@ export type WebviewToHostMessageType =
   | "webview/intent/setActiveAxis"
   | "webview/intent/dropSignal"
   | "webview/intent/addSignalToActiveAxis"
-  | "webview/intent/addSignalToNewAxis"
-  | "webview/dropSignal"
-  | "webview/command";
+  | "webview/intent/addSignalToNewAxis";
 
 export type ParsedHostToWebviewMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
@@ -109,22 +107,6 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<
       "webview/intent/addSignalToNewAxis",
       { viewerId: string; signal: string; requestId: string }
-    >
-  | ProtocolEnvelope<
-      "webview/dropSignal",
-      {
-        signal: string;
-        plotId: string;
-        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
-        source: "axis-row" | "canvas-overlay";
-      }
-    >
-  | ProtocolEnvelope<
-      "webview/command",
-      {
-        command: "zoomToFit" | "cancelGesture" | "revealSignal";
-        args?: Record<string, unknown>;
-      }
     >;
 
 type WorkspaceStateLike = {
@@ -230,9 +212,7 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/setActiveAxis" ||
     type === "webview/intent/dropSignal" ||
     type === "webview/intent/addSignalToActiveAxis" ||
-    type === "webview/intent/addSignalToNewAxis" ||
-    type === "webview/dropSignal" ||
-    type === "webview/command"
+    type === "webview/intent/addSignalToNewAxis"
   );
 }
 
@@ -344,29 +324,7 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
     return payload.target.kind === "new-axis";
   }
 
-  if (type === "webview/dropSignal") {
-    if (
-      typeof payload.signal !== "string" ||
-      typeof payload.plotId !== "string" ||
-      !isRecord(payload.target) ||
-      (payload.source !== "axis-row" && payload.source !== "canvas-overlay")
-    ) {
-      return false;
-    }
-
-    if (payload.target.kind === "axis") {
-      return typeof payload.target.axisId === "string";
-    }
-
-    return payload.target.kind === "new-axis";
-  }
-
-  return (
-    (payload.command === "zoomToFit" ||
-      payload.command === "cancelGesture" ||
-      payload.command === "revealSignal") &&
-    (payload.args === undefined || isRecord(payload.args))
-  );
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

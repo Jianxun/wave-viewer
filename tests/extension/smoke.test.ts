@@ -122,14 +122,18 @@ function createDeps(overrides?: {
   getCachedWorkspace: ReturnType<typeof vi.fn>;
   setCachedWorkspace: ReturnType<typeof vi.fn>;
 } {
+  const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
   const panelFixture = overrides?.panelFixture ?? createPanelFixture();
   const showError = vi.fn();
   const logDebug = vi.fn();
   const hasActiveDocument = overrides?.hasActiveDocument ?? true;
-  let cachedWorkspace = overrides?.initialWorkspace;
-  const getCachedWorkspace = vi.fn(() => cachedWorkspace);
-  const setCachedWorkspace = vi.fn((_documentPath: string, workspace: WorkspaceState) => {
-    cachedWorkspace = workspace;
+  const store = createHostStateStore();
+  if (overrides?.initialWorkspace) {
+    store.setWorkspace(datasetPath, overrides.initialWorkspace);
+  }
+  const getCachedWorkspace = vi.fn((documentPath: string) => store.getWorkspace(documentPath));
+  const setCachedWorkspace = vi.fn((documentPath: string, workspace: WorkspaceState) => {
+    store.setWorkspace(documentPath, workspace);
   });
 
   const deps: CommandDeps = {
@@ -154,7 +158,7 @@ function createDeps(overrides?: {
       }
       return {
         dataset: {
-          path: "/workspace/examples/simulations/ota.spice.csv",
+          path: datasetPath,
           rowCount: 3,
           columns: [
             { name: "time", values: [0, 1, 2] },
@@ -168,6 +172,10 @@ function createDeps(overrides?: {
     onPanelCreated: () => "viewer-1",
     getCachedWorkspace,
     setCachedWorkspace,
+    getHostStateSnapshot: (documentPath) => store.getSnapshot(documentPath),
+    ensureHostStateSnapshot: (documentPath, defaultXSignal) =>
+      store.ensureSnapshot(documentPath, defaultXSignal),
+    commitHostStateTransaction: (transaction) => store.commitTransaction(transaction),
     showError,
     logDebug,
     buildHtml: () => overrides?.buildHtml ?? "<html>shell</html>"
@@ -385,7 +393,7 @@ describe("T-002 extension shell smoke", () => {
       version: PROTOCOL_VERSION,
       type: "host/stateSnapshot",
       payload: {
-        revision: 0,
+        revision: 1,
         workspace: {
           activePlotId: "plot-1",
           plots: [
@@ -871,7 +879,7 @@ describe("T-022 follow-up signal actions after remove", () => {
 });
 
 describe("T-018 normalized protocol handling", () => {
-  it("handles validated dropSignal intent by caching and posting statePatch", async () => {
+  it("handles validated dropSignal intent via host transaction and posts statePatch", async () => {
     const { deps, panelFixture, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
     });
@@ -889,7 +897,7 @@ describe("T-018 normalized protocol handling", () => {
       })
     );
 
-    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(setCachedWorkspace).not.toHaveBeenCalled();
     expect(panelFixture.sentMessages).toEqual([
       {
         version: PROTOCOL_VERSION,
@@ -912,7 +920,7 @@ describe("T-018 normalized protocol handling", () => {
         version: PROTOCOL_VERSION,
         type: "host/statePatch",
         payload: {
-          revision: 0,
+          revision: 1,
           workspace: {
             activePlotId: "plot-1",
             plots: [
@@ -978,10 +986,12 @@ describe("T-018 normalized protocol handling", () => {
     const initial = createWorkspaceFixture();
     const fromSidePanel = applySidePanelSignalAction(initial, { type: "add-to-plot", signal: "vin" });
     const fromDropSignal = applyDropSignalAction(initial, {
+      viewerId: "viewer-1",
       signal: "vin",
       plotId: "plot-1",
       target: { kind: "axis", axisId: "y1" },
-      source: "axis-row"
+      source: "axis-row",
+      requestId: "req-1"
     });
 
     expect(fromDropSignal).toEqual(fromSidePanel);
@@ -993,16 +1003,20 @@ describe("T-018 normalized protocol handling", () => {
       signal: "vin"
     });
     const fromAxisRowDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      viewerId: "viewer-1",
       signal: "vin",
       plotId: "plot-1",
       target: { kind: "axis", axisId: "y1" },
-      source: "axis-row"
+      source: "axis-row",
+      requestId: "req-1"
     });
     const fromCanvasOverlayDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      viewerId: "viewer-1",
       signal: "vin",
       plotId: "plot-1",
       target: { kind: "axis", axisId: "y1" },
-      source: "canvas-overlay"
+      source: "canvas-overlay",
+      requestId: "req-2"
     });
 
     expect(fromAxisRowDrop).toEqual(fromSidePanel);
@@ -1012,10 +1026,12 @@ describe("T-018 normalized protocol handling", () => {
 
   it("handles dropSignal new-axis target by creating one axis and binding the dropped trace", () => {
     const next = applyDropSignalAction(createWorkspaceFixture(), {
+      viewerId: "viewer-1",
       signal: "vin",
       plotId: "plot-1",
       target: { kind: "new-axis" },
-      source: "axis-row"
+      source: "axis-row",
+      requestId: "req-1"
     });
 
     expect(next.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
@@ -1035,16 +1051,20 @@ describe("T-018 normalized protocol handling", () => {
       signal: "vin"
     });
     const fromAxisRowDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      viewerId: "viewer-1",
       signal: "vin",
       plotId: "plot-1",
       target: { kind: "new-axis" },
-      source: "axis-row"
+      source: "axis-row",
+      requestId: "req-1"
     });
     const fromCanvasOverlayDrop = applyDropSignalAction(createWorkspaceFixture(), {
+      viewerId: "viewer-1",
       signal: "vin",
       plotId: "plot-1",
       target: { kind: "new-axis" },
-      source: "canvas-overlay"
+      source: "canvas-overlay",
+      requestId: "req-2"
     });
 
     expect(fromAxisRowDrop).toEqual(fromSidePanel);
@@ -1070,7 +1090,7 @@ describe("T-018 normalized protocol handling", () => {
       })
     );
 
-    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(setCachedWorkspace).not.toHaveBeenCalled();
     expect(panelFixture.sentMessages).toEqual([
       {
         version: PROTOCOL_VERSION,
@@ -1093,7 +1113,7 @@ describe("T-018 normalized protocol handling", () => {
         version: PROTOCOL_VERSION,
         type: "host/statePatch",
         payload: {
-          revision: 0,
+          revision: 1,
           workspace: {
             activePlotId: "plot-1",
             plots: [
@@ -1667,8 +1687,10 @@ describe("T-033 revisioned protocol semantics", () => {
 
   it("uses v2 intent and host state message names", () => {
     const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+    const hostSource = fs.readFileSync(path.resolve("src/extension/commands.ts"), "utf8");
 
     expect(source).toContain('createProtocolEnvelope("webview/intent/dropSignal"');
+    expect(hostSource).not.toContain('"webview/dropSignal"');
     expect(source).toContain('if (message.type === "host/stateSnapshot")');
     expect(source).toContain('if (message.type === "host/statePatch")');
     expect(source).toContain('if (message.type === "host/tupleUpsert")');

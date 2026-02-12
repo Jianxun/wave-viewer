@@ -70,10 +70,7 @@ export function applySidePanelSignalAction(
 
 export function applyDropSignalAction(
   workspace: WorkspaceState,
-  payload: (
-    | Extract<WebviewToHostMessage, { type: "webview/dropSignal" }>
-    | Extract<WebviewToHostMessage, { type: "webview/intent/dropSignal" }>
-  )["payload"],
+  payload: Extract<WebviewToHostMessage, { type: "webview/intent/dropSignal" }>["payload"],
   options?: { sourceId?: string }
 ): WorkspaceState {
   let nextWorkspace = reduceWorkspaceState(workspace, {

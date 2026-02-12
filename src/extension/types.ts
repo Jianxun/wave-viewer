@@ -73,15 +73,6 @@ export type WebviewToHostMessage =
         source: "axis-row" | "canvas-overlay";
         requestId: string;
       }
-    >
-  | ProtocolEnvelope<
-      "webview/dropSignal",
-      {
-        signal: string;
-        plotId: string;
-        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
-        source: "axis-row" | "canvas-overlay";
-      }
     >;
 
 export type ActiveDocumentLike = {
@@ -132,7 +123,7 @@ export type CommandDeps = {
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   getHostStateSnapshot?(documentPath: string): HostStateSnapshot | undefined;
   ensureHostStateSnapshot?(documentPath: string, defaultXSignal: string): HostStateSnapshot;
-  commitHostStateTransaction?(transaction: HostStateTransaction): HostStateTransactionResult;
+  commitHostStateTransaction(transaction: HostStateTransaction): HostStateTransactionResult;
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): string | undefined;
   showError(message: string): void;

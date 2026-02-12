@@ -55,7 +55,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
-      if (message.type === "webview/dropSignal" || message.type === "webview/intent/dropSignal") {
+      if (message.type === "webview/intent/dropSignal") {
         if (!datasetPath || !normalizedDataset) {
           deps.logDebug?.("Ignored dropSignal because no dataset is bound to this panel.", {
             payload: message.payload
@@ -69,46 +69,33 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         let viewerState: { activePlotId: string; activeAxisByPlotId: Record<string, `y${number}`> };
         const patchReason = `dropSignal:${message.payload.source}`;
         try {
-          if (deps.commitHostStateTransaction) {
-            const requestedAxisId =
-              message.payload.target.kind === "axis" && isAxisId(message.payload.target.axisId)
-                ? message.payload.target.axisId
-                : undefined;
-            const transaction = deps.commitHostStateTransaction({
-              datasetPath,
-              defaultXSignal: normalizedDataset.defaultXSignal,
-              reason: patchReason,
-              mutate: (workspace) =>
-                applyDropSignalAction(workspace, message.payload, {
-                  sourceId: toTraceSourceId(datasetPath, message.payload.signal)
-                }),
-              selectActiveAxis: ({ previous, nextWorkspace }) => {
-                if (requestedAxisId) {
-                  return { plotId: message.payload.plotId, axisId: requestedAxisId };
-                }
-                const newAxisId = findNewAxisId(previous.workspace, nextWorkspace, message.payload.plotId);
-                if (!newAxisId) {
-                  return undefined;
-                }
-                return { plotId: message.payload.plotId, axisId: newAxisId };
+          const requestedAxisId =
+            message.payload.target.kind === "axis" && isAxisId(message.payload.target.axisId)
+              ? message.payload.target.axisId
+              : undefined;
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath,
+            defaultXSignal: normalizedDataset.defaultXSignal,
+            reason: patchReason,
+            mutate: (workspace) =>
+              applyDropSignalAction(workspace, message.payload, {
+                sourceId: toTraceSourceId(datasetPath, message.payload.signal)
+              }),
+            selectActiveAxis: ({ previous, nextWorkspace }) => {
+              if (requestedAxisId) {
+                return { plotId: message.payload.plotId, axisId: requestedAxisId };
               }
-            });
-            previousWorkspace = transaction.previous.workspace;
-            nextWorkspace = transaction.next.workspace;
-            revision = transaction.next.revision;
-            viewerState = transaction.next.viewerState;
-          } else {
-            const cachedWorkspace =
-              deps.getCachedWorkspace?.(datasetPath) ??
-              createWorkspaceState(normalizedDataset.defaultXSignal);
-            previousWorkspace = cachedWorkspace;
-            nextWorkspace = applyDropSignalAction(cachedWorkspace, message.payload, {
-              sourceId: toTraceSourceId(datasetPath, message.payload.signal)
-            });
-            deps.setCachedWorkspace?.(datasetPath, nextWorkspace);
-            revision = 0;
-            viewerState = deriveViewerState(nextWorkspace);
-          }
+              const newAxisId = findNewAxisId(previous.workspace, nextWorkspace, message.payload.plotId);
+              if (!newAxisId) {
+                return undefined;
+              }
+              return { plotId: message.payload.plotId, axisId: newAxisId };
+            }
+          });
+          previousWorkspace = transaction.previous.workspace;
+          nextWorkspace = transaction.next.workspace;
+          revision = transaction.next.revision;
+          viewerState = transaction.next.viewerState;
         } catch (error) {
           deps.logDebug?.("Ignored invalid webview dropSignal message payload.", {
             payload: message.payload,
