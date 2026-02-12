@@ -194,6 +194,25 @@ body {
   color: var(--text-muted);
 }
 
+.signal-panel-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.signal-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lane-action-button {
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
 .list-row {
   display: grid;
   gap: 6px;

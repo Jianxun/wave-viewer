@@ -353,6 +353,39 @@ async function renderWorkspace(): Promise<void> {
       postSetActiveAxis(newAxisId);
     },
     onCreateLane: (afterAxisId) => postAddAxis(afterAxisId),
+    onReorderLane: ({ axisId, toIndex }) =>
+      dispatch({ type: "axis/reorder", payload: { axisId, toIndex } }),
+    onRemoveLane: ({ axisId, traceIds }) => {
+      if (!workspace) {
+        return;
+      }
+
+      const activePlot = getActivePlot(workspace);
+      const axisIndex = activePlot.axes.findIndex((axis) => axis.id === axisId);
+      if (axisIndex < 0 || activePlot.axes.length <= 1) {
+        return;
+      }
+
+      let nextWorkspace = workspace;
+      for (const traceId of traceIds) {
+        nextWorkspace = reduceWorkspaceState(nextWorkspace, {
+          type: "trace/remove",
+          payload: { traceId }
+        });
+      }
+      nextWorkspace = reduceWorkspaceState(nextWorkspace, {
+        type: "axis/remove",
+        payload: { axisId }
+      });
+      workspace = nextWorkspace;
+
+      if (preferredDropAxisId === axisId) {
+        const nextAxes = getActivePlot(nextWorkspace).axes;
+        const fallbackIndex = Math.max(0, Math.min(axisIndex, nextAxes.length - 1));
+        preferredDropAxisId = nextAxes[fallbackIndex]?.id;
+      }
+      void renderWorkspace();
+    },
     onSetAxis: (traceId, axisId) => postSetTraceAxis(traceId, axisId),
     onActivateLane: (axisId) => postSetActiveAxis(axisId),
     onSetVisible: (traceId, visible) =>

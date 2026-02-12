@@ -1938,3 +1938,20 @@ describe("T-040 new-lane drop target placement and insertion anchor wiring", () 
     expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
   });
 });
+
+describe("lane-board lane controls", () => {
+  it("wires lane up/down controls and close-removes-lane-with-traces", () => {
+    const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(signalListSource).toContain('moveUpButton.textContent = "Up";');
+    expect(signalListSource).toContain('moveDownButton.textContent = "Down";');
+    expect(signalListSource).toContain('closeButton.textContent = "Close";');
+    expect(signalListSource).toContain("props.onReorderLane({");
+    expect(signalListSource).toContain("props.onRemoveLane({");
+    expect(mainSource).toContain("onReorderLane: ({ axisId, toIndex }) =>");
+    expect(mainSource).toContain('type: "axis/reorder"');
+    expect(mainSource).toContain('type: "trace/remove"');
+    expect(mainSource).toContain('type: "axis/remove"');
+  });
+});

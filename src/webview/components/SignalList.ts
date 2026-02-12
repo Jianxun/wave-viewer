@@ -13,6 +13,8 @@ export type SignalListProps = {
   onDropSignal(payload: { signal: string; target: DropSignalTarget }): void;
   onDropTraceToNewLane(payload: { traceId: string; afterAxisId: AxisId }): void;
   onCreateLane(afterAxisId?: AxisId): void;
+  onReorderLane(payload: { axisId: AxisId; toIndex: number }): void;
+  onRemoveLane(payload: { axisId: AxisId; traceIds: string[] }): void;
   onSetAxis(traceId: string, axisId: AxisId): void;
   onActivateLane(axisId: AxisId): void;
   onSetVisible(traceId: string, visible: boolean): void;
@@ -77,7 +79,7 @@ export function renderSignalList(props: SignalListProps): void {
     axes: props.axes,
     traces: props.traces
   });
-  for (const lane of model.lanes) {
+  for (const [laneIndex, lane] of model.lanes.entries()) {
     const laneSection = createSection(lane.axisLabel);
     laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);
     laneSection.body.classList.add("trace-lane-body", "drop-target");
@@ -88,6 +90,46 @@ export function renderSignalList(props: SignalListProps): void {
       }
       props.onActivateLane(lane.axisId);
     });
+
+    const moveUpButton = document.createElement("button");
+    moveUpButton.type = "button";
+    moveUpButton.className = "chip-button lane-action-button";
+    moveUpButton.textContent = "Up";
+    moveUpButton.title = "Move lane up";
+    moveUpButton.disabled = laneIndex === 0;
+    moveUpButton.addEventListener("click", () => {
+      props.onReorderLane({
+        axisId: lane.axisId,
+        toIndex: laneIndex - 1
+      });
+    });
+
+    const moveDownButton = document.createElement("button");
+    moveDownButton.type = "button";
+    moveDownButton.className = "chip-button lane-action-button";
+    moveDownButton.textContent = "Down";
+    moveDownButton.title = "Move lane down";
+    moveDownButton.disabled = laneIndex >= model.lanes.length - 1;
+    moveDownButton.addEventListener("click", () => {
+      props.onReorderLane({
+        axisId: lane.axisId,
+        toIndex: laneIndex + 1
+      });
+    });
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "chip-button lane-action-button";
+    closeButton.textContent = "Close";
+    closeButton.title = "Remove lane and all traces assigned to it";
+    closeButton.disabled = model.lanes.length <= 1;
+    closeButton.addEventListener("click", () => {
+      props.onRemoveLane({
+        axisId: lane.axisId,
+        traceIds: lane.traceChips.map((trace) => trace.id)
+      });
+    });
+    laneSection.actions.append(moveUpButton, moveDownButton, closeButton);
 
     laneSection.body.addEventListener("dragover", (event) => {
       if (!event.dataTransfer) {
@@ -212,19 +254,26 @@ function createMutedText(text: string): HTMLParagraphElement {
   return paragraph;
 }
 
-function createSection(titleText: string): { section: HTMLElement; body: HTMLElement } {
+function createSection(titleText: string): { section: HTMLElement; body: HTMLElement; actions: HTMLElement } {
   const section = document.createElement("section");
   section.className = "signal-panel-section";
+
+  const header = document.createElement("div");
+  header.className = "signal-panel-section-header";
 
   const title = document.createElement("h3");
   title.className = "signal-panel-section-title";
   title.textContent = `Lane ${titleText}`;
 
+  const actions = document.createElement("div");
+  actions.className = "signal-panel-actions";
+  header.append(title, actions);
+
   const body = document.createElement("div");
   body.className = "list-stack";
 
-  section.append(title, body);
-  return { section, body };
+  section.append(header, body);
+  return { section, body, actions };
 }
 
 function createDropToNewLaneSection(options: {
