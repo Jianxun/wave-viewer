@@ -8,6 +8,6 @@ T-039:
   pr: 45
   merged: true
 T-040:
-  status: ready_for_review
+  status: review_clean
   pr: 46
   merged: false
