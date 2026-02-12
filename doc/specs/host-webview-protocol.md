@@ -1,14 +1,14 @@
 # Host-Webview Protocol Spec
 
 ## Purpose
-Define versioned message contracts between extension host and webview for Wave Viewer interactions.
+Define the target protocol contract for a host-authoritative Wave Viewer model where the webview emits user intents and renders host-issued state.
 
 ## Envelope
 All messages use this envelope:
 
 ```ts
 type ProtocolEnvelope<TType extends string, TPayload> = {
-  version: 1;
+  version: 2;
   type: TType;
   payload: TPayload;
 };
@@ -18,28 +18,48 @@ Rules:
 - `version` is required on every message.
 - `type` is required and namespaced by sender (`host/...`, `webview/...`).
 - Unknown `type` must be ignored with debug logging; must not crash UI.
+- Host state-bearing messages MUST include monotonic `revision: number`.
+
+## State ownership
+- Host is the single writer for workspace structure and viewer interaction state.
+- Webview MUST NOT publish full workspace snapshots back to host.
+- Webview emits intent messages only; host validates and applies reducer actions.
 
 ## Host -> webview messages
-- `host/datasetLoaded`
-  - payload: `{ datasetPath: string; signals: string[]; defaultXSignal: string }`
-- `host/workspaceLoaded`
-  - payload: `{ workspace: WorkspaceState }`
-- `host/workspacePatched`
-  - payload: `{ workspace: WorkspaceState; reason: string }`
+- `host/stateSnapshot`
+  - payload: `{ revision: number; workspace: WorkspaceState; viewerState: ViewerState }`
+  - full state payload used on initial ready/reconnect.
+- `host/statePatch`
+  - payload: `{ revision: number; workspace: WorkspaceState; viewerState: ViewerState; reason: string }`
+  - authoritative incremental update; may still carry full normalized objects in MVP.
+- `host/tupleUpsert`
+  - payload: `{ tuples: SidePanelTraceTuplePayload[] }`
+  - transports numeric `(x, y)` arrays and tuple metadata only.
+- `host/viewerBindingUpdated`
+  - payload: `{ viewerId: string; datasetPath?: string }`
 
 ## Webview -> host messages
-- `webview/workspaceChanged`
-  - payload: `{ workspace: WorkspaceState; reason: string }`
-- `webview/dropSignal`
+- `webview/intent/setActivePlot`
+  - payload: `{ viewerId: string; plotId: string; requestId: string }`
+- `webview/intent/setActiveAxis`
+  - payload: `{ viewerId: string; plotId: string; axisId: string; requestId: string }`
+- `webview/intent/dropSignal`
   - payload:
+    - `viewerId: string`
     - `signal: string`
     - `plotId: string`
     - `target: { kind: "axis"; axisId: string } | { kind: "new-axis" }`
     - `source: "axis-row" | "canvas-overlay"`
-- `webview/command`
-  - payload:
-    - `command: "zoomToFit" | "cancelGesture" | "revealSignal"`
-    - `args?: Record<string, unknown>`
+    - `requestId: string`
+- `webview/intent/addSignalToActiveAxis`
+  - payload: `{ viewerId: string; signal: string; requestId: string }`
+- `webview/intent/addSignalToNewAxis`
+  - payload: `{ viewerId: string; signal: string; requestId: string }`
+
+## Ordering and replay rules
+- Webview MUST ignore host state messages where `revision <= lastAppliedRevision`.
+- Host MUST increment `revision` once per committed transaction.
+- Compound operations (for example, "add signal to new axis") MUST be committed atomically under one new revision.
 
 ## Compatibility policy
 - Additive payload fields are allowed in minor evolution and must be optional for receivers.
@@ -61,5 +81,6 @@ Rules:
 
 ## Verification
 - Unit tests for envelope/type/payload validation.
-- Unit tests for `webview/dropSignal` target variants.
-- Smoke tests for host-webview roundtrip on dataset load and signal add/drop flows.
+- Unit tests for revision monotonicity and stale-message rejection.
+- Unit tests for intent-to-reducer transaction mapping.
+- Smoke tests for host-authoritative roundtrip on explorer commands and drag/drop flows.

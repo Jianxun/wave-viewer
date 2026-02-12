@@ -1,12 +1,12 @@
 # Side-Panel Workflow Spec
 
 ## Purpose
-Define the normative side-panel-first interaction model for signal discovery, quick actions, and drag/drop plotting in Wave Viewer.
+Define the normative side-panel-first interaction model for signal discovery, quick actions, and drag/drop plotting in a host-authoritative Wave Viewer architecture.
 
 ## Surfaces and responsibilities
 - Side panel is the primary discovery/action surface for signals.
 - Webview is the primary rendering/manipulation surface for plots, traces, and axes.
-- Extension host owns command handling and state mutation dispatch.
+- Extension host owns command handling, state mutation, and active-target routing.
 
 ## Signal browser requirements
 - Must display numeric signals from the active dataset.
@@ -15,16 +15,18 @@ Define the normative side-panel-first interaction model for signal discovery, qu
 
 ## Required side-panel actions
 - `Add to Plot`
-  - Adds selected signal to active/default target axis in active plot.
+  - Adds selected signal to active axis in active plot.
+  - If no valid active axis exists, host falls back to first axis; if none exists, host creates one axis then appends trace.
 - `Add to New Axis`
   - Creates one axis and appends one trace instance bound to that new axis.
+  - Newly created axis becomes the active axis for the plot.
 - `Reveal in Plot`
   - Focuses plot tab and highlights existing trace instances for the selected signal when present.
 
 ## Drag/drop contract
 - Drag source is a signal tree item.
 - Drop targets are axis row targets and the canvas domain overlay.
-- Webview normalizes every drop into one event shape (`webview/dropSignal`) and sends it to host.
+- Webview normalizes every drop into one intent shape (`webview/intent/dropSignal`) and sends it to host.
 - Host resolves target axis behavior and dispatches reducer actions.
 
 ## Drop target semantics
@@ -38,17 +40,28 @@ Define the normative side-panel-first interaction model for signal discovery, qu
 ## Determinism constraints
 - Side-panel command path and drag/drop path MUST converge to same reducer-level operation semantics.
 - Trace append order MUST be deterministic for repeated inputs.
-- No direct webview-only state mutation may bypass host/reducer flow.
+- No direct webview-only structural state mutation may bypass host/reducer flow.
+- "Add signal to new axis" MUST be atomic: create axis + append trace + set active axis in one transaction.
 
-## Transitional fallback policy
-- In-webview signal controls remain enabled until side-panel workflow stabilization criteria are met.
-- Parity criteria:
-  - side-panel command actions available
-  - lane-targeted drag/drop available
-  - regression tests cover both side-panel command and drag/drop paths
-- Deprecation of in-webview signal-add controls is deferred until stabilization is confirmed in follow-up tasks.
+## Active axis semantics
+- Active axis is scoped per plot (`activeAxisByPlotId[plotId]`).
+- Active axis is the default target for:
+  - Explorer `Add to Plot`
+  - Explorer double-click quick add
+- Active axis changes when:
+  - user explicitly selects an axis target in webview
+  - plot changes and a valid per-plot active axis exists
+  - new-axis operations succeed (new axis becomes active)
+- If active axis is removed:
+  - host reassigns active axis deterministically to reassignment target or first axis.
+
+## State synchronization policy
+- Host is state authority and emits revisioned snapshot/patch updates.
+- Webview emits intents only and never sends full workspace snapshots.
+- Webview ignores stale host state revisions (`revision <= lastAppliedRevision`).
 
 ## Verification
 - Unit tests for signal-add reducer convergence across all entry paths.
 - Unit tests for canvas-domain hit-testing and axis row target resolution.
-- Extension smoke tests for command wiring and message bridge routing.
+- Unit tests for active-axis fallback, reassignment, and new-axis activation.
+- Extension smoke tests for command wiring and revisioned intent/state routing.
