@@ -51,6 +51,7 @@ describe("T-006 spec roundtrip", () => {
       datasetPath: "/workspace/examples/simulations/ota.spice.csv",
       workspace
     });
+    expect(yaml).toContain("mode: reference-only");
 
     const parsed = importPlotSpecV1({
       yamlText: yaml,

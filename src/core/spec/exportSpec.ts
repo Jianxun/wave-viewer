@@ -7,11 +7,12 @@ import type {
   PlotSpecTraceV1,
   PlotSpecV1
 } from "./plotSpecV1";
-import { PLOT_SPEC_V1_VERSION } from "./plotSpecV1";
+import { PLOT_SPEC_V1_VERSION, REFERENCE_ONLY_SPEC_MODE } from "./plotSpecV1";
 
 export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
   const spec: PlotSpecV1 = {
     version: PLOT_SPEC_V1_VERSION,
+    mode: REFERENCE_ONLY_SPEC_MODE,
     dataset: {
       path: input.datasetPath
     },

@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createImportSpecCommand,
   createViewerSessionRegistry,
   createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
@@ -206,6 +207,24 @@ function createLoadedDatasetFixture(
     },
     defaultXSignal: "time"
   };
+}
+
+function createReferenceOnlySpecYaml(datasetPath: string): string {
+  return [
+    "version: 1",
+    "mode: reference-only",
+    "dataset:",
+    `  path: ${datasetPath}`,
+    "workspace:",
+    "  activePlotId: plot-1",
+    "  plots:",
+    "    - id: plot-1",
+    "      name: Plot 1",
+    "      xSignal: time",
+    "      axes:",
+    "        - id: y1",
+    "      traces: []"
+  ].join("\n");
 }
 
 describe("T-002 extension shell smoke", () => {
@@ -492,6 +511,75 @@ describe("T-002 extension shell smoke", () => {
     panelFixture.emitMessage(createProtocolEnvelope("webview/unknown", { whatever: true }));
 
     expect(panelFixture.sentMessages).toEqual([]);
+  });
+});
+
+describe("T-030 reference-only spec import workflow", () => {
+  it("rejects import when spec dataset reference does not match active CSV", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const setCachedWorkspace = vi.fn();
+    const command = createImportSpecCommand({
+      getActiveDocument: () => ({
+        fileName: "/workspace/examples/simulations/new.csv",
+        uri: { fsPath: "/workspace/examples/simulations/new.csv" }
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/new.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      setCachedWorkspace,
+      showError,
+      showInformation,
+      showOpenDialog: async () => "/workspace/specs/replay.wave-viewer.yaml",
+      readTextFile: () => createReferenceOnlySpecYaml("/workspace/examples/simulations/old.csv")
+    });
+
+    await command();
+
+    expect(showError).toHaveBeenCalledWith(
+      "Wave Viewer reference-only spec points to '/workspace/examples/simulations/old.csv', but the active CSV is '/workspace/examples/simulations/new.csv'. Open the referenced CSV or re-export the spec from the current file."
+    );
+    expect(showInformation).not.toHaveBeenCalled();
+    expect(setCachedWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("imports reference-only spec when dataset reference matches active CSV", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const setCachedWorkspace = vi.fn();
+    const command = createImportSpecCommand({
+      getActiveDocument: () => ({
+        fileName: "/workspace/examples/simulations/ota.spice.csv",
+        uri: { fsPath: "/workspace/examples/simulations/ota.spice.csv" }
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      setCachedWorkspace,
+      showError,
+      showInformation,
+      showOpenDialog: async () => "/workspace/specs/replay.wave-viewer.yaml",
+      readTextFile: () =>
+        createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv")
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(setCachedWorkspace).toHaveBeenCalledTimes(1);
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer spec imported from /workspace/specs/replay.wave-viewer.yaml"
+    );
   });
 });
 

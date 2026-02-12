@@ -20,8 +20,8 @@ T-029:
   pr: 34
   merged: true
 T-030:
-  status: backlog
-  pr: null
+  status: review_clean
+  pr: 35
   merged: false
 T-031:
   status: backlog

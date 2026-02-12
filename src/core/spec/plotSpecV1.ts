@@ -1,6 +1,9 @@
 import type { WorkspaceState } from "../../webview/state/workspaceState";
 
 export const PLOT_SPEC_V1_VERSION = 1;
+export const REFERENCE_ONLY_SPEC_MODE = "reference-only";
+
+export type PlotSpecPersistenceMode = typeof REFERENCE_ONLY_SPEC_MODE | "portable-archive";
 
 export type PlotSpecAxisV1 = {
   id: `y${number}`;
@@ -29,6 +32,7 @@ export type PlotSpecPlotV1 = {
 
 export type PlotSpecV1 = {
   version: typeof PLOT_SPEC_V1_VERSION;
+  mode: PlotSpecPersistenceMode;
   dataset: {
     path: string;
   };
