@@ -1787,3 +1787,16 @@ describe("T-039 lane activation intent wiring", () => {
     expect(signalListSource).toContain('laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);');
   });
 });
+
+describe("T-040 new-lane drop target placement and insertion anchor wiring", () => {
+  it("places the new-lane drop target in signal list and wires afterAxisId in drop intents", () => {
+    const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+    const axisManagerSource = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+
+    expect(signalListSource).toContain('body.textContent = "Drop signal here to create a new lane";');
+    expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
+    expect(mainSource).toContain("onDropSignal: ({ signal, target }) => {");
+    expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
+  });
+});
