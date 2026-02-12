@@ -582,8 +582,26 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
 
       const cachedWorkspace = deps.getCachedWorkspace?.(datasetPath);
       if (cachedWorkspace) {
+        const hydratedReplay = hydrateWorkspaceReplayPayload(
+          viewerId,
+          datasetPath,
+          normalizedDataset,
+          cachedWorkspace,
+          deps.logDebug
+        );
+        if (hydratedReplay.workspace !== cachedWorkspace) {
+          deps.setCachedWorkspace?.(datasetPath, hydratedReplay.workspace);
+        }
+        for (const tracePayload of hydratedReplay.tracePayloads) {
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/sidePanelTraceInjected", {
+              viewerId,
+              trace: tracePayload
+            })
+          );
+        }
         void panel.webview.postMessage(
-          createProtocolEnvelope("host/workspaceLoaded", { workspace: cachedWorkspace })
+          createProtocolEnvelope("host/workspaceLoaded", { workspace: hydratedReplay.workspace })
         );
       }
     });
@@ -747,6 +765,82 @@ function getAddedTraces(previous: WorkspaceState, next: WorkspaceState): Array<{
     }
   }
   return addedTraces;
+}
+
+function hydrateWorkspaceReplayPayload(
+  viewerId: string,
+  documentPath: string,
+  loadedDataset: LoadedDatasetRecord,
+  workspace: WorkspaceState,
+  logDebug?: (message: string, details?: unknown) => void
+): {
+  workspace: WorkspaceState;
+  tracePayloads: SidePanelTraceTuplePayload[];
+} {
+  const tracePayloads: SidePanelTraceTuplePayload[] = [];
+  const tracePayloadBySourceId = new Map<string, SidePanelTraceTuplePayload>();
+  let hasHydratedTrace = false;
+
+  const nextPlots = workspace.plots.map((plot) => {
+    const nextTraces = plot.traces.map((trace) => {
+      const sourceId = trace.sourceId ?? toTraceSourceId(documentPath, trace.signal);
+      if (trace.sourceId !== sourceId) {
+        hasHydratedTrace = true;
+      }
+
+      if (!tracePayloadBySourceId.has(sourceId)) {
+        try {
+          const payload = createSidePanelTraceInjectedPayload(
+            viewerId,
+            documentPath,
+            loadedDataset,
+            trace.signal,
+            {
+              traceId: trace.id,
+              sourceId
+            }
+          ).trace;
+          tracePayloadBySourceId.set(sourceId, payload);
+          tracePayloads.push(payload);
+        } catch (error) {
+          logDebug?.("Skipped tuple hydration for cached workspace trace.", {
+            traceId: trace.id,
+            signal: trace.signal,
+            sourceId,
+            error: getErrorMessage(error)
+          });
+        }
+      }
+
+      if (!hasHydratedTrace) {
+        return trace;
+      }
+
+      return {
+        ...trace,
+        sourceId
+      };
+    });
+
+    if (!hasHydratedTrace) {
+      return plot;
+    }
+
+    return {
+      ...plot,
+      traces: nextTraces
+    };
+  });
+
+  return {
+    workspace: hasHydratedTrace
+      ? {
+          ...workspace,
+          plots: nextPlots
+        }
+      : workspace,
+    tracePayloads
+  };
 }
 
 function createSidePanelTraceInjectedPayload(

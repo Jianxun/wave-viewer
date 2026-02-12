@@ -342,6 +342,107 @@ describe("T-002 extension shell smoke", () => {
     expect(datasetMessage?.payload).not.toHaveProperty("axes");
   });
 
+  it("hydrates cached workspace traces and emits tuple payloads before workspaceLoaded", async () => {
+    const cachedWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 2
+        }
+      ]
+    };
+    const { deps, panelFixture, setCachedWorkspace } = createDeps({
+      initialWorkspace: cachedWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+    panelFixture.emitMessage(createProtocolEnvelope("webview/ready", { ready: true }));
+
+    expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
+      "host/init",
+      "host/viewerBindingUpdated",
+      "host/datasetLoaded",
+      "host/sidePanelTraceInjected",
+      "host/workspaceLoaded"
+    ]);
+    expect(panelFixture.sentMessages[3]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/sidePanelTraceInjected",
+      payload: {
+        viewerId: "viewer-1",
+        trace: {
+          traceId: "trace-1",
+          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1, 2],
+          y: [1, 2, 3]
+        }
+      }
+    });
+    expect(panelFixture.sentMessages[4]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/workspaceLoaded",
+      payload: {
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [
+                {
+                  id: "trace-1",
+                  signal: "vin",
+                  sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+                  axisId: "y1",
+                  visible: true
+                }
+              ],
+              nextAxisNumber: 2
+            }
+          ]
+        }
+      }
+    });
+    expect(setCachedWorkspace).toHaveBeenCalledWith("/workspace/examples/simulations/ota.spice.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+  });
+
   it("posts init only when opened without a dataset context", async () => {
     const { deps, panelFixture, showError } = createDeps({ hasActiveDocument: false });
 
