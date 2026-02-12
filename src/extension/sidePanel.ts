@@ -370,7 +370,9 @@ export function runResolvedSidePanelQuickAdd(deps: RunResolvedSidePanelQuickAddD
 
   void deps.targetViewer.panel.webview.postMessage(
     createProtocolEnvelope("host/sidePanelQuickAdd", {
-      signal: deps.signal
+      signal: deps.signal,
+      plotId: deps.quickAddTarget?.plotId,
+      axisId: deps.quickAddTarget?.axisId
     })
   );
   return true;

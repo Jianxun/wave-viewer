@@ -81,7 +81,10 @@ export type ParsedHostToWebviewMessage =
       { revision: number; workspace: WorkspaceStateLike; viewerState: ViewerStateLike; reason: string }
     >
   | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
-  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
+  | ProtocolEnvelope<
+      "host/sidePanelQuickAdd",
+      { signal: string; plotId?: string; axisId?: `y${number}` | string }
+    >
   | ProtocolEnvelope<
     "host/sidePanelTraceInjected",
     { viewerId: string; trace: SidePanelTraceTuplePayload }
@@ -315,7 +318,18 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
   }
 
   if (type === "host/sidePanelQuickAdd") {
-    return isNonEmptyString(payload.signal);
+    if (!isNonEmptyString(payload.signal)) {
+      return false;
+    }
+    const hasPlotId = payload.plotId !== undefined;
+    const hasAxisId = payload.axisId !== undefined;
+    if (hasPlotId !== hasAxisId) {
+      return false;
+    }
+    return (
+      (!hasPlotId && !hasAxisId) ||
+      (isNonEmptyString(payload.plotId) && isNonEmptyString(payload.axisId))
+    );
   }
 
   if (type === "host/sidePanelTraceInjected") {
