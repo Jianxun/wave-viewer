@@ -1731,6 +1731,10 @@ describe("T-027 side-panel quick-add tuple injection", () => {
       documentPath: "/workspace/examples/simulations/ota.spice.csv",
       loadedDataset: createLoadedDatasetFixture(),
       signal: "vin",
+      quickAddTarget: {
+        plotId: "plot-2",
+        axisId: "y2"
+      },
       targetViewer: {
         viewerId: "viewer-7",
         panel: panelFixture.panel,
@@ -1772,7 +1776,9 @@ describe("T-027 side-panel quick-add tuple injection", () => {
       version: PROTOCOL_VERSION,
       type: "host/sidePanelQuickAdd",
       payload: {
-        signal: "vin"
+        signal: "vin",
+        plotId: "plot-2",
+        axisId: "y2"
       }
     });
   });
@@ -2179,5 +2185,14 @@ describe("T-041 plot tab lifecycle host intents", () => {
     expect(source).toContain("onRemove: (plotId) => postRemovePlot(plotId)");
     expect(source).not.toContain('onAdd: () =>\n      dispatch({\n        type: "plot/add"');
     expect(source).not.toContain('onRemove: (plotId) => dispatch({ type: "plot/remove", payload: { plotId } })');
+  });
+});
+
+describe("T-042 multi-plot quick-add targeting", () => {
+  it("routes quick-add drop intents using host-provided plot and lane target metadata", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain("message.payload.plotId && message.payload.axisId");
+    expect(source).toContain("plotId: message.payload.plotId");
   });
 });

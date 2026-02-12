@@ -50,7 +50,10 @@ type HostMessage =
       }
     >
   | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
-  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
+  | ProtocolEnvelope<
+      "host/sidePanelQuickAdd",
+      { signal: string; plotId?: string; axisId?: AxisId }
+    >
   | ProtocolEnvelope<"host/sidePanelTraceInjected", { viewerId: string; trace: SidePanelTraceTuplePayload }>;
 
 const vscode = acquireVsCodeApi();
@@ -160,6 +163,7 @@ function postDropSignal(payload: {
   signal: string;
   target: { kind: "axis"; axisId: AxisId } | { kind: "new-axis"; afterAxisId?: AxisId };
   source: "axis-row" | "canvas-overlay";
+  plotId?: string;
 }): void {
   if (!workspace) {
     return;
@@ -173,7 +177,7 @@ function postDropSignal(payload: {
     createProtocolEnvelope("webview/intent/dropSignal", {
       viewerId,
       signal: payload.signal,
-      plotId: getActivePlot(workspace).id,
+      plotId: payload.plotId ?? getActivePlot(workspace).id,
       target: payload.target,
       source: payload.source,
       requestId: `${viewerId}:intent:${nextRequestId++}`
@@ -579,10 +583,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
 
   if (message.type === "host/sidePanelQuickAdd") {
+    const target =
+      message.payload.plotId && message.payload.axisId
+        ? { kind: "axis" as const, axisId: message.payload.axisId }
+        : resolvePreferredDropTarget();
     postDropSignal({
       signal: message.payload.signal,
-      target: resolvePreferredDropTarget(),
-      source: "axis-row"
+      target,
+      source: "axis-row",
+      plotId: message.payload.plotId
     });
     return;
   }

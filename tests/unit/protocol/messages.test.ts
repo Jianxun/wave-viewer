@@ -119,6 +119,36 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts host sidePanelQuickAdd with explicit plot and axis target", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/sidePanelQuickAdd", {
+        signal: "vin",
+        plotId: "plot-2",
+        axisId: "y2"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/sidePanelQuickAdd",
+      payload: {
+        signal: "vin",
+        plotId: "plot-2",
+        axisId: "y2"
+      }
+    });
+  });
+
+  it("rejects host sidePanelQuickAdd when plot and axis target are partially specified", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/sidePanelQuickAdd", {
+        signal: "vin",
+        plotId: "plot-2"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
   it("rejects host tupleUpsert when tuple lengths are mismatched", () => {
     const parsed = parseHostToWebviewMessage(
       createProtocolEnvelope("host/tupleUpsert", {

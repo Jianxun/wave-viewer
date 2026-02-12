@@ -4,9 +4,9 @@ T-041:
   pr: 48
   merged: true
 T-042:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 49
+  merged: true
 T-043:
   status: ready
   pr: null

@@ -55,7 +55,10 @@ export type HostToWebviewMessage =
       }
     >
   | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
-  | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
+  | ProtocolEnvelope<
+      "host/sidePanelQuickAdd",
+      { signal: string; plotId?: string; axisId?: `y${number}` }
+    >
   | ProtocolEnvelope<
       "host/sidePanelTraceInjected",
       { viewerId: string; trace: SidePanelTraceTuplePayload }
@@ -282,6 +285,10 @@ export type RunResolvedSidePanelQuickAddDeps = {
   documentPath: string;
   loadedDataset: LoadedDatasetRecord;
   signal: string;
+  quickAddTarget?: {
+    plotId: string;
+    axisId: `y${number}`;
+  };
   targetViewer: ViewerSessionRoute;
   bindViewerToDataset(viewerId: string, datasetPath: string): void;
   showError(message: string): void;

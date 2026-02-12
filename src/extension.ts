@@ -230,10 +230,24 @@ export function activate(context: VSCode.ExtensionContext): void {
       return;
     }
 
+    const snapshot = hostStateStore.ensureSnapshot(
+      selection.documentPath,
+      selection.loadedDataset.defaultXSignal
+    );
+    const activePlotId = snapshot.viewerState.activePlotId;
+    const activeAxisId = snapshot.viewerState.activeAxisByPlotId[activePlotId];
+
     runResolvedSidePanelQuickAdd({
       documentPath: selection.documentPath,
       loadedDataset: selection.loadedDataset,
       signal: selection.signal,
+      quickAddTarget:
+        activeAxisId === undefined
+          ? undefined
+          : {
+              plotId: activePlotId,
+              axisId: activeAxisId
+            },
       targetViewer,
       bindViewerToDataset: (viewerId, datasetPath) => {
         viewerSessions.bindViewerToDataset(viewerId, datasetPath);
