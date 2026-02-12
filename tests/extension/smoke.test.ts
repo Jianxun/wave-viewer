@@ -329,7 +329,7 @@ describe("T-002 extension shell smoke", () => {
     ]);
   });
 
-  it("hydrates cached workspace traces and emits tuple payloads before workspaceLoaded", async () => {
+  it("hydrates cached workspace traces and emits tuple payloads before stateSnapshot", async () => {
     const cachedWorkspace: WorkspaceState = {
       activePlotId: "plot-1",
       plots: [
@@ -360,29 +360,31 @@ describe("T-002 extension shell smoke", () => {
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/init",
       "host/viewerBindingUpdated",
-      "host/sidePanelTraceInjected",
-      "host/workspaceLoaded"
+      "host/tupleUpsert",
+      "host/stateSnapshot"
     ]);
     expect(panelFixture.sentMessages[2]).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/sidePanelTraceInjected",
+      type: "host/tupleUpsert",
       payload: {
-        viewerId: "viewer-1",
-        trace: {
-          traceId: "trace-1",
-          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-          xName: "time",
-          yName: "vin",
-          x: [0, 1, 2],
-          y: [1, 2, 3]
-        }
+        tuples: [
+          {
+            traceId: "trace-1",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ]
       }
     });
     expect(panelFixture.sentMessages[3]).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/workspaceLoaded",
+      type: "host/stateSnapshot",
       payload: {
+        revision: 0,
         workspace: {
           activePlotId: "plot-1",
           plots: [
@@ -403,6 +405,12 @@ describe("T-002 extension shell smoke", () => {
               nextAxisNumber: 2
             }
           ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: {
+            "plot-1": "y1"
+          }
         }
       }
     });
@@ -862,7 +870,7 @@ describe("T-022 follow-up signal actions after remove", () => {
 });
 
 describe("T-018 normalized protocol handling", () => {
-  it("handles validated dropSignal by caching and posting workspacePatched", async () => {
+  it("handles validated dropSignal intent by caching and posting statePatch", async () => {
     const { deps, panelFixture, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
     });
@@ -870,11 +878,13 @@ describe("T-018 normalized protocol handling", () => {
     await createOpenViewerCommand(deps)();
 
     panelFixture.emitMessage(
-      createProtocolEnvelope("webview/dropSignal", {
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
         signal: "vin",
         plotId: "plot-1",
         target: { kind: "axis", axisId: "y1" },
-        source: "axis-row"
+        source: "axis-row",
+        requestId: "req-1"
       })
     );
 
@@ -882,24 +892,26 @@ describe("T-018 normalized protocol handling", () => {
     expect(panelFixture.sentMessages).toEqual([
       {
         version: PROTOCOL_VERSION,
-        type: "host/sidePanelTraceInjected",
+        type: "host/tupleUpsert",
         payload: {
-          viewerId: "viewer-1",
-          trace: {
-            traceId: "trace-1",
-            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-            xName: "time",
-            yName: "vin",
-            x: [0, 1, 2],
-            y: [1, 2, 3]
-          }
+          tuples: [
+            {
+              traceId: "trace-1",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+              xName: "time",
+              yName: "vin",
+              x: [0, 1, 2],
+              y: [1, 2, 3]
+            }
+          ]
         }
       },
       {
         version: PROTOCOL_VERSION,
-        type: "host/workspacePatched",
+        type: "host/statePatch",
         payload: {
+          revision: 0,
           workspace: {
             activePlotId: "plot-1",
             plots: [
@@ -921,6 +933,12 @@ describe("T-018 normalized protocol handling", () => {
               }
             ]
           },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y1"
+            }
+          },
           reason: "dropSignal:axis-row"
         }
       }
@@ -935,11 +953,13 @@ describe("T-018 normalized protocol handling", () => {
     await createOpenViewerCommand(deps)();
 
     panelFixture.emitMessage(
-      createProtocolEnvelope("webview/dropSignal", {
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
         signal: "vin",
         plotId: "plot-1",
         target: { kind: "axis" },
-        source: "axis-row"
+        source: "axis-row",
+        requestId: "req-1"
       })
     );
 
@@ -948,7 +968,7 @@ describe("T-018 normalized protocol handling", () => {
     expect(logDebug).toHaveBeenCalledWith(
       "Ignored invalid or unknown webview message.",
       expect.objectContaining({
-        type: "webview/dropSignal"
+        type: "webview/intent/dropSignal"
       })
     );
   });
@@ -1039,11 +1059,13 @@ describe("T-018 normalized protocol handling", () => {
     await createOpenViewerCommand(deps)();
 
     panelFixture.emitMessage(
-      createProtocolEnvelope("webview/dropSignal", {
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
         signal: "vin",
         plotId: "plot-1",
         target: { kind: "axis", axisId: "y1" },
-        source: "canvas-overlay"
+        source: "canvas-overlay",
+        requestId: "req-2"
       })
     );
 
@@ -1051,24 +1073,26 @@ describe("T-018 normalized protocol handling", () => {
     expect(panelFixture.sentMessages).toEqual([
       {
         version: PROTOCOL_VERSION,
-        type: "host/sidePanelTraceInjected",
+        type: "host/tupleUpsert",
         payload: {
-          viewerId: "viewer-1",
-          trace: {
-            traceId: "trace-1",
-            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-            xName: "time",
-            yName: "vin",
-            x: [0, 1, 2],
-            y: [1, 2, 3]
-          }
+          tuples: [
+            {
+              traceId: "trace-1",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+              xName: "time",
+              yName: "vin",
+              x: [0, 1, 2],
+              y: [1, 2, 3]
+            }
+          ]
         }
       },
       {
         version: PROTOCOL_VERSION,
-        type: "host/workspacePatched",
+        type: "host/statePatch",
         payload: {
+          revision: 0,
           workspace: {
             activePlotId: "plot-1",
             plots: [
@@ -1089,6 +1113,12 @@ describe("T-018 normalized protocol handling", () => {
                 nextAxisNumber: 2
               }
             ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y1"
+            }
           },
           reason: "dropSignal:canvas-overlay"
         }
@@ -1179,8 +1209,8 @@ describe("T-025 standalone viewer side-panel routing", () => {
     ]);
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/viewerBindingUpdated",
-      "host/sidePanelTraceInjected",
-      "host/workspacePatched"
+      "host/tupleUpsert",
+      "host/statePatch"
     ]);
     expect(panelFixture.sentMessages[0]).toEqual({
       version: PROTOCOL_VERSION,
@@ -1192,25 +1222,33 @@ describe("T-025 standalone viewer side-panel routing", () => {
     });
     expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/sidePanelTraceInjected",
+      type: "host/tupleUpsert",
       payload: {
-        viewerId: "viewer-1",
-        trace: {
-          traceId: "trace-1",
-          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-          xName: "time",
-          yName: "vin",
-          x: [0, 1, 2],
-          y: [1, 2, 3]
-        }
+        tuples: [
+          {
+            traceId: "trace-1",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ]
       }
     });
     expect(panelFixture.sentMessages[2]).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/workspacePatched",
+      type: "host/statePatch",
       payload: {
+        revision: 1,
         workspace: nextWorkspace,
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: {
+            "plot-1": "y1"
+          }
+        },
         reason: "sidePanel:add-to-plot"
       }
     });
@@ -1250,7 +1288,7 @@ describe("T-025 standalone viewer side-panel routing", () => {
 });
 
 describe("T-027 side-panel quick-add tuple injection", () => {
-  it("routes quick-add to a standalone target and posts sidePanelTraceInjected tuple payload", () => {
+  it("routes quick-add to a standalone target and posts tupleUpsert payload", () => {
     const panelFixture = createPanelFixture();
     const bindViewerToDataset = vi.fn();
     const showError = vi.fn();
@@ -1276,22 +1314,23 @@ describe("T-027 side-panel quick-add tuple injection", () => {
     );
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/viewerBindingUpdated",
-      "host/sidePanelTraceInjected"
+      "host/tupleUpsert"
     ]);
     expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/sidePanelTraceInjected",
+      type: "host/tupleUpsert",
       payload: {
-        viewerId: "viewer-7",
-        trace: {
-          traceId: "viewer-7:vin:3",
-          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
-          xName: "time",
-          yName: "vin",
-          x: [0, 1, 2],
-          y: [1, 2, 3]
-        }
+        tuples: [
+          {
+            traceId: "viewer-7:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ]
       }
     });
   });
@@ -1353,8 +1392,8 @@ describe("T-027 side-panel quick-add tuple injection", () => {
     expect(showError).not.toHaveBeenCalled();
 
     const tuplePayloads = panelFixture.sentMessages
-      .filter((message) => message.type === "host/sidePanelTraceInjected")
-      .map((message) => message.payload.trace);
+      .filter((message) => message.type === "host/tupleUpsert")
+      .map((message) => message.payload.tuples[0]);
 
     expect(tuplePayloads).toHaveLength(2);
     expect(tuplePayloads[0]).toMatchObject({
@@ -1498,5 +1537,25 @@ describe("T-032 host-authoritative workspace state store", () => {
     expect(second.previous.revision).toBe(1);
     expect(second.next.revision).toBe(2);
     expect(second.next.workspace.plots[0]?.traces.map((trace) => trace.signal)).toEqual(["vin", "vout"]);
+  });
+});
+
+describe("T-033 revisioned protocol semantics", () => {
+  it("enforces stale host-state rejection in webview message handling", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain("let lastAppliedRevision = -1;");
+    expect(source).toContain("if (message.payload.revision <= lastAppliedRevision) {");
+    expect(source).toContain("Ignored stale host snapshot revision.");
+    expect(source).toContain("Ignored stale host patch revision.");
+  });
+
+  it("uses v2 intent and host state message names", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain('createProtocolEnvelope("webview/intent/dropSignal"');
+    expect(source).toContain('if (message.type === "host/stateSnapshot")');
+    expect(source).toContain('if (message.type === "host/statePatch")');
+    expect(source).toContain('if (message.type === "host/tupleUpsert")');
   });
 });
