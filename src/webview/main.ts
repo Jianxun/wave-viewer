@@ -176,6 +176,9 @@ function postSetActiveAxis(axisId: AxisId): void {
     return;
   }
 
+  preferredDropAxisId = axisId;
+  void renderWorkspace();
+
   vscode.postMessage(
     createProtocolEnvelope("webview/intent/setActiveAxis", {
       viewerId,
@@ -287,6 +290,33 @@ async function renderWorkspace(): Promise<void> {
         target,
         source: "axis-row"
       });
+    },
+    onDropTraceToNewLane: ({ traceId, afterAxisId }) => {
+      if (!workspace) {
+        return;
+      }
+
+      const previousActivePlot = getActivePlot(workspace);
+      const previousAxisIds = new Set(previousActivePlot.axes.map((axis) => axis.id));
+      workspace = reduceWorkspaceState(workspace, {
+        type: "axis/add",
+        payload: { afterAxisId }
+      });
+
+      const nextActivePlot = getActivePlot(workspace);
+      const newAxisId = nextActivePlot.axes.find((axis) => !previousAxisIds.has(axis.id))?.id;
+      if (!newAxisId) {
+        void renderWorkspace();
+        return;
+      }
+
+      workspace = reduceWorkspaceState(workspace, {
+        type: "trace/setAxis",
+        payload: { traceId, axisId: newAxisId }
+      });
+      preferredDropAxisId = newAxisId;
+      void renderWorkspace();
+      postSetActiveAxis(newAxisId);
     },
     onSetAxis: (traceId, axisId) => dispatch({ type: "trace/setAxis", payload: { traceId, axisId } }),
     onActivateLane: (axisId) => postSetActiveAxis(axisId),

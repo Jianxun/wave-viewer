@@ -11,6 +11,7 @@ export type SignalListProps = {
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
   onDropSignal(payload: { signal: string; target: DropSignalTarget }): void;
+  onDropTraceToNewLane(payload: { traceId: string; afterAxisId: AxisId }): void;
   onSetAxis(traceId: string, axisId: AxisId): void;
   onActivateLane(axisId: AxisId): void;
   onSetVisible(traceId: string, visible: boolean): void;
@@ -82,7 +83,7 @@ export function renderSignalList(props: SignalListProps): void {
     laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);
     laneSection.body.classList.add("trace-lane-body", "drop-target");
     laneSection.body.dataset.axisId = lane.axisId;
-    laneSection.body.addEventListener("click", (event) => {
+    laneSection.section.addEventListener("click", (event) => {
       if (shouldIgnoreLaneActivation(event.target)) {
         return;
       }
@@ -176,8 +177,12 @@ export function renderSignalList(props: SignalListProps): void {
     if (lane.axisId === activeLaneAxisId) {
       props.container.appendChild(
         createDropToNewLaneSection({
+          traces: props.traces,
+          afterAxisId: lane.axisId,
           canDropSignal: props.canDropSignal,
           parseDroppedSignal: props.parseDroppedSignal,
+          onDropTraceToNewLane: (traceId, afterAxisId) =>
+            props.onDropTraceToNewLane({ traceId, afterAxisId }),
           onDropSignal: (signal) =>
             props.onDropSignal({
               signal,
@@ -223,8 +228,11 @@ function createSection(titleText: string): { section: HTMLElement; body: HTMLEle
 }
 
 function createDropToNewLaneSection(options: {
+  traces: TraceState[];
+  afterAxisId: AxisId;
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
+  onDropTraceToNewLane(traceId: string, afterAxisId: AxisId): void;
   onDropSignal(signal: string): void;
 }): HTMLElement {
   const section = document.createElement("section");
@@ -233,6 +241,48 @@ function createDropToNewLaneSection(options: {
   const body = document.createElement("div");
   body.className = "list-row axis-row-new-target drop-target";
   body.textContent = "Drop signal here to create a new lane";
+  body.addEventListener("dragenter", (event) => {
+    if (!event.dataTransfer) {
+      return;
+    }
+    if (!hasTraceChipDrop(event.dataTransfer) && !options.canDropSignal(event)) {
+      return;
+    }
+    event.preventDefault();
+    body.classList.add("drop-active");
+  });
+  body.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer) {
+      return;
+    }
+    if (!hasTraceChipDrop(event.dataTransfer) && !options.canDropSignal(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = hasTraceChipDrop(event.dataTransfer) ? "move" : "copy";
+    body.classList.add("drop-active");
+  });
+  body.addEventListener("dragleave", (event) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && body.contains(nextTarget)) {
+      return;
+    }
+    body.classList.remove("drop-active");
+  });
+  body.addEventListener("drop", (event) => {
+    body.classList.remove("drop-active");
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    const traceId = event.dataTransfer.getData("text/wave-viewer-trace-id");
+    const trace = options.traces.find((entry) => entry.id === traceId);
+    if (trace) {
+      event.preventDefault();
+      options.onDropTraceToNewLane(trace.id, options.afterAxisId);
+      return;
+    }
+  });
   addDropHandlers({
     target: body,
     canDropSignal: options.canDropSignal,
@@ -242,6 +292,10 @@ function createDropToNewLaneSection(options: {
 
   section.append(body);
   return section;
+}
+
+function hasTraceChipDrop(dataTransfer: DataTransfer): boolean {
+  return dataTransfer.types.includes("text/wave-viewer-trace-id");
 }
 
 function resolveActiveLaneAxisId(

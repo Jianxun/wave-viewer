@@ -116,6 +116,7 @@ export type ViewerSessionRoute = {
 export type ViewerSessionRegistry = {
   registerPanel(panel: WebviewPanelLike, datasetPath?: string): string;
   bindViewerToDataset(viewerId: string, datasetPath: string): void;
+  getDatasetPathForViewer(viewerId: string): string | undefined;
   markViewerFocused(viewerId: string): void;
   removeViewer(viewerId: string): void;
   resolveTargetViewerSession(datasetPath: string): ViewerSessionRoute | undefined;
@@ -130,6 +131,7 @@ export type CommandDeps = {
   getPreferredDatasetPath?(): string | undefined;
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
+  resolveDatasetPathForViewer?(viewerId: string): string | undefined;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
   getHostStateSnapshot?(documentPath: string): HostStateSnapshot | undefined;

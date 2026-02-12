@@ -171,6 +171,9 @@ export function activate(context: VSCode.ExtensionContext): void {
         bindPanelToDataset: (documentPath, panel) => {
           const target = viewerSessions.resolveTargetViewerSession(documentPath);
           if (target && target.panel === panel) {
+            if (target.bindDataset) {
+              viewerSessions.bindViewerToDataset(target.viewerId, documentPath);
+            }
             return target.viewerId;
           }
           return undefined;
@@ -227,7 +230,9 @@ export function activate(context: VSCode.ExtensionContext): void {
       loadedDataset: selection.loadedDataset,
       signal: selection.signal,
       targetViewer,
-      bindViewerToDataset: () => undefined,
+      bindViewerToDataset: (viewerId, datasetPath) => {
+        viewerSessions.bindViewerToDataset(viewerId, datasetPath);
+      },
       showError: (message) => {
         void vscode.window.showErrorMessage(message);
       }
@@ -249,6 +254,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     onDatasetLoaded: (documentPath, loaded) => {
       registerLoadedDataset(documentPath, loaded);
     },
+    resolveDatasetPathForViewer: (viewerId) => viewerSessions.getDatasetPathForViewer(viewerId),
     getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     setCachedWorkspace: (documentPath, workspace) => {
       hostStateStore.setWorkspace(documentPath, workspace);
@@ -262,7 +268,7 @@ export function activate(context: VSCode.ExtensionContext): void {
         enableScripts: true,
         retainContextWhenHidden: true
       }) as unknown as WebviewPanelLike,
-    onPanelCreated: (_documentPath, panel) => viewerSessions.registerPanel(panel),
+    onPanelCreated: (documentPath, panel) => viewerSessions.registerPanel(panel, documentPath),
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     },
