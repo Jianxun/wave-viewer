@@ -24,3 +24,10 @@ archive:
   - { T-022: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-022.md, pr: 26 } }
   - { T-023: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-023.md, pr: 27 } }
   - { T-024: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-024.md, pr: 28 } }
+  - { T-025: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-025.md, pr: 30 } }
+  - { T-026: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-026.md, pr: 31 } }
+  - { T-027: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-027.md, pr: 32 } }
+  - { T-028: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-028.md, pr: 33 } }
+  - { T-029: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-029.md, pr: 34 } }
+  - { T-030: { completed_on: 2026-02-12, owner: Executor, scratchpad: agents/scratchpads/T-030.md, pr: 35 } }
+  - { T-031: { completed_on: null, owner: Executor, scratchpad: agents/scratchpads/T-031.md, pr: null } }

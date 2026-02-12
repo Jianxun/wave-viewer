@@ -11,7 +11,7 @@ import {
 } from "../../../src/webview/state/workspaceState";
 
 describe("signal panel model", () => {
-  it("groups assigned signals by lane order and keeps available signals separate", () => {
+  it("groups assigned signals by lane order", () => {
     let workspace = createWorkspaceState("time");
     workspace = addAxis(workspace, {});
     workspace = addTrace(workspace, { signal: "vin", axisId: "y2" });
@@ -20,12 +20,10 @@ describe("signal panel model", () => {
 
     const activePlot = workspace.plots[0]!;
     const model = buildSignalPanelModel({
-      signals: ["time", "vin", "vout", "vref"],
       axes: activePlot.axes,
       traces: activePlot.traces
     });
 
-    expect(model.availableSignals).toEqual(["time", "vin", "vout", "vref"]);
     expect(model.lanes).toEqual([
       { axisId: "y1", axisLabel: "Y1 (Lane 1)", assignedSignals: ["vout"] },
       { axisId: "y2", axisLabel: "Y2 (Lane 2)", assignedSignals: ["vin", "vin"] }
@@ -48,7 +46,6 @@ describe("signal panel model", () => {
 
     const activePlot = workspace.plots[0]!;
     const model = buildSignalPanelModel({
-      signals: ["time", "vin", "vout", "vref"],
       axes: activePlot.axes,
       traces: activePlot.traces
     });

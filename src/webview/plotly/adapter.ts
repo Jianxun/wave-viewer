@@ -45,14 +45,12 @@ export type PlotlyLayout = {
     fillcolor: "rgba(0,0,0,0)";
     layer: "below";
   }>;
-  hovermode: "x unified";
+  hovermode: "x unified" | "closest";
   legend: { orientation: "h"; y: number; x: number };
   xaxis: {
     title?: { text: string };
     autorange?: boolean;
     range?: [number, number];
-    anchor?: "free";
-    position?: number;
     rangeslider?: { visible: boolean; autorange?: boolean; range?: [number, number] };
     automargin: boolean;
     fixedrange?: boolean;
@@ -134,19 +132,13 @@ export function buildPlotlyFigure(payload: {
     plot_bgcolor: "#101723",
     font: { color: "#e8edf8" },
     dragmode: "zoom",
-    hovermode: "x unified",
+    hovermode: "closest",
     legend: { orientation: "h", y: 1.08, x: 0 },
     xaxis: {
       title: { text: firstTuple?.xName ?? payload.plot.xSignal },
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
-      anchor: "free",
-      position: 0,
-      rangeslider: {
-        visible: true,
-        autorange: true,
-        range: xBounds
-      },
+      rangeslider: { visible: false, autorange: true, range: xBounds },
       automargin: true,
       fixedrange: false
     }

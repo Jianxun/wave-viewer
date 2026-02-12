@@ -1,165 +1,148 @@
 schema_version: 2
 current_sprint:
-  - id: T-025
-    title: Restore Explorer signal actions for standalone viewer launch
+  - id: T-032
+    title: Introduce host-authoritative workspace + viewer interaction store
     owner: Executor
     dod:
-      - Fix the regression where Explorer right-click `Add Signal to Plot` does nothing after launching Wave Viewer without an active CSV editor.
-      - Keep current reducer semantics unchanged (`add-to-plot`, `add-to-new-axis`, `reveal-in-plot`) for side-panel actions.
-      - Ensure host emits explicit actionable warning when no target viewer can accept a side-panel action.
-      - Add/adjust smoke tests covering standalone launch + side-panel action flow.
-    verify:
-      - npm run lint
-      - npm test -- tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-025.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
-    files:
-      - src/extension.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-025.md
-  - id: T-026
-    title: Introduce viewer-session registry in extension host
-    owner: Executor
-    depends_on:
-      - T-025
-    dod:
-      - Add explicit `viewerId` identity for each open Wave Viewer panel and maintain host-side registry (`viewerId -> panel`, `viewerId -> dataset?`).
-      - Track active/focused viewer session to route side-panel commands deterministically.
-      - Remove reliance on single-key `datasetPath -> panel` assumptions for side-panel command routing.
-      - Add regression tests for multiple-viewer routing and panel disposal cleanup.
-    verify:
-      - npm run lint
-      - npm test -- tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-026.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
-    files:
-      - src/extension.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-026.md
-  - id: T-027
-    title: Add explicit viewer-binding protocol messages
-    owner: Executor
-    depends_on:
-      - T-026
-    dod:
-      - Define and implement typed protocol messages for viewer binding updates (host -> webview) and side-panel trace injection using explicit tuple payloads `(x, y)` (host -> webview).
-      - Use full inline numeric arrays in payloads for MVP; do not introduce chunk/handle streaming in this task.
-      - Ensure protocol additions preserve backward-compatible reducer-level semantics for plot/lane assignment.
-      - Add/adjust protocol contract tests and extension smoke tests for the new message types.
-      - Keep runtime validation strict at host/webview boundaries.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-027.md
-      spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0006-trace-payload-independent-variable-tuples.md
-    files:
-      - src/extension.ts
-      - src/webview/main.ts
-      - src/core/dataset/types.ts
-      - tests/unit/protocol/messages.test.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-027.md
-  - id: T-028
-    title: Refactor viewer signal panel to show available and per-lane assigned signals
-    owner: Executor
-    depends_on:
-      - T-027
-    dod:
-      - Replace single flat signal list UX with sections that make lane assignment explicit (available signals + per-lane assignments).
-      - Ensure UI remains deterministic and consistent with reducer state after add/remove/reassign/reorder operations.
-      - Preserve existing drag/drop and quick-add functionality while updating signal display structure.
-      - Add unit/smoke checks for new signal panel rendering and interactions.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/webview/workspaceState.test.ts tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-028.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0003-side-panel-first-workflow.md
-    files:
-      - src/webview/components/SignalList.ts
-      - src/webview/main.ts
-      - src/webview/index.html
-      - src/webview/styles.css
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-028.md
-  - id: T-029
-    title: Implement tuple-trace ingestion path from Explorer to viewer
-    owner: Executor
-    dod:
-      - Implement host-side mapping from selected Explorer signal to explicit tuple trace payloads (`x[]`, `y[]`, metadata) for viewer delivery.
-      - Ensure viewer state stores and renders only trace tuples received from host; avoid deriving plot data from full dataset snapshots inside viewer.
-      - Keep lane assignment and reducer behavior deterministic when adding tuple traces.
-      - Add unit/smoke tests proving mixed-grid traces from different sources can coexist in one viewer session.
+      - Add a host-side state store that is the single writer for `WorkspaceState` and viewer interaction state (`activePlotId`, `activeAxisByPlotId`, `revision`).
+      - Route explorer/side-panel command mutations through host transactions only (no webview-authoritative writes).
+      - Keep reducer behavior deterministic while centralizing commit/apply logic in host.
+      - Add focused tests for transaction atomicity and revision monotonic increment behavior.
     verify:
       - npm run lint
       - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-029.md
+      scratchpad: agents/scratchpads/T-032.md
       spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0006-trace-payload-independent-variable-tuples.md
+      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
     files:
       - src/extension.ts
-      - src/webview/main.ts
-      - src/webview/plotly/adapter.ts
+      - src/extension/commands.ts
+      - src/extension/sidePanel.ts
+      - src/extension/types.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-032.md
+  - id: T-033
+    title: Implement revisioned intent protocol v2 between webview and host
+    owner: Executor
+    depends_on:
+      - T-032
+    dod:
+      - Add typed/runtime-validated `webview/intent/*` messages and host `stateSnapshot/statePatch` messages with monotonic revision.
+      - Enforce stale host-state rejection in webview (`revision <= lastAppliedRevision` is ignored).
+      - Keep tuple transport separate from structural state updates.
+      - Add protocol contract tests for validation and revision ordering semantics.
+    verify:
+      - npm run lint
+      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-033.md
+      spec: doc/specs/host-webview-protocol.md
+      adr: agents/adr/ADR-0010-revisioned-intent-based-protocol.md
+    files:
       - src/core/dataset/types.ts
+      - src/extension/types.ts
+      - src/webview/main.ts
+      - tests/unit/protocol/messages.test.ts
       - tests/extension/smoke.test.ts
-      - tests/unit/webview/workspaceState.test.ts
-      - agents/scratchpads/T-029.md
+      - agents/scratchpads/T-033.md
+  - id: T-034
+    title: Convert webview to projection-only renderer and intent emitter
+    owner: Executor
+    depends_on:
+      - T-033
+    dod:
+      - Remove webview-to-host full workspace publication path (`webview/workspaceChanged`).
+      - Ensure webview local updates are driven by host-authoritative snapshot/patch messages only.
+      - Preserve drag/drop and interaction UX by emitting intents rather than direct state snapshots.
+      - Add regression coverage proving no dual-write overwrite path remains.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-034.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
+    files:
+      - src/webview/main.ts
+      - src/extension/commands.ts
+      - src/extension/workspaceActions.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-034.md
+  - id: T-035
+    title: Add active-axis semantics and default targeting across explorer and drop flows
+    owner: Executor
+    depends_on:
+      - T-034
+    dod:
+      - Implement host-owned `activeAxisByPlotId` lifecycle (set/select/fallback/remove/reassign behavior).
+      - Ensure explorer `Add to Plot` and quick-add target active axis by default.
+      - Ensure all new-axis operations set the newly created axis active in the same transaction.
+      - Add UI indication for active axis and tests for targeting consistency across entry paths.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/signalList.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-035.md
+      spec: doc/specs/side-panel-workflow.md
+      adr: agents/adr/ADR-0011-active-axis-targeting-and-new-axis-activation.md
+    files:
+      - src/extension.ts
+      - src/extension/sidePanel.ts
+      - src/webview/main.ts
+      - src/webview/components/AxisManager.ts
+      - src/webview/styles.css
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-035.md
 backlog:
-  - id: T-030
-    title: Add deterministic `reference-only` spec persistence mode
+  - id: T-036
+    title: Remove legacy protocol/dual-write compatibility shims
     owner: Executor
     depends_on:
-      - T-029
+      - T-035
     dod:
-      - Implement export/import path for `reference-only` specs that preserve plotting intent without embedding full sample arrays.
-      - Ensure rerun workflow can bind fresh source data and reconstruct plot assignments deterministically.
-      - Add validation and tests for missing/outdated references with clear actionable errors.
+      - Remove deprecated v1 message handlers and any legacy host/webview dual-write fallback paths.
+      - Tighten runtime validation and error handling to reject unsupported legacy payloads clearly.
+      - Update integration tests to assert only v2 intent/state contracts are used.
     verify:
       - npm run lint
-      - npm test -- tests/unit/spec/importErrors.test.ts tests/unit/spec/roundtrip.test.ts tests/extension/smoke.test.ts
+      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-030.md
-      spec: doc/specs/wave-viewer-mvp.md
-      adr: agents/adr/ADR-0007-dual-spec-persistence-modes.md
+      scratchpad: agents/scratchpads/T-036.md
+      spec: doc/specs/host-webview-protocol.md
+      adr: agents/adr/ADR-0010-revisioned-intent-based-protocol.md
     files:
+      - src/core/dataset/types.ts
+      - src/extension/commands.ts
+      - src/webview/main.ts
+      - tests/unit/protocol/messages.test.ts
+      - tests/extension/smoke.test.ts
+      - agents/scratchpads/T-036.md
+  - id: T-037
+    title: Re-baseline deterministic replay and docs after protocol migration
+    owner: Executor
+    depends_on:
+      - T-036
+    dod:
+      - Verify spec import/export and replay behavior remain deterministic under host-authoritative + revisioned protocol model.
+      - Update architecture docs and testing strategy references to remove stale legacy workflow assumptions.
+      - Add end-to-end regression coverage for explorer command flows (add-to-plot, add-to-new-axis, quick-add) across reopen/reconnect scenarios.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-037.md
+      spec: doc/specs/wave-viewer-mvp.md
+      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
+    files:
+      - doc/specs/testing-strategy.md
       - src/core/spec/importSpec.ts
       - src/core/spec/exportSpec.ts
+      - tests/extension/smoke.test.ts
+      - tests/unit/spec/roundtrip.test.ts
       - tests/unit/spec/importErrors.test.ts
-      - tests/unit/spec/roundtrip.test.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-030.md
-  - id: T-031
-    title: Add deterministic `portable-archive` spec mode with embedded trace tuples
-    owner: Executor
-    depends_on:
-      - T-030
-    dod:
-      - Implement export/import path for `portable-archive` specs embedding full tuple trace data needed for offline replay.
-      - Keep archive serialization deterministic (trace order, axis assignment, numeric array ordering).
-      - Add regression tests validating archive replay works without accessing original source files.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/spec/roundtrip.test.ts tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-031.md
-      spec: doc/specs/wave-viewer-mvp.md
-      adr: agents/adr/ADR-0007-dual-spec-persistence-modes.md
-    files:
-      - src/core/spec/importSpec.ts
-      - src/core/spec/exportSpec.ts
-      - src/core/spec/plotSpecV1.ts
-      - tests/unit/spec/roundtrip.test.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-031.md
+      - agents/scratchpads/T-037.md
 exploration_candidates:
-  - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after side-panel workflow stabilization criteria are met.
+  - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.
   - Evaluate decimation strategy for large CSV files under side-panel-driven multi-trace workflows.

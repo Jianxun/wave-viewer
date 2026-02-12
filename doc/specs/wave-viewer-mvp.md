@@ -62,6 +62,8 @@ Detailed behavior is specified in `doc/specs/side-panel-workflow.md`.
 ### 3.2 Signal Add/Reassign Semantics
 - All user entry paths (side-panel command, side-panel drag/drop, fallback in-webview control) MUST converge to the same reducer action contract.
 - Adding a signal appends a trace instance for a concrete target axis (`yN`), creating a new axis only through explicit action.
+- Active axis is a per-plot concept and is the default target for `Add to Plot` and explorer quick-add.
+- `Add to New Axis` MUST create the new axis, append the trace to it, and set that new axis as active in one host transaction.
 - Same signal may be appended multiple times to different axes (or the same axis) as independent trace instances.
 
 ### 3.3 Trace and Axis Controls
@@ -123,8 +125,10 @@ type WorkspaceState = {
 ## 5. Host-Webview Protocol Contract
 
 - Host/webview messaging MUST use explicit message types and schema-validated payloads.
+- Host is the authoritative state owner; webview emits intents and renders host-issued state.
+- Host state messages MUST include monotonic revision numbers; webview MUST ignore stale revisions.
 - Protocol changes MUST follow compatibility/versioning rules in `doc/specs/host-webview-protocol.md`.
-- Drag/drop signal operations MUST emit normalized `webview/dropSignal` events to the host.
+- Drag/drop signal operations MUST emit normalized `webview/intent/dropSignal` events to the host.
 
 ## 6. Plotly Mapping Rules
 

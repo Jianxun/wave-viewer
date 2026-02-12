@@ -282,21 +282,7 @@ describe("T-002 extension shell smoke", () => {
       type: "host/viewerBindingUpdated",
       payload: {
         viewerId: "viewer-1",
-        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
-      }
-    });
-    expect(panelFixture.sentMessages[2]).toEqual({
-      version: PROTOCOL_VERSION,
-      type: "host/datasetLoaded",
-      payload: {
-        path: "/workspace/examples/simulations/ota.spice.csv",
-        fileName: "ota.spice.csv",
-        rowCount: 3,
-        columns: [
-          { name: "time", values: [0, 1, 2] },
-          { name: "vin", values: [1, 2, 3] }
-        ],
-        defaultXSignal: "time"
+        datasetPath: undefined
       }
     });
   });
@@ -315,7 +301,7 @@ describe("T-002 extension shell smoke", () => {
     expect(panelFixture.sentMessages).toEqual([]);
   });
 
-  it("loads webview shell and posts init + dataset events after ready", async () => {
+  it("loads webview shell and posts init + viewer identity after ready", async () => {
     const { deps, panelFixture, showError } = createDeps();
 
     await createOpenViewerCommand(deps)();
@@ -336,29 +322,10 @@ describe("T-002 extension shell smoke", () => {
         type: "host/viewerBindingUpdated",
         payload: {
           viewerId: "viewer-1",
-          datasetPath: "/workspace/examples/simulations/ota.spice.csv"
-        }
-      },
-      {
-        version: PROTOCOL_VERSION,
-        type: "host/datasetLoaded",
-        payload: {
-          path: "/workspace/examples/simulations/ota.spice.csv",
-          fileName: "ota.spice.csv",
-          rowCount: 3,
-          columns: [
-            { name: "time", values: [0, 1, 2] },
-            { name: "vin", values: [1, 2, 3] }
-          ],
-          defaultXSignal: "time"
+          datasetPath: undefined
         }
       }
     ]);
-
-    const datasetMessage = panelFixture.sentMessages[2];
-    expect(datasetMessage?.type).toBe("host/datasetLoaded");
-    expect(datasetMessage?.payload).not.toHaveProperty("layout");
-    expect(datasetMessage?.payload).not.toHaveProperty("axes");
   });
 
   it("hydrates cached workspace traces and emits tuple payloads before workspaceLoaded", async () => {
@@ -392,11 +359,10 @@ describe("T-002 extension shell smoke", () => {
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/init",
       "host/viewerBindingUpdated",
-      "host/datasetLoaded",
       "host/sidePanelTraceInjected",
       "host/workspaceLoaded"
     ]);
-    expect(panelFixture.sentMessages[3]).toEqual({
+    expect(panelFixture.sentMessages[2]).toEqual({
       version: PROTOCOL_VERSION,
       type: "host/sidePanelTraceInjected",
       payload: {
@@ -412,7 +378,7 @@ describe("T-002 extension shell smoke", () => {
         }
       }
     });
-    expect(panelFixture.sentMessages[4]).toEqual({
+    expect(panelFixture.sentMessages[3]).toEqual({
       version: PROTOCOL_VERSION,
       type: "host/workspaceLoaded",
       payload: {
@@ -1170,7 +1136,7 @@ describe("T-028 signal panel structure", () => {
 });
 
 describe("T-025 standalone viewer side-panel routing", () => {
-  it("binds a standalone viewer to dataset action and posts datasetLoaded before patch", () => {
+  it("binds a standalone viewer action target and posts tuple + patch messages", () => {
     const panelFixture = createPanelFixture();
     const showWarning = vi.fn();
     const bindPanelToDataset = vi.fn();
@@ -1214,34 +1180,19 @@ describe("T-025 standalone viewer side-panel routing", () => {
       }
     ]);
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
-      "host/datasetLoaded",
       "host/viewerBindingUpdated",
       "host/sidePanelTraceInjected",
       "host/workspacePatched"
     ]);
     expect(panelFixture.sentMessages[0]).toEqual({
       version: PROTOCOL_VERSION,
-      type: "host/datasetLoaded",
-      payload: {
-        path: "/workspace/examples/simulations/ota.spice.csv",
-        fileName: "ota.spice.csv",
-        rowCount: 3,
-        columns: [
-          { name: "time", values: [0, 1, 2] },
-          { name: "vin", values: [1, 2, 3] }
-        ],
-        defaultXSignal: "time"
-      }
-    });
-    expect(panelFixture.sentMessages[1]).toEqual({
-      version: PROTOCOL_VERSION,
       type: "host/viewerBindingUpdated",
       payload: {
         viewerId: "viewer-1",
-        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
+        datasetPath: undefined
       }
     });
-    expect(panelFixture.sentMessages[2]).toEqual({
+    expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
       type: "host/sidePanelTraceInjected",
       payload: {
@@ -1257,7 +1208,7 @@ describe("T-025 standalone viewer side-panel routing", () => {
         }
       }
     });
-    expect(panelFixture.sentMessages[3]).toEqual({
+    expect(panelFixture.sentMessages[2]).toEqual({
       version: PROTOCOL_VERSION,
       type: "host/workspacePatched",
       payload: {
@@ -1326,11 +1277,10 @@ describe("T-027 side-panel quick-add tuple injection", () => {
       "/workspace/examples/simulations/ota.spice.csv"
     );
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
-      "host/datasetLoaded",
       "host/viewerBindingUpdated",
       "host/sidePanelTraceInjected"
     ]);
-    expect(panelFixture.sentMessages[2]).toEqual({
+    expect(panelFixture.sentMessages[1]).toEqual({
       version: PROTOCOL_VERSION,
       type: "host/sidePanelTraceInjected",
       payload: {
