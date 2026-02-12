@@ -349,12 +349,13 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
 
 export function applySidePanelSignalAction(
   workspace: WorkspaceState,
-  action: SidePanelSignalAction
+  action: SidePanelSignalAction,
+  options?: { sourceId?: string }
 ): WorkspaceState {
   if (action.type === "add-to-plot") {
     return reduceWorkspaceState(workspace, {
       type: "trace/add",
-      payload: { signal: action.signal }
+      payload: { signal: action.signal, sourceId: options?.sourceId }
     });
   }
 
@@ -367,7 +368,7 @@ export function applySidePanelSignalAction(
     }
     return reduceWorkspaceState(withAxis, {
       type: "trace/add",
-      payload: { signal: action.signal, axisId }
+      payload: { signal: action.signal, sourceId: options?.sourceId, axisId }
     });
   }
 
@@ -398,7 +399,8 @@ export function applySidePanelSignalAction(
 
 export function applyDropSignalAction(
   workspace: WorkspaceState,
-  payload: Extract<WebviewToHostMessage, { type: "webview/dropSignal" }>["payload"]
+  payload: Extract<WebviewToHostMessage, { type: "webview/dropSignal" }>["payload"],
+  options?: { sourceId?: string }
 ): WorkspaceState {
   let nextWorkspace = reduceWorkspaceState(workspace, {
     type: "plot/setActive",
@@ -418,7 +420,12 @@ export function applyDropSignalAction(
 
     return reduceWorkspaceState(nextWorkspace, {
       type: "trace/add",
-      payload: { plotId: payload.plotId, signal: payload.signal, axisId: newAxisId }
+      payload: {
+        plotId: payload.plotId,
+        signal: payload.signal,
+        sourceId: options?.sourceId,
+        axisId: newAxisId
+      }
     });
   }
 
@@ -428,7 +435,12 @@ export function applyDropSignalAction(
 
   return reduceWorkspaceState(nextWorkspace, {
     type: "trace/add",
-    payload: { plotId: payload.plotId, signal: payload.signal, axisId: payload.target.axisId }
+    payload: {
+      plotId: payload.plotId,
+      signal: payload.signal,
+      sourceId: options?.sourceId,
+      axisId: payload.target.axisId
+    }
   });
 }
 
@@ -506,7 +518,9 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
 
         let nextWorkspace: WorkspaceState;
         try {
-          nextWorkspace = applyDropSignalAction(cachedWorkspace, message.payload);
+          nextWorkspace = applyDropSignalAction(cachedWorkspace, message.payload, {
+            sourceId: toTraceSourceId(datasetPath, message.payload.signal)
+          });
         } catch (error) {
           deps.logDebug?.("Ignored invalid webview dropSignal message payload.", {
             payload: message.payload,
@@ -516,6 +530,23 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         }
 
         deps.setCachedWorkspace?.(datasetPath, nextWorkspace);
+        for (const trace of getAddedTraces(cachedWorkspace, nextWorkspace)) {
+          void panel.webview.postMessage(
+            createProtocolEnvelope(
+              "host/sidePanelTraceInjected",
+              createSidePanelTraceInjectedPayload(
+                viewerId,
+                datasetPath,
+                normalizedDataset,
+                trace.signal,
+                {
+                  traceId: trace.id,
+                  sourceId: trace.sourceId
+                }
+              )
+            )
+          );
+        }
         void panel.webview.postMessage(
           createProtocolEnvelope("host/workspacePatched", {
             workspace: nextWorkspace,
@@ -686,11 +717,44 @@ function createViewerBindingUpdatedPayload(
   };
 }
 
+function toTraceSourceId(documentPath: string, signal: string): string {
+  return `${documentPath}::${signal}`;
+}
+
+function getAddedTraces(previous: WorkspaceState, next: WorkspaceState): Array<{
+  id: string;
+  signal: string;
+  sourceId?: string;
+}> {
+  const previousTraceIds = new Set<string>();
+  for (const plot of previous.plots) {
+    for (const trace of plot.traces) {
+      previousTraceIds.add(trace.id);
+    }
+  }
+
+  const addedTraces: Array<{ id: string; signal: string; sourceId?: string }> = [];
+  for (const plot of next.plots) {
+    for (const trace of plot.traces) {
+      if (previousTraceIds.has(trace.id)) {
+        continue;
+      }
+      addedTraces.push({
+        id: trace.id,
+        signal: trace.signal,
+        sourceId: trace.sourceId
+      });
+    }
+  }
+  return addedTraces;
+}
+
 function createSidePanelTraceInjectedPayload(
   viewerId: string,
   documentPath: string,
   loadedDataset: LoadedDatasetRecord,
-  signal: string
+  signal: string,
+  options?: { traceId?: string; sourceId?: string }
 ): Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"] {
   const xColumn = loadedDataset.dataset.columns.find(
     (column) => column.name === loadedDataset.defaultXSignal
@@ -705,8 +769,8 @@ function createSidePanelTraceInjectedPayload(
   return {
     viewerId,
     trace: {
-      traceId: `${viewerId}:${signal}:${yColumn.values.length}`,
-      sourceId: `${documentPath}::${signal}`,
+      traceId: options?.traceId ?? `${viewerId}:${signal}:${yColumn.values.length}`,
+      sourceId: options?.sourceId ?? toTraceSourceId(documentPath, signal),
       datasetPath: documentPath,
       xName: xColumn.name,
       yName: yColumn.name,
@@ -745,6 +809,8 @@ export function runResolvedSidePanelSignalAction(
   const nextWorkspace = applySidePanelSignalAction(workspace, {
     type: deps.actionType,
     signal: deps.signal
+  }, {
+    sourceId: toTraceSourceId(deps.documentPath, deps.signal)
   });
   deps.setCachedWorkspace(deps.documentPath, nextWorkspace);
 
@@ -757,8 +823,9 @@ export function runResolvedSidePanelSignalAction(
     return nextWorkspace;
   }
 
+  const viewerId = deps.bindPanelToDataset(deps.documentPath, panel) ?? "viewer-unknown";
+
   if (!boundPanel && standalonePanel === panel) {
-    const viewerId = deps.bindPanelToDataset(deps.documentPath, panel);
     deps.clearStandalonePanel(panel);
     void panel.webview.postMessage(
       createProtocolEnvelope(
@@ -766,14 +833,24 @@ export function runResolvedSidePanelSignalAction(
         createDatasetLoadedPayload(deps.documentPath, deps.loadedDataset)
       )
     );
-    if (viewerId) {
-      void panel.webview.postMessage(
-        createProtocolEnvelope(
-          "host/viewerBindingUpdated",
-          createViewerBindingUpdatedPayload(viewerId, deps.documentPath)
-        )
-      );
-    }
+    void panel.webview.postMessage(
+      createProtocolEnvelope(
+        "host/viewerBindingUpdated",
+        createViewerBindingUpdatedPayload(viewerId, deps.documentPath)
+      )
+    );
+  }
+
+  for (const trace of getAddedTraces(workspace, nextWorkspace)) {
+    void panel.webview.postMessage(
+      createProtocolEnvelope(
+        "host/sidePanelTraceInjected",
+        createSidePanelTraceInjectedPayload(viewerId, deps.documentPath, deps.loadedDataset, trace.signal, {
+          traceId: trace.id,
+          sourceId: trace.sourceId
+        })
+      )
+    );
   }
 
   void panel.webview.postMessage(

@@ -3,7 +3,8 @@ declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 import {
   createProtocolEnvelope,
   parseHostToWebviewMessage,
-  type ProtocolEnvelope
+  type ProtocolEnvelope,
+  type SidePanelTraceTuplePayload
 } from "../core/dataset/types";
 import { renderAxisManager } from "./components/AxisManager";
 import { renderSignalList } from "./components/SignalList";
@@ -12,8 +13,7 @@ import { renderTraceList } from "./components/TraceList";
 import {
   getAxisLaneDomains,
   parseRelayoutRanges,
-  resolveAxisIdFromNormalizedY,
-  type DatasetColumnData
+  resolveAxisIdFromNormalizedY
 } from "./plotly/adapter";
 import { createPlotRenderer } from "./plotly/renderPlot";
 import { reduceWorkspaceState, type WorkspaceAction } from "./state/reducer";
@@ -61,7 +61,7 @@ const vscode = acquireVsCodeApi();
 
 let workspace: WorkspaceState | undefined;
 let signalNames: string[] = [];
-let columns: DatasetColumnData[] = [];
+const traceTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>();
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
@@ -328,7 +328,7 @@ async function renderWorkspace(): Promise<void> {
       })
   });
 
-  await plotRenderer.render(activePlot, columns);
+  await plotRenderer.render(activePlot, traceTuplesBySourceId);
   renderCanvasDropOverlay(activePlot.axes);
   vscode.postMessage(
     createProtocolEnvelope("webview/workspaceChanged", {
@@ -429,7 +429,6 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
 
   if (message.type === "host/datasetLoaded") {
-    columns = message.payload.columns;
     signalNames = message.payload.columns.map((column) => column.name);
     const initialXSignal = signalNames.includes(message.payload.defaultXSignal)
       ? message.payload.defaultXSignal
@@ -478,10 +477,34 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
 
   if (message.type === "host/sidePanelTraceInjected") {
-    postDropSignal({
-      signal: message.payload.trace.yName,
-      target: resolvePreferredDropTarget(),
-      source: "axis-row"
+    const tuple = message.payload.trace;
+    traceTuplesBySourceId.set(tuple.sourceId, tuple);
+    if (!workspace) {
+      return;
+    }
+    const activePlot = getActivePlot(workspace);
+    if (activePlot.traces.some((trace) => trace.sourceId === tuple.sourceId)) {
+      return;
+    }
+
+    const target = resolvePreferredDropTarget();
+    if (target.kind === "new-axis") {
+      dispatch({ type: "axis/add" });
+      const refreshed = workspace ? getActivePlot(workspace) : undefined;
+      const newestAxis = refreshed?.axes[refreshed.axes.length - 1]?.id;
+      if (!newestAxis) {
+        return;
+      }
+      dispatch({
+        type: "trace/add",
+        payload: { signal: tuple.yName, sourceId: tuple.sourceId, axisId: newestAxis }
+      });
+      return;
+    }
+
+    dispatch({
+      type: "trace/add",
+      payload: { signal: tuple.yName, sourceId: tuple.sourceId, axisId: target.axisId }
     });
   }
 });

@@ -6,16 +6,37 @@ import {
   getAxisLaneDomains,
   mapLaneIndexToPlotly,
   parseRelayoutRanges,
-  resolveAxisIdFromNormalizedY,
-  type DatasetColumnData
+  resolveAxisIdFromNormalizedY
 } from "../../../../src/webview/plotly/adapter";
 import type { AxisState, PlotState } from "../../../../src/webview/state/workspaceState";
+import type { SidePanelTraceTuplePayload } from "../../../../src/core/dataset/types";
 
-const columns: DatasetColumnData[] = [
-  { name: "time", values: [0, 1, 2] },
-  { name: "vin", values: [1, 2, 3] },
-  { name: "vout", values: [3, 2, 1] }
-];
+const traceTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>([
+  [
+    "/workspace/examples/a.csv::vin",
+    {
+      traceId: "trace-1",
+      sourceId: "/workspace/examples/a.csv::vin",
+      datasetPath: "/workspace/examples/a.csv",
+      xName: "time",
+      yName: "vin",
+      x: [0, 1, 2],
+      y: [1, 2, 3]
+    }
+  ],
+  [
+    "/workspace/examples/a.csv::vout",
+    {
+      traceId: "trace-2",
+      sourceId: "/workspace/examples/a.csv::vout",
+      datasetPath: "/workspace/examples/a.csv",
+      xName: "time",
+      yName: "vout",
+      x: [0, 1, 2],
+      y: [3, 2, 1]
+    }
+  ]
+]);
 
 function createPlot(overrides?: Partial<PlotState>): PlotState {
   const axes: AxisState[] = [
@@ -29,8 +50,20 @@ function createPlot(overrides?: Partial<PlotState>): PlotState {
     xSignal: "time",
     axes,
     traces: [
-      { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
-      { id: "trace-2", signal: "vout", axisId: "y2", visible: false }
+      {
+        id: "trace-1",
+        signal: "vin",
+        sourceId: "/workspace/examples/a.csv::vin",
+        axisId: "y1",
+        visible: true
+      },
+      {
+        id: "trace-2",
+        signal: "vout",
+        sourceId: "/workspace/examples/a.csv::vout",
+        axisId: "y2",
+        visible: false
+      }
     ],
     nextAxisNumber: 3,
     ...overrides
@@ -56,7 +89,7 @@ describe("plotly adapter", () => {
   it("maps plot state to traces/layout with visibility and axis mapping", () => {
     const figure = buildPlotlyFigure({
       plot: createPlot(),
-      columns
+      traceTuplesBySourceId
     });
 
     expect(figure.data).toHaveLength(2);
@@ -123,7 +156,7 @@ describe("plotly adapter", () => {
           { id: "y2", range: [0, 5] }
         ]
       }),
-      columns
+      traceTuplesBySourceId
     });
 
     expect(figure.layout.xaxis).toMatchObject({ autorange: false, range: [0.2, 1.8] });
@@ -136,7 +169,7 @@ describe("plotly adapter", () => {
       plot: createPlot({
         axes: [{ id: "y3" }, { id: "y1" }, { id: "y2" }]
       }),
-      columns
+      traceTuplesBySourceId
     });
 
     expect((figure.layout.yaxis as { domain?: [number, number] }).domain?.[0]).toBeCloseTo(
@@ -160,20 +193,44 @@ describe("plotly adapter", () => {
     const basePlot = createPlot({
       axes: [{ id: "y1" }, { id: "y2" }, { id: "y3" }],
       traces: [
-        { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
-        { id: "trace-2", signal: "vout", axisId: "y3", visible: true }
+        {
+          id: "trace-1",
+          signal: "vin",
+          sourceId: "/workspace/examples/a.csv::vin",
+          axisId: "y1",
+          visible: true
+        },
+        {
+          id: "trace-2",
+          signal: "vout",
+          sourceId: "/workspace/examples/a.csv::vout",
+          axisId: "y3",
+          visible: true
+        }
       ]
     });
     const reorderedPlot = createPlot({
       axes: [{ id: "y3" }, { id: "y1" }, { id: "y2" }],
       traces: [
-        { id: "trace-1", signal: "vin", axisId: "y1", visible: true },
-        { id: "trace-2", signal: "vout", axisId: "y3", visible: true }
+        {
+          id: "trace-1",
+          signal: "vin",
+          sourceId: "/workspace/examples/a.csv::vin",
+          axisId: "y1",
+          visible: true
+        },
+        {
+          id: "trace-2",
+          signal: "vout",
+          sourceId: "/workspace/examples/a.csv::vout",
+          axisId: "y3",
+          visible: true
+        }
       ]
     });
 
-    const baseline = buildPlotlyFigure({ plot: basePlot, columns });
-    const reordered = buildPlotlyFigure({ plot: reorderedPlot, columns });
+    const baseline = buildPlotlyFigure({ plot: basePlot, traceTuplesBySourceId });
+    const reordered = buildPlotlyFigure({ plot: reorderedPlot, traceTuplesBySourceId });
 
     expect(baseline.layout.xaxis).toMatchObject({ anchor: "free", position: 0 });
     expect(reordered.layout.xaxis).toMatchObject({ anchor: "free", position: 0 });
@@ -185,7 +242,7 @@ describe("plotly adapter", () => {
       plot: createPlot({
         axes: [{ id: "y1" }]
       }),
-      columns
+      traceTuplesBySourceId
     });
 
     expect(figure.layout.yaxis).toMatchObject({ domain: [0, 1] });
@@ -266,6 +323,50 @@ describe("plotly adapter", () => {
         { axisId: "y1", range: [-1, 1] },
         { axisId: "y2", range: undefined }
       ]
+    });
+  });
+
+  it("renders mixed-grid traces from different sources in one figure", () => {
+    const mixedSourcePlot = createPlot({
+      traces: [
+        {
+          id: "trace-1",
+          signal: "vin",
+          sourceId: "/workspace/examples/a.csv::vin",
+          axisId: "y1",
+          visible: true
+        },
+        {
+          id: "trace-2",
+          signal: "vin",
+          sourceId: "/workspace/examples/b.csv::vin",
+          axisId: "y2",
+          visible: true
+        }
+      ]
+    });
+    const mixedSourceTuples = new Map(traceTuplesBySourceId);
+    mixedSourceTuples.set("/workspace/examples/b.csv::vin", {
+      traceId: "trace-2",
+      sourceId: "/workspace/examples/b.csv::vin",
+      datasetPath: "/workspace/examples/b.csv",
+      xName: "frequency",
+      yName: "vin",
+      x: [10, 100, 1000],
+      y: [0.1, 0.2, 0.3]
+    });
+
+    const figure = buildPlotlyFigure({
+      plot: mixedSourcePlot,
+      traceTuplesBySourceId: mixedSourceTuples
+    });
+
+    expect(figure.data).toHaveLength(2);
+    expect(figure.data[0]).toMatchObject({ x: [0, 1, 2], y: [1, 2, 3], yaxis: "y" });
+    expect(figure.data[1]).toMatchObject({
+      x: [10, 100, 1000],
+      y: [0.1, 0.2, 0.3],
+      yaxis: "y2"
     });
   });
 });

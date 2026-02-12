@@ -726,6 +726,22 @@ describe("T-018 normalized protocol handling", () => {
     expect(panelFixture.sentMessages).toEqual([
       {
         version: PROTOCOL_VERSION,
+        type: "host/sidePanelTraceInjected",
+        payload: {
+          viewerId: "viewer-1",
+          trace: {
+            traceId: "trace-1",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        }
+      },
+      {
+        version: PROTOCOL_VERSION,
         type: "host/workspacePatched",
         payload: {
           workspace: {
@@ -736,7 +752,15 @@ describe("T-018 normalized protocol handling", () => {
                 name: "Plot 1",
                 xSignal: "time",
                 axes: [{ id: "y1" }],
-                traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+                traces: [
+                  {
+                    id: "trace-1",
+                    signal: "vin",
+                    sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+                    axisId: "y1",
+                    visible: true
+                  }
+                ],
                 nextAxisNumber: 2
               }
             ]
@@ -871,6 +895,22 @@ describe("T-018 normalized protocol handling", () => {
     expect(panelFixture.sentMessages).toEqual([
       {
         version: PROTOCOL_VERSION,
+        type: "host/sidePanelTraceInjected",
+        payload: {
+          viewerId: "viewer-1",
+          trace: {
+            traceId: "trace-1",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        }
+      },
+      {
+        version: PROTOCOL_VERSION,
         type: "host/workspacePatched",
         payload: {
           workspace: {
@@ -881,7 +921,15 @@ describe("T-018 normalized protocol handling", () => {
                 name: "Plot 1",
                 xSignal: "time",
                 axes: [{ id: "y1" }],
-                traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+                traces: [
+                  {
+                    id: "trace-1",
+                    signal: "vin",
+                    sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+                    axisId: "y1",
+                    visible: true
+                  }
+                ],
                 nextAxisNumber: 2
               }
             ]
@@ -968,11 +1016,18 @@ describe("T-025 standalone viewer side-panel routing", () => {
     expect(bindPanelToDataset).toHaveBeenCalledTimes(1);
     expect(standalonePanel).toBeUndefined();
     expect(nextWorkspace.plots[0]?.traces).toEqual([
-      { id: "trace-1", signal: "vin", axisId: "y1", visible: true }
+      {
+        id: "trace-1",
+        signal: "vin",
+        sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+        axisId: "y1",
+        visible: true
+      }
     ]);
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/datasetLoaded",
       "host/viewerBindingUpdated",
+      "host/sidePanelTraceInjected",
       "host/workspacePatched"
     ]);
     expect(panelFixture.sentMessages[0]).toEqual({
@@ -999,6 +1054,22 @@ describe("T-025 standalone viewer side-panel routing", () => {
     });
     expect(panelFixture.sentMessages[2]).toEqual({
       version: PROTOCOL_VERSION,
+      type: "host/sidePanelTraceInjected",
+      payload: {
+        viewerId: "viewer-1",
+        trace: {
+          traceId: "trace-1",
+          sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1, 2],
+          y: [1, 2, 3]
+        }
+      }
+    });
+    expect(panelFixture.sentMessages[3]).toEqual({
+      version: PROTOCOL_VERSION,
       type: "host/workspacePatched",
       payload: {
         workspace: nextWorkspace,
@@ -1024,7 +1095,13 @@ describe("T-025 standalone viewer side-panel routing", () => {
     });
 
     expect(nextWorkspace.plots[0]?.traces).toEqual([
-      { id: "trace-1", signal: "vin", axisId: "y1", visible: true }
+      {
+        id: "trace-1",
+        signal: "vin",
+        sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+        axisId: "y1",
+        visible: true
+      }
     ]);
     expect(showWarning).toHaveBeenCalledWith(
       createNoTargetViewerWarning("add-to-plot", "/workspace/examples/simulations/ota.spice.csv")
@@ -1079,6 +1156,81 @@ describe("T-027 side-panel quick-add tuple injection", () => {
           y: [1, 2, 3]
         }
       }
+    });
+  });
+
+  it("supports mixed-grid tuple injections from different sources in one viewer session", () => {
+    const panelFixture = createPanelFixture();
+    const bindViewerToDataset = vi.fn();
+    const showError = vi.fn();
+
+    const first = runResolvedSidePanelQuickAdd({
+      documentPath: "/workspace/examples/a.csv",
+      loadedDataset: {
+        dataset: {
+          path: "/workspace/examples/a.csv",
+          rowCount: 3,
+          columns: [
+            { name: "time", values: [0, 1, 2] },
+            { name: "vin", values: [1, 2, 3] }
+          ]
+        },
+        defaultXSignal: "time"
+      },
+      signal: "vin",
+      targetViewer: {
+        viewerId: "viewer-9",
+        panel: panelFixture.panel,
+        bindDataset: false
+      },
+      bindViewerToDataset,
+      showError
+    });
+
+    const second = runResolvedSidePanelQuickAdd({
+      documentPath: "/workspace/examples/b.csv",
+      loadedDataset: {
+        dataset: {
+          path: "/workspace/examples/b.csv",
+          rowCount: 3,
+          columns: [
+            { name: "frequency", values: [10, 100, 1000] },
+            { name: "vin", values: [0.1, 0.2, 0.3] }
+          ]
+        },
+        defaultXSignal: "frequency"
+      },
+      signal: "vin",
+      targetViewer: {
+        viewerId: "viewer-9",
+        panel: panelFixture.panel,
+        bindDataset: false
+      },
+      bindViewerToDataset,
+      showError
+    });
+
+    expect(first).toBe(true);
+    expect(second).toBe(true);
+    expect(bindViewerToDataset).not.toHaveBeenCalled();
+    expect(showError).not.toHaveBeenCalled();
+
+    const tuplePayloads = panelFixture.sentMessages
+      .filter((message) => message.type === "host/sidePanelTraceInjected")
+      .map((message) => message.payload.trace);
+
+    expect(tuplePayloads).toHaveLength(2);
+    expect(tuplePayloads[0]).toMatchObject({
+      sourceId: "/workspace/examples/a.csv::vin",
+      xName: "time",
+      x: [0, 1, 2],
+      y: [1, 2, 3]
+    });
+    expect(tuplePayloads[1]).toMatchObject({
+      sourceId: "/workspace/examples/b.csv::vin",
+      xName: "frequency",
+      x: [10, 100, 1000],
+      y: [0.1, 0.2, 0.3]
     });
   });
 });
