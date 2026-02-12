@@ -12,6 +12,6 @@ T-043:
   pr: 50
   merged: true
 T-044:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 51
+  merged: true

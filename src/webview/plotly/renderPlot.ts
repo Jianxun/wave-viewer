@@ -35,6 +35,16 @@ export function createPlotRenderer(payload: {
   const eventDiv = payload.container as PlotlyEventDiv;
   let relayoutBound = false;
 
+  function toPngFileName(plotName: string): string {
+    const sanitized = plotName
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    return sanitized.length > 0 ? sanitized : "wave-viewer-plot";
+  }
+
   async function render(
     plot: PlotState,
     traceTuplesBySourceId: ReadonlyMap<string, SidePanelTraceTuplePayload>
@@ -48,7 +58,11 @@ export function createPlotRenderer(payload: {
       displayModeBar: true,
       displaylogo: false,
       scrollZoom: true,
-      modeBarButtonsToRemove: ["select2d", "lasso2d"]
+      modeBarButtonsToRemove: ["select2d", "lasso2d"],
+      toImageButtonOptions: {
+        format: "png",
+        filename: toPngFileName(plot.name)
+      }
     });
 
     if (!relayoutBound && typeof eventDiv.on === "function") {
