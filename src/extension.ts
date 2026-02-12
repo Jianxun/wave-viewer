@@ -211,10 +211,12 @@ export function activate(context: VSCode.ExtensionContext): void {
         datasetPath: selection.documentPath,
         defaultXSignal: selection.loadedDataset.defaultXSignal,
         reason: "sidePanel:quick-add",
-        mutate: (workspace) =>
+        mutate: (workspace, viewerState) =>
           applySidePanelSignalAction(workspace, {
             type: "add-to-plot",
             signal: selection.signal
+          }, {
+            axisId: viewerState.activeAxisByPlotId[workspace.activePlotId]
           })
       });
       return;

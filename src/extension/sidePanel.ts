@@ -247,7 +247,7 @@ export function runResolvedSidePanelSignalAction(
     datasetPath: deps.documentPath,
     defaultXSignal: deps.loadedDataset.defaultXSignal,
     reason: `sidePanel:${deps.actionType}`,
-    mutate: (workspace) =>
+    mutate: (workspace, viewerState) =>
       applySidePanelSignalAction(
         workspace,
         {
@@ -255,9 +255,27 @@ export function runResolvedSidePanelSignalAction(
           signal: deps.signal
         },
         {
-          sourceId: toTraceSourceId(deps.documentPath, deps.signal)
+          sourceId: toTraceSourceId(deps.documentPath, deps.signal),
+          axisId: viewerState.activeAxisByPlotId[workspace.activePlotId]
         }
-      )
+      ),
+    selectActiveAxis:
+      deps.actionType === "add-to-new-axis"
+        ? ({ previous, nextWorkspace }) => {
+            const previousAxisIds = new Set(
+              previous.workspace.plots
+                .find((plot) => plot.id === nextWorkspace.activePlotId)
+                ?.axes.map((axis) => axis.id) ?? []
+            );
+            const newAxis = nextWorkspace.plots
+              .find((plot) => plot.id === nextWorkspace.activePlotId)
+              ?.axes.find((axis) => !previousAxisIds.has(axis.id));
+            if (!newAxis) {
+              return undefined;
+            }
+            return { plotId: nextWorkspace.activePlotId, axisId: newAxis.id };
+          }
+        : undefined
   });
   const workspace = transaction.previous.workspace;
   const nextWorkspace = transaction.next.workspace;

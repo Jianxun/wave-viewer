@@ -5,12 +5,28 @@ import type { SidePanelSignalAction, WebviewToHostMessage } from "./types";
 export function applySidePanelSignalAction(
   workspace: WorkspaceState,
   action: SidePanelSignalAction,
-  options?: { sourceId?: string }
+  options?: { sourceId?: string; axisId?: `y${number}` }
 ): WorkspaceState {
   if (action.type === "add-to-plot") {
-    return reduceWorkspaceState(workspace, {
+    const currentPlot = workspace.plots.find((plot) => plot.id === workspace.activePlotId);
+    const needsAxis = !currentPlot || currentPlot.axes.length === 0;
+    const workspaceWithAxis = needsAxis
+      ? reduceWorkspaceState(workspace, { type: "axis/add" })
+      : workspace;
+    const activePlot = workspaceWithAxis.plots.find(
+      (plot) => plot.id === workspaceWithAxis.activePlotId
+    );
+    const requestedAxisExists =
+      options?.axisId !== undefined &&
+      (activePlot?.axes.some((axis) => axis.id === options.axisId) ?? false);
+    const fallbackAxisId = activePlot?.axes[0]?.id;
+    return reduceWorkspaceState(workspaceWithAxis, {
       type: "trace/add",
-      payload: { signal: action.signal, sourceId: options?.sourceId }
+      payload: {
+        signal: action.signal,
+        sourceId: options?.sourceId,
+        axisId: requestedAxisExists ? options?.axisId : fallbackAxisId
+      }
     });
   }
 
