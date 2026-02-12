@@ -91,6 +91,15 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/renamePlot",
+      {
+        viewerId: string;
+        plotId: string;
+        name: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/setActiveAxis",
       {
         viewerId: string;

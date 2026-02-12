@@ -128,19 +128,6 @@ function getRequiredElement<TElement extends HTMLElement = HTMLElement>(id: stri
   return element as TElement;
 }
 
-function dispatch(action: WorkspaceAction): void {
-  if (!workspace) {
-    return;
-  }
-
-  try {
-    workspace = reduceWorkspaceState(workspace, action);
-    void renderWorkspace();
-  } catch (error) {
-    bridgeStatusEl.textContent = `State error: ${getErrorMessage(error)}`;
-  }
-}
-
 function resolvePreferredDropTarget(): { kind: "axis"; axisId: AxisId } | { kind: "new-axis" } {
   if (!workspace) {
     return { kind: "new-axis" };
@@ -210,6 +197,17 @@ function postRemovePlot(plotId: string): void {
     createProtocolEnvelope("webview/intent/removePlot", {
       viewerId,
       plotId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
+function postRenamePlot(plotId: string, name: string): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/renamePlot", {
+      viewerId,
+      plotId,
+      name,
       requestId: `${viewerId}:intent:${nextRequestId++}`
     })
   );
@@ -395,11 +393,11 @@ async function renderWorkspace(): Promise<void> {
         return;
       }
 
-      const nextName = window.prompt("Rename plot", plot.name);
+      const nextName = window.prompt("Rename plot", plot.name)?.trim();
       if (!nextName) {
         return;
       }
-      dispatch({ type: "plot/rename", payload: { plotId, name: nextName } });
+      postRenamePlot(plotId, nextName);
     },
     onRemove: (plotId) => postRemovePlot(plotId)
   });

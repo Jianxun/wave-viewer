@@ -48,6 +48,7 @@ export type WebviewToHostMessageType =
   | "webview/intent/setActivePlot"
   | "webview/intent/addPlot"
   | "webview/intent/removePlot"
+  | "webview/intent/renamePlot"
   | "webview/intent/setActiveAxis"
   | "webview/intent/setTraceAxis"
   | "webview/intent/addAxis"
@@ -103,6 +104,10 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<
       "webview/intent/removePlot",
       { viewerId: string; plotId: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/renamePlot",
+      { viewerId: string; plotId: string; name: string; requestId: string }
     >
   | ProtocolEnvelope<
       "webview/intent/setActiveAxis",
@@ -256,6 +261,7 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/setActivePlot" ||
     type === "webview/intent/addPlot" ||
     type === "webview/intent/removePlot" ||
+    type === "webview/intent/renamePlot" ||
     type === "webview/intent/setActiveAxis" ||
     type === "webview/intent/setTraceAxis" ||
     type === "webview/intent/addAxis" ||
@@ -352,6 +358,15 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
     return (
       isNonEmptyString(payload.viewerId) &&
       isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/renamePlot") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.name) &&
       isNonEmptyString(payload.requestId)
     );
   }
