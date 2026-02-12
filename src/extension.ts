@@ -135,8 +135,12 @@ export function computeLayoutWatchTransition(
   };
 }
 
-export function toDeterministicLayoutYaml(datasetPath: string, workspace: WorkspaceState): string {
-  const yamlText = exportPlotSpecV1({ datasetPath, workspace });
+export function toDeterministicLayoutYaml(
+  datasetPath: string,
+  workspace: WorkspaceState,
+  layoutUri?: string
+): string {
+  const yamlText = exportPlotSpecV1({ datasetPath, workspace, specPath: layoutUri });
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
 }
 
@@ -319,7 +323,8 @@ export function createLayoutExternalEditController(
         const loaded = deps.loadDataset(datasetPath);
         const imported = importPlotSpecV1({
           yamlText,
-          availableSignals: loaded.dataset.columns.map((column) => column.name)
+          availableSignals: loaded.dataset.columns.map((column) => column.name),
+          specPath: layoutUri
         });
         if (imported.datasetPath !== datasetPath) {
           throw new Error(
@@ -462,7 +467,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     persistLayout: (input) =>
       writeLayoutFileAtomically(
         input.layoutUri,
-        toDeterministicLayoutYaml(input.datasetPath, input.workspace),
+        toDeterministicLayoutYaml(input.datasetPath, input.workspace, input.layoutUri),
         input.revision
       ),
     logDebug: (message, details) => {

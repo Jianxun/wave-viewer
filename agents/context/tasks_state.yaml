@@ -16,6 +16,6 @@ T-048:
   pr: 56
   merged: true
 T-049:
-  status: backlog
-  pr: null
-  merged: false
+  status: done
+  pr: 57
+  merged: true
