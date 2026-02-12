@@ -57,7 +57,8 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
     const resolveDatasetContext = (
       requestedViewerId: string
     ): { datasetPath: string; normalizedDataset: { dataset: Dataset; defaultXSignal: string } } | undefined => {
-      const resolvedDatasetPath = deps.resolveDatasetPathForViewer?.(requestedViewerId) ?? datasetPath;
+      const resolvedDatasetPath =
+        deps.resolveViewerSessionContext?.(requestedViewerId)?.datasetPath ?? datasetPath;
       if (!resolvedDatasetPath) {
         return undefined;
       }
@@ -698,28 +699,32 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       }
 
       void panel.webview.postMessage(createProtocolEnvelope("host/init", { title: "Wave Viewer" }));
+      const viewerSessionContext = deps.resolveViewerSessionContext?.(viewerId);
+      const boundDatasetPath = viewerSessionContext?.datasetPath ?? datasetPath;
       void panel.webview.postMessage(
         createProtocolEnvelope(
           "host/viewerBindingUpdated",
-          createViewerBindingUpdatedPayload(viewerId, datasetPath)
+          createViewerBindingUpdatedPayload(viewerId, boundDatasetPath)
         )
       );
 
-      if (!datasetPath || !normalizedDataset) {
+      const context = resolveDatasetContext(viewerId);
+      if (!context) {
         return;
       }
+      const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
 
-      const cachedWorkspace = deps.getCachedWorkspace?.(datasetPath);
+      const cachedWorkspace = deps.getCachedWorkspace?.(resolvedDatasetPath);
       if (cachedWorkspace) {
         const hydratedReplay = hydrateWorkspaceReplayPayload(
           viewerId,
-          datasetPath,
-          normalizedDataset,
+          resolvedDatasetPath,
+          resolvedDataset,
           cachedWorkspace,
           deps.logDebug
         );
         if (hydratedReplay.workspace !== cachedWorkspace) {
-          deps.setCachedWorkspace?.(datasetPath, hydratedReplay.workspace);
+          deps.setCachedWorkspace?.(resolvedDatasetPath, hydratedReplay.workspace);
         }
         for (const tracePayload of hydratedReplay.tracePayloads) {
           void panel.webview.postMessage(
@@ -728,7 +733,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
             })
           );
         }
-        const snapshot = deps.getHostStateSnapshot?.(datasetPath);
+        const snapshot = deps.getHostStateSnapshot?.(resolvedDatasetPath);
         const revision = snapshot?.revision ?? 0;
         const viewerState = snapshot?.viewerState ?? deriveViewerState(hydratedReplay.workspace);
         void panel.webview.postMessage(
