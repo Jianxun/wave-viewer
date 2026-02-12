@@ -4,9 +4,9 @@ T-025:
   pr: 30
   merged: true
 T-026:
-  status: review_clean
+  status: done
   pr: 31
-  merged: false
+  merged: true
 T-027:
   status: ready
   pr: null
