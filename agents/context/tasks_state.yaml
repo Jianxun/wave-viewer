@@ -12,6 +12,6 @@ T-043:
   pr: 50
   merged: true
 T-044:
-  status: ready_for_review
+  status: review_clean
   pr: 51
   merged: false
