@@ -154,10 +154,13 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
 ### 7.2 Spec Requirements
 - Include:
   - version
-  - dataset path reference
+  - dataset path reference (absolute or layout-relative)
   - plots, axes, traces, x-signal, ranges, visibility, order
 - Exclude:
   - transient UI-only state not affecting rendered output.
+- Explicit `*.wave-viewer.yaml` files are the primary persistence artifact.
+- Compatibility fallback remains supported for `<csv>.wave-viewer.yaml` sidecar identity when no explicit layout is bound.
+- When a layout file and CSV are colocated, exports should prefer relative dataset references (for example `./trace.csv`) to reduce machine-specific path coupling.
 
 ### 7.3 Determinism Guarantees
 - Given identical CSV and YAML spec, reconstructed workspace must match:
