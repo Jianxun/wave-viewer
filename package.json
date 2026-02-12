@@ -14,6 +14,9 @@
   ],
   "activationEvents": [
     "onCommand:waveViewer.openViewer",
+    "onCommand:waveViewer.openLayout",
+    "onCommand:waveViewer.saveLayout",
+    "onCommand:waveViewer.saveLayoutAs",
     "onCommand:waveViewer.exportPlotSpec",
     "onCommand:waveViewer.importPlotSpec",
     "onCommand:waveViewer.signalBrowser.addToPlot",
@@ -30,6 +33,18 @@
       {
         "command": "waveViewer.openViewer",
         "title": "Wave Viewer: Open Viewer"
+      },
+      {
+        "command": "waveViewer.openLayout",
+        "title": "Wave Viewer: Open Layout (YAML)"
+      },
+      {
+        "command": "waveViewer.saveLayout",
+        "title": "Wave Viewer: Save Layout"
+      },
+      {
+        "command": "waveViewer.saveLayoutAs",
+        "title": "Wave Viewer: Save Layout As..."
       },
       {
         "command": "waveViewer.exportPlotSpec",

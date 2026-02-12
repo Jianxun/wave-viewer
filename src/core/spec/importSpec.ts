@@ -63,6 +63,12 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
   };
 }
 
+export function readPlotSpecDatasetPathV1(yamlText: string): string {
+  const parsed = parseYaml(yamlText);
+  const spec = validateSpecShape(parsed);
+  return spec.dataset.path;
+}
+
 function parseYaml(yamlText: string): unknown {
   try {
     return parse(yamlText);

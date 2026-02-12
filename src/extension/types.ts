@@ -330,4 +330,37 @@ export type ImportSpecCommandDeps = {
   readTextFile(filePath: string): string;
 };
 
+export type OpenLayoutCommandDeps = {
+  getActiveViewerId(): string | undefined;
+  showOpenDialog(): Promise<string | undefined>;
+  readTextFile(filePath: string): string;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
+  bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
+  showError(message: string): void;
+  showInformation(message: string): void;
+};
+
+export type SaveLayoutCommandDeps = {
+  getActiveViewerId(): string | undefined;
+  resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
+  writeTextFile(filePath: string, text: string): void;
+  showError(message: string): void;
+  showInformation(message: string): void;
+};
+
+export type SaveLayoutAsCommandDeps = {
+  getActiveViewerId(): string | undefined;
+  resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
+  showSaveDialog(defaultPath: string): Promise<string | undefined>;
+  writeTextFile(filePath: string, text: string): void;
+  bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
+  showError(message: string): void;
+  showInformation(message: string): void;
+};
+
 export type ExtensionContextLike = Pick<VSCode.ExtensionContext, "extensionUri" | "subscriptions">;

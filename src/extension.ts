@@ -30,9 +30,12 @@ import {
   createExportSpecCommand,
   createImportSpecCommand,
   createLoadCsvFilesCommand,
+  createOpenLayoutCommand,
   createOpenViewerCommand,
   createReloadAllLoadedFilesCommand,
   createRemoveLoadedFileCommand,
+  createSaveLayoutAsCommand,
+  createSaveLayoutCommand,
   isCsvFile
 } from "./extension/commands";
 import { buildWebviewHtml } from "./extension/webviewHtml";
@@ -45,6 +48,9 @@ import {
 import type { LoadedDatasetRecord, WebviewPanelLike } from "./extension/types";
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
+export const OPEN_LAYOUT_COMMAND = "waveViewer.openLayout";
+export const SAVE_LAYOUT_COMMAND = "waveViewer.saveLayout";
+export const SAVE_LAYOUT_AS_COMMAND = "waveViewer.saveLayoutAs";
 export const EXPORT_SPEC_COMMAND = "waveViewer.exportPlotSpec";
 export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
 export {
@@ -66,10 +72,13 @@ export {
   createExportSpecCommand,
   createImportSpecCommand,
   createLoadCsvFilesCommand,
+  createOpenLayoutCommand,
   createNoTargetViewerWarning,
   createOpenViewerCommand,
   createReloadAllLoadedFilesCommand,
   createRemoveLoadedFileCommand,
+  createSaveLayoutAsCommand,
+  createSaveLayoutCommand,
   createViewerSessionRegistry,
   isCsvFile,
   resolveSidePanelSelection,
@@ -345,6 +354,76 @@ export function activate(context: VSCode.ExtensionContext): void {
     readTextFile: (filePath) => fs.readFileSync(filePath, "utf8")
   });
 
+  const openLayoutCommand = createOpenLayoutCommand({
+    getActiveViewerId: () => viewerSessions.getActiveViewerId(),
+    showOpenDialog: async () => {
+      const result = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { YAML: ["yaml", "yml"] }
+      });
+      return result?.[0]?.fsPath;
+    },
+    readTextFile: (filePath) => fs.readFileSync(filePath, "utf8"),
+    loadDataset,
+    setCachedWorkspace: (documentPath, workspace) => {
+      hostStateStore.setWorkspace(documentPath, workspace);
+    },
+    bindViewerToLayout: (viewerId, layoutUri, datasetPath) => {
+      viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
+    },
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    showInformation: (message) => {
+      void vscode.window.showInformationMessage(message);
+    }
+  });
+
+  const saveLayoutCommand = createSaveLayoutCommand({
+    getActiveViewerId: () => viewerSessions.getActiveViewerId(),
+    resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
+    loadDataset,
+    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
+    writeTextFile: (filePath, text) => {
+      fs.writeFileSync(filePath, text, "utf8");
+    },
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    showInformation: (message) => {
+      void vscode.window.showInformationMessage(message);
+    }
+  });
+
+  const saveLayoutAsCommand = createSaveLayoutAsCommand({
+    getActiveViewerId: () => viewerSessions.getActiveViewerId(),
+    resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
+    loadDataset,
+    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
+    showSaveDialog: async (defaultPath) => {
+      const defaultUri = vscode.Uri.file(defaultPath);
+      const result = await vscode.window.showSaveDialog({
+        defaultUri,
+        filters: { YAML: ["yaml", "yml"] }
+      });
+      return result?.fsPath;
+    },
+    writeTextFile: (filePath, text) => {
+      fs.writeFileSync(filePath, text, "utf8");
+    },
+    bindViewerToLayout: (viewerId, layoutUri, datasetPath) => {
+      viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
+    },
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    showInformation: (message) => {
+      void vscode.window.showInformationMessage(message);
+    }
+  });
+
   const loadCsvFilesCommand = createLoadCsvFilesCommand({
     showOpenDialog: async () => {
       const result = await vscode.window.showOpenDialog({
@@ -392,6 +471,11 @@ export function activate(context: VSCode.ExtensionContext): void {
 
   context.subscriptions.push(signalTreeView);
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
+  context.subscriptions.push(vscode.commands.registerCommand(OPEN_LAYOUT_COMMAND, openLayoutCommand));
+  context.subscriptions.push(vscode.commands.registerCommand(SAVE_LAYOUT_COMMAND, saveLayoutCommand));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(SAVE_LAYOUT_AS_COMMAND, saveLayoutAsCommand)
+  );
   context.subscriptions.push(vscode.commands.registerCommand(EXPORT_SPEC_COMMAND, exportSpecCommand));
   context.subscriptions.push(vscode.commands.registerCommand(IMPORT_SPEC_COMMAND, importSpecCommand));
   context.subscriptions.push(
