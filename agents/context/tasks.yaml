@@ -1,147 +1,84 @@
 schema_version: 2
 current_sprint:
-  - id: T-032
-    title: Introduce host-authoritative workspace + viewer interaction store
+  - id: T-038
+    title: Replace split sidebar lists with lane-aligned draggable trace-chip board
     owner: Executor
     dod:
-      - Add a host-side state store that is the single writer for `WorkspaceState` and viewer interaction state (`activePlotId`, `activeAxisByPlotId`, `revision`).
-      - Route explorer/side-panel command mutations through host transactions only (no webview-authoritative writes).
-      - Keep reducer behavior deterministic while centralizing commit/apply logic in host.
-      - Add focused tests for transaction atomicity and revision monotonic increment behavior.
+      - Replace the current Signal List + Trace List composition with one lane-oriented board that renders lane containers in the same order as plot lanes.
+      - Render each chip as a trace instance keyed by `trace.id` (not signal name) so duplicate same-signal traces can coexist and be manipulated independently.
+      - Support drag-and-drop of chips between lane containers to reassign `trace.axisId` without creating/removing traces.
+      - Keep per-chip controls minimal (`visible` toggle and remove) while preserving existing reducer semantics.
+      - Add/refresh focused component tests for duplicate-trace rendering and drag-reassign behavior.
     verify:
       - npm run lint
-      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
+      - npm test -- tests/unit/webview/signalList.test.ts tests/unit/webview/workspaceState.test.ts
     links:
-      scratchpad: agents/scratchpads/T-032.md
-      spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
+      scratchpad: agents/scratchpads/T-038.md
+      spec: doc/specs/side-panel-workflow.md
     files:
-      - src/extension.ts
-      - src/extension/commands.ts
-      - src/extension/sidePanel.ts
-      - src/extension/types.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-032.md
-  - id: T-033
-    title: Implement revisioned intent protocol v2 between webview and host
+      - src/webview/main.ts
+      - src/webview/components/SignalList.ts
+      - src/webview/components/TraceList.ts
+      - src/webview/styles.css
+      - src/webview/state/reducer.ts
+      - tests/unit/webview/signalList.test.ts
+      - tests/unit/webview/workspaceState.test.ts
+      - agents/scratchpads/T-038.md
+  - id: T-039
+    title: Add explicit lane activation intent from lane-container click
     owner: Executor
     depends_on:
-      - T-032
+      - T-038
     dod:
-      - Add typed/runtime-validated `webview/intent/*` messages and host `stateSnapshot/statePatch` messages with monotonic revision.
-      - Enforce stale host-state rejection in webview (`revision <= lastAppliedRevision` is ignored).
-      - Keep tuple transport separate from structural state updates.
-      - Add protocol contract tests for validation and revision ordering semantics.
+      - Add a new webview intent to set active lane/axis from sidebar lane-container click (`plotId`, `axisId`).
+      - Handle the intent in host transaction flow and update `viewerState.activeAxisByPlotId` without mutating traces.
+      - Ensure active-lane state round-trips in snapshot/patch messages and is reflected consistently in sidebar highlighting and quick-add default target.
+      - Add protocol/runtime validation updates and integration coverage for lane-click activation.
     verify:
       - npm run lint
       - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-033.md
+      scratchpad: agents/scratchpads/T-039.md
       spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0010-revisioned-intent-based-protocol.md
     files:
       - src/core/dataset/types.ts
       - src/extension/types.ts
+      - src/extension/commands.ts
       - src/webview/main.ts
+      - src/webview/components/SignalList.ts
       - tests/unit/protocol/messages.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-033.md
-  - id: T-034
-    title: Convert webview to projection-only renderer and intent emitter
+      - agents/scratchpads/T-039.md
+  - id: T-040
+    title: Insert "drop to new lane" target immediately below active lane
     owner: Executor
     depends_on:
-      - T-033
+      - T-039
     dod:
-      - Remove webview-to-host full workspace publication path (`webview/workspaceChanged`).
-      - Ensure webview local updates are driven by host-authoritative snapshot/patch messages only.
-      - Preserve drag/drop and interaction UX by emitting intents rather than direct state snapshots.
-      - Add regression coverage proving no dual-write overwrite path remains.
+      - Move the "drop to new lane" container from fixed bottom position to render immediately below the active lane container.
+      - Extend axis creation action shape to support insertion index/anchor (`afterAxisId` or equivalent) so new lane placement matches sidebar drop target position.
+      - Ensure a drop onto the new-lane container performs one atomic operation: create axis at target position, assign dropped trace/signal, and set that new axis active.
+      - Add reducer/adapter tests for axis insertion ordering and regression coverage for existing new-axis paths.
     verify:
       - npm run lint
-      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/workspaceState.test.ts
+      - npm test -- tests/unit/webview/workspaceState.test.ts tests/unit/webview/plotly/adapter.test.ts tests/extension/smoke.test.ts
     links:
-      scratchpad: agents/scratchpads/T-034.md
-      spec: doc/specs/side-panel-workflow.md
-      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
-    files:
-      - src/webview/main.ts
-      - src/extension/commands.ts
-      - src/extension/workspaceActions.ts
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-034.md
-  - id: T-035
-    title: Add active-axis semantics and default targeting across explorer and drop flows
-    owner: Executor
-    depends_on:
-      - T-034
-    dod:
-      - Implement host-owned `activeAxisByPlotId` lifecycle (set/select/fallback/remove/reassign behavior).
-      - Ensure explorer `Add to Plot` and quick-add target active axis by default.
-      - Ensure all new-axis operations set the newly created axis active in the same transaction.
-      - Add UI indication for active axis and tests for targeting consistency across entry paths.
-    verify:
-      - npm run lint
-      - npm test -- tests/extension/smoke.test.ts tests/unit/webview/signalList.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-035.md
+      scratchpad: agents/scratchpads/T-040.md
       spec: doc/specs/side-panel-workflow.md
       adr: agents/adr/ADR-0011-active-axis-targeting-and-new-axis-activation.md
     files:
-      - src/extension.ts
-      - src/extension/sidePanel.ts
+      - src/webview/components/SignalList.ts
       - src/webview/main.ts
-      - src/webview/components/AxisManager.ts
-      - src/webview/styles.css
-      - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-035.md
-backlog:
-  - id: T-036
-    title: Remove legacy protocol/dual-write compatibility shims
-    owner: Executor
-    depends_on:
-      - T-035
-    dod:
-      - Remove deprecated v1 message handlers and any legacy host/webview dual-write fallback paths.
-      - Tighten runtime validation and error handling to reject unsupported legacy payloads clearly.
-      - Update integration tests to assert only v2 intent/state contracts are used.
-    verify:
-      - npm run lint
-      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-036.md
-      spec: doc/specs/host-webview-protocol.md
-      adr: agents/adr/ADR-0010-revisioned-intent-based-protocol.md
-    files:
-      - src/core/dataset/types.ts
+      - src/webview/state/workspaceState.ts
+      - src/webview/state/reducer.ts
+      - src/extension/workspaceActions.ts
       - src/extension/commands.ts
-      - src/webview/main.ts
-      - tests/unit/protocol/messages.test.ts
+      - src/webview/plotly/adapter.ts
+      - tests/unit/webview/workspaceState.test.ts
+      - tests/unit/webview/plotly/adapter.test.ts
       - tests/extension/smoke.test.ts
-      - agents/scratchpads/T-036.md
-  - id: T-037
-    title: Re-baseline deterministic replay and docs after protocol migration
-    owner: Executor
-    depends_on:
-      - T-036
-    dod:
-      - Verify spec import/export and replay behavior remain deterministic under host-authoritative + revisioned protocol model.
-      - Update architecture docs and testing strategy references to remove stale legacy workflow assumptions.
-      - Add end-to-end regression coverage for explorer command flows (add-to-plot, add-to-new-axis, quick-add) across reopen/reconnect scenarios.
-    verify:
-      - npm run lint
-      - npm test -- tests/extension/smoke.test.ts tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
-    links:
-      scratchpad: agents/scratchpads/T-037.md
-      spec: doc/specs/wave-viewer-mvp.md
-      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
-    files:
-      - doc/specs/testing-strategy.md
-      - src/core/spec/importSpec.ts
-      - src/core/spec/exportSpec.ts
-      - tests/extension/smoke.test.ts
-      - tests/unit/spec/roundtrip.test.ts
-      - tests/unit/spec/importErrors.test.ts
-      - agents/scratchpads/T-037.md
+      - agents/scratchpads/T-040.md
+backlog: []
 exploration_candidates:
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.

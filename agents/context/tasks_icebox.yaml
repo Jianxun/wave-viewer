@@ -1,2 +1,26 @@
 schema_version: 1
-icebox: []
+icebox:
+  - id: T-037
+    title: Re-baseline deterministic replay and docs after protocol migration
+    owner: Executor
+    depends_on:
+      - T-036
+    dod:
+      - Verify spec import/export and replay behavior remain deterministic under host-authoritative + revisioned protocol model.
+      - Update architecture docs and testing strategy references to remove stale legacy workflow assumptions.
+      - Add end-to-end regression coverage for explorer command flows (add-to-plot, add-to-new-axis, quick-add) across reopen/reconnect scenarios.
+    verify:
+      - npm run lint
+      - npm test -- tests/extension/smoke.test.ts tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
+    links:
+      scratchpad: agents/scratchpads/T-037.md
+      spec: doc/specs/wave-viewer-mvp.md
+      adr: agents/adr/ADR-0009-host-authoritative-workspace-and-viewer-state.md
+    files:
+      - doc/specs/testing-strategy.md
+      - src/core/spec/importSpec.ts
+      - src/core/spec/exportSpec.ts
+      - tests/extension/smoke.test.ts
+      - tests/unit/spec/roundtrip.test.ts
+      - tests/unit/spec/importErrors.test.ts
+      - agents/scratchpads/T-037.md
