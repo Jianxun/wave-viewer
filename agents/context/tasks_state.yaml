@@ -12,7 +12,7 @@ T-047:
   pr: 54
   merged: true
 T-048:
-  status: backlog
+  status: in_progress
   pr: null
   merged: false
 T-049:
