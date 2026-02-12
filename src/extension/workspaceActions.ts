@@ -5,7 +5,7 @@ import type { SidePanelSignalAction, WebviewToHostMessage } from "./types";
 export function applySidePanelSignalAction(
   workspace: WorkspaceState,
   action: SidePanelSignalAction,
-  options?: { sourceId?: string; axisId?: `y${number}` }
+  options?: { sourceId?: string; axisId?: `y${number}`; afterAxisId?: `y${number}` }
 ): WorkspaceState {
   if (action.type === "add-to-plot") {
     const currentPlot = workspace.plots.find((plot) => plot.id === workspace.activePlotId);
@@ -31,10 +31,12 @@ export function applySidePanelSignalAction(
   }
 
   if (action.type === "add-to-new-axis") {
-    const withAxis = reduceWorkspaceState(workspace, { type: "axis/add" });
-    const activePlot = withAxis.plots.find((plot) => plot.id === withAxis.activePlotId);
-    const axisId = activePlot?.axes[activePlot.axes.length - 1]?.id;
-    if (!axisId) {
+    const withAxis = reduceWorkspaceState(workspace, {
+      type: "axis/add",
+      payload: { afterAxisId: options?.afterAxisId }
+    });
+    const axisId = findAddedAxisId(workspace, withAxis, withAxis.activePlotId);
+    if (axisId === undefined) {
       return withAxis;
     }
     return reduceWorkspaceState(withAxis, {
@@ -81,11 +83,10 @@ export function applyDropSignalAction(
   if (payload.target.kind === "new-axis") {
     nextWorkspace = reduceWorkspaceState(nextWorkspace, {
       type: "axis/add",
-      payload: { plotId: payload.plotId }
+      payload: { plotId: payload.plotId, afterAxisId: payload.target.afterAxisId }
     });
-    const targetPlot = nextWorkspace.plots.find((plot) => plot.id === payload.plotId);
-    const newAxisId = targetPlot?.axes[targetPlot.axes.length - 1]?.id;
-    if (!newAxisId) {
+    const newAxisId = findAddedAxisId(workspace, nextWorkspace, payload.plotId);
+    if (newAxisId === undefined) {
       return nextWorkspace;
     }
 
@@ -117,4 +118,17 @@ export function applyDropSignalAction(
 
 function isAxisId(value: string): value is `y${number}` {
   return /^y\d+$/.test(value);
+}
+
+function findAddedAxisId(
+  previousWorkspace: WorkspaceState,
+  nextWorkspace: WorkspaceState,
+  plotId: string
+): `y${number}` | undefined {
+  const previousAxisIds = new Set(
+    previousWorkspace.plots.find((plot) => plot.id === plotId)?.axes.map((axis) => axis.id) ?? []
+  );
+  return nextWorkspace.plots
+    .find((plot) => plot.id === plotId)
+    ?.axes.find((axis) => !previousAxisIds.has(axis.id))?.id;
 }

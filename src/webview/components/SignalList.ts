@@ -1,11 +1,16 @@
 import type { AxisId, AxisState, TraceState } from "../state/workspaceState";
 import { formatAxisOptionLabel } from "./axisLabels";
 
+type DropSignalTarget = { kind: "axis"; axisId: AxisId } | { kind: "new-axis"; afterAxisId?: AxisId };
+
 export type SignalListProps = {
   container: HTMLElement;
   axes: AxisState[];
   traces: TraceState[];
   activeAxisId?: AxisId;
+  canDropSignal(event: DragEvent): boolean;
+  parseDroppedSignal(event: DragEvent): string | undefined;
+  onDropSignal(payload: { signal: string; target: DropSignalTarget }): void;
   onSetAxis(traceId: string, axisId: AxisId): void;
   onActivateLane(axisId: AxisId): void;
   onSetVisible(traceId: string, visible: boolean): void;
@@ -70,6 +75,7 @@ export function renderSignalList(props: SignalListProps): void {
     axes: props.axes,
     traces: props.traces
   });
+  const activeLaneAxisId = resolveActiveLaneAxisId(model.lanes, props.activeAxisId);
 
   for (const lane of model.lanes) {
     const laneSection = createSection(lane.axisLabel);
@@ -166,6 +172,20 @@ export function renderSignalList(props: SignalListProps): void {
       }
     }
     props.container.appendChild(laneSection.section);
+
+    if (lane.axisId === activeLaneAxisId) {
+      props.container.appendChild(
+        createDropToNewLaneSection({
+          canDropSignal: props.canDropSignal,
+          parseDroppedSignal: props.parseDroppedSignal,
+          onDropSignal: (signal) =>
+            props.onDropSignal({
+              signal,
+              target: { kind: "new-axis", afterAxisId: lane.axisId }
+            })
+        })
+      );
+    }
   }
 
   if (props.traces.length === 0) {
@@ -200,4 +220,85 @@ function createSection(titleText: string): { section: HTMLElement; body: HTMLEle
 
   section.append(title, body);
   return { section, body };
+}
+
+function createDropToNewLaneSection(options: {
+  canDropSignal(event: DragEvent): boolean;
+  parseDroppedSignal(event: DragEvent): string | undefined;
+  onDropSignal(signal: string): void;
+}): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "signal-panel-section";
+
+  const body = document.createElement("div");
+  body.className = "list-row axis-row-new-target drop-target";
+  body.textContent = "Drop signal here to create a new lane";
+  addDropHandlers({
+    target: body,
+    canDropSignal: options.canDropSignal,
+    parseDroppedSignal: options.parseDroppedSignal,
+    onDropSignal: options.onDropSignal
+  });
+
+  section.append(body);
+  return section;
+}
+
+function resolveActiveLaneAxisId(
+  lanes: Array<{ axisId: AxisId }>,
+  activeAxisId: AxisId | undefined
+): AxisId | undefined {
+  if (lanes.length === 0) {
+    return undefined;
+  }
+
+  if (activeAxisId && lanes.some((lane) => lane.axisId === activeAxisId)) {
+    return activeAxisId;
+  }
+
+  return lanes[0]?.axisId;
+}
+
+function addDropHandlers(options: {
+  target: HTMLElement;
+  canDropSignal(event: DragEvent): boolean;
+  parseDroppedSignal(event: DragEvent): string | undefined;
+  onDropSignal(signal: string): void;
+}): void {
+  const setActive = (active: boolean) => {
+    options.target.classList.toggle("drop-active", active);
+  };
+
+  options.target.addEventListener("dragenter", (event) => {
+    if (!options.canDropSignal(event)) {
+      return;
+    }
+    event.preventDefault();
+    setActive(true);
+  });
+
+  options.target.addEventListener("dragover", (event) => {
+    if (!options.canDropSignal(event)) {
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setActive(true);
+  });
+
+  options.target.addEventListener("dragleave", () => {
+    setActive(false);
+  });
+
+  options.target.addEventListener("drop", (event) => {
+    const signal = options.parseDroppedSignal(event);
+    setActive(false);
+    if (!signal) {
+      return;
+    }
+    event.preventDefault();
+    options.onDropSignal(signal);
+  });
 }

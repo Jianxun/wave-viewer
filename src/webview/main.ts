@@ -148,7 +148,7 @@ function resolvePreferredDropTarget(): { kind: "axis"; axisId: AxisId } | { kind
 
 function postDropSignal(payload: {
   signal: string;
-  target: { kind: "axis"; axisId: AxisId } | { kind: "new-axis" };
+  target: { kind: "axis"; axisId: AxisId } | { kind: "new-axis"; afterAxisId?: AxisId };
   source: "axis-row" | "canvas-overlay";
 }): void {
   if (!workspace) {
@@ -269,6 +269,25 @@ async function renderWorkspace(): Promise<void> {
     axes: activePlot.axes,
     traces: activePlot.traces,
     activeAxisId: preferredDropAxisId,
+    canDropSignal: (event) => {
+      if (!event.dataTransfer) {
+        return false;
+      }
+      return hasSupportedDropSignalType(event.dataTransfer);
+    },
+    parseDroppedSignal: (event) => {
+      if (!event.dataTransfer) {
+        return undefined;
+      }
+      return extractSignalFromDropData(event.dataTransfer);
+    },
+    onDropSignal: ({ signal, target }) => {
+      postDropSignal({
+        signal,
+        target,
+        source: "axis-row"
+      });
+    },
     onSetAxis: (traceId, axisId) => dispatch({ type: "trace/setAxis", payload: { traceId, axisId } }),
     onActivateLane: (axisId) => postSetActiveAxis(axisId),
     onSetVisible: (traceId, visible) =>

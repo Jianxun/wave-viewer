@@ -1102,6 +1102,27 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("inserts dropSignal new-axis target directly after the requested anchor axis", () => {
+    const seededWorkspace = applySidePanelSignalAction(createWorkspaceFixture(), {
+      type: "add-to-new-axis",
+      signal: "seed"
+    });
+    const next = applyDropSignalAction(seededWorkspace, {
+      viewerId: "viewer-1",
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "new-axis", afterAxisId: "y1" },
+      source: "axis-row",
+      requestId: "req-1"
+    });
+
+    expect(next.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y3", "y2"]);
+    expect(next.plots[0]?.traces.map((trace) => ({ signal: trace.signal, axisId: trace.axisId }))).toEqual([
+      { signal: "seed", axisId: "y2" },
+      { signal: "vin", axisId: "y3" }
+    ]);
+  });
+
   it("keeps equivalent new-axis workspace outcomes across side-panel and both drop sources", () => {
     const fromSidePanel = applySidePanelSignalAction(createWorkspaceFixture(), {
       type: "add-to-new-axis",
@@ -1764,5 +1785,18 @@ describe("T-039 lane activation intent wiring", () => {
     expect(webviewSource).toContain("activeAxisId: preferredDropAxisId");
     expect(signalListSource).toContain("props.onActivateLane(lane.axisId);");
     expect(signalListSource).toContain('laneSection.section.classList.toggle("axis-row-active", lane.axisId === props.activeAxisId);');
+  });
+});
+
+describe("T-040 new-lane drop target placement and insertion anchor wiring", () => {
+  it("places the new-lane drop target in signal list and wires afterAxisId in drop intents", () => {
+    const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+    const axisManagerSource = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
+
+    expect(signalListSource).toContain('body.textContent = "Drop signal here to create a new lane";');
+    expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
+    expect(mainSource).toContain("onDropSignal: ({ signal, target }) => {");
+    expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
   });
 });

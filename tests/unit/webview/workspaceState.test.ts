@@ -140,6 +140,17 @@ describe("workspaceState", () => {
     expect(workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y3", "y1", "y2"]);
   });
 
+  it("inserts newly created axes immediately after the requested anchor axis", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addAxis(workspace, {});
+    expect(workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y2", "y3"]);
+
+    workspace = addAxis(workspace, { afterAxisId: "y1" });
+
+    expect(workspace.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y4", "y2", "y3"]);
+  });
+
   it("keeps trace assignments stable when lane order changes", () => {
     let workspace = createWorkspaceState("time");
     workspace = addAxis(workspace, {});

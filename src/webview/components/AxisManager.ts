@@ -8,7 +8,7 @@ export type AxisManagerProps = {
   onAddAxis(): void;
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
-  onDropSignal(payload: { signal: string; target: { kind: "axis"; axisId: AxisId } | { kind: "new-axis" } }): void;
+  onDropSignal(payload: { signal: string; target: { kind: "axis"; axisId: AxisId } }): void;
   onReorderAxis(payload: { axisId: AxisId; toIndex: number }): void;
   onRemoveAxis(payload: { axisId: AxisId; reassignToAxisId?: AxisId }): void;
   onReassignTraces(payload: { fromAxisId: AxisId; toAxisId: AxisId }): void;
@@ -115,17 +115,6 @@ export function renderAxisManager(props: AxisManagerProps): void {
     });
     props.container.appendChild(row);
   }
-
-  const dropToNewAxisRow = document.createElement("div");
-  dropToNewAxisRow.className = "list-row axis-row axis-row-new-target drop-target";
-  dropToNewAxisRow.textContent = "Drop signal here to create a new axis";
-  addDropHandlers({
-    target: dropToNewAxisRow,
-    canDropSignal: props.canDropSignal,
-    parseDroppedSignal: props.parseDroppedSignal,
-    onDropSignal: (signal) => props.onDropSignal({ signal, target: { kind: "new-axis" } })
-  });
-  props.container.appendChild(dropToNewAxisRow);
 
   const addButton = document.createElement("button");
   addButton.type = "button";

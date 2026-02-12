@@ -24,7 +24,7 @@ export type WorkspaceAction =
   | { type: "plot/setActive"; payload: { plotId: string } }
   | { type: "plot/setXSignal"; payload: { plotId?: string; xSignal: string } }
   | { type: "plot/setXRange"; payload: { plotId?: string; xRange?: [number, number] } }
-  | { type: "axis/add"; payload?: { plotId?: string } }
+  | { type: "axis/add"; payload?: { plotId?: string; afterAxisId?: `y${number}` } }
   | { type: "axis/reorder"; payload: { plotId?: string; axisId: `y${number}`; toIndex: number } }
   | {
       type: "axis/remove";

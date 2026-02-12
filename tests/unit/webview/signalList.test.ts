@@ -122,6 +122,8 @@ describe("signal lane drag reassignment", () => {
     expect(source).toContain("laneSection.body.dataset.axisId = lane.axisId;");
     expect(source).toContain("props.onSetAxis(reassignment.traceId, reassignment.axisId);");
     expect(source).toContain('event.dataTransfer?.setData("text/wave-viewer-trace-id", trace.id);');
+    expect(source).toContain('body.textContent = "Drop signal here to create a new lane";');
+    expect(source).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
   });
 });
 
