@@ -133,15 +133,25 @@ export function setPlotXRange(
 
 export function addAxis(
   state: WorkspaceState,
-  payload: { plotId?: string } = {}
+  payload: { plotId?: string; afterAxisId?: AxisId } = {}
 ): WorkspaceState {
   const plotId = payload.plotId ?? state.activePlotId;
   return withUpdatedPlot(state, plotId, (plot) => {
     const nextAxisId = `y${plot.nextAxisNumber}` as AxisId;
+    const nextAxis: AxisState = { id: nextAxisId };
+    const nextAxes = plot.axes.slice();
+
+    if (payload.afterAxisId === undefined) {
+      nextAxes.push(nextAxis);
+    } else {
+      assertAxisExists(plot, payload.afterAxisId);
+      const anchorIndex = plot.axes.findIndex((axis) => axis.id === payload.afterAxisId);
+      nextAxes.splice(anchorIndex + 1, 0, nextAxis);
+    }
 
     return {
       ...plot,
-      axes: [...plot.axes, { id: nextAxisId }],
+      axes: nextAxes,
       nextAxisNumber: plot.nextAxisNumber + 1
     };
   });

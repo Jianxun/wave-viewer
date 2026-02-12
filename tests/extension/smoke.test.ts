@@ -1102,6 +1102,27 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("inserts dropSignal new-axis target directly after the requested anchor axis", () => {
+    const seededWorkspace = applySidePanelSignalAction(createWorkspaceFixture(), {
+      type: "add-to-new-axis",
+      signal: "seed"
+    });
+    const next = applyDropSignalAction(seededWorkspace, {
+      viewerId: "viewer-1",
+      signal: "vin",
+      plotId: "plot-1",
+      target: { kind: "new-axis", afterAxisId: "y1" },
+      source: "axis-row",
+      requestId: "req-1"
+    });
+
+    expect(next.plots[0]?.axes.map((axis) => axis.id)).toEqual(["y1", "y3", "y2"]);
+    expect(next.plots[0]?.traces.map((trace) => ({ signal: trace.signal, axisId: trace.axisId }))).toEqual([
+      { signal: "seed", axisId: "y2" },
+      { signal: "vin", axisId: "y3" }
+    ]);
+  });
+
   it("keeps equivalent new-axis workspace outcomes across side-panel and both drop sources", () => {
     const fromSidePanel = applySidePanelSignalAction(createWorkspaceFixture(), {
       type: "add-to-new-axis",

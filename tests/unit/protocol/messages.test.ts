@@ -191,6 +191,32 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview intent dropSignal payloads for new-axis targets with insertion anchors", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "new-axis", afterAxisId: "y2" },
+        source: "axis-row",
+        requestId: "req-1"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/dropSignal",
+      payload: {
+        viewerId: "viewer-1",
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "new-axis", afterAxisId: "y2" },
+        source: "axis-row",
+        requestId: "req-1"
+      }
+    });
+  });
+
   it("accepts webview intent setActiveAxis payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/intent/setActiveAxis", {
@@ -231,6 +257,20 @@ describe("protocol envelope validators", () => {
         signal: "vin",
         plotId: "plot-1",
         target: { kind: "axis" },
+        source: "axis-row",
+        requestId: "req-1"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects dropSignal new-axis payloads with invalid insertion anchors", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/dropSignal", {
+        viewerId: "viewer-1",
+        signal: "vin",
+        plotId: "plot-1",
+        target: { kind: "new-axis", afterAxisId: "axis-two" },
         source: "axis-row",
         requestId: "req-1"
       })

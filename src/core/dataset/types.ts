@@ -95,7 +95,9 @@ export type ParsedWebviewToHostMessage =
         viewerId: string;
         signal: string;
         plotId: string;
-        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
+        target:
+          | { kind: "axis"; axisId: string }
+          | { kind: "new-axis"; afterAxisId?: `y${number}` };
         source: "axis-row" | "canvas-overlay";
         requestId: string;
       }
@@ -321,7 +323,11 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
       return typeof payload.target.axisId === "string";
     }
 
-    return payload.target.kind === "new-axis";
+    if (payload.target.kind !== "new-axis") {
+      return false;
+    }
+
+    return payload.target.afterAxisId === undefined || isAxisId(payload.target.afterAxisId);
   }
 
   return false;

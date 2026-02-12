@@ -78,7 +78,9 @@ export type WebviewToHostMessage =
         viewerId: string;
         signal: string;
         plotId: string;
-        target: { kind: "axis"; axisId: string } | { kind: "new-axis" };
+        target:
+          | { kind: "axis"; axisId: string }
+          | { kind: "new-axis"; afterAxisId?: `y${number}` };
         source: "axis-row" | "canvas-overlay";
         requestId: string;
       }
