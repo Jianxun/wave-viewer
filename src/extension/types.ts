@@ -73,6 +73,16 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/setTraceAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        traceId: string;
+        axisId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/dropSignal",
       {
         viewerId: string;

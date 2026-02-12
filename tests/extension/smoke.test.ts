@@ -292,7 +292,7 @@ describe("T-002 extension shell smoke", () => {
       type: "host/viewerBindingUpdated",
       payload: {
         viewerId: "viewer-1",
-        datasetPath: undefined
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv"
       }
     });
   });
@@ -332,7 +332,7 @@ describe("T-002 extension shell smoke", () => {
         type: "host/viewerBindingUpdated",
         payload: {
           viewerId: "viewer-1",
-          datasetPath: undefined
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv"
         }
       }
     ]);
@@ -1006,6 +1006,83 @@ describe("T-018 normalized protocol handling", () => {
             }
           },
           reason: "dropSignal:axis-row"
+        }
+      }
+    ]);
+  });
+
+  it("handles validated setTraceAxis intent via host transaction and persists lane reassignment", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/setTraceAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "y2",
+        requestId: "req-set-trace-axis-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }, { id: "y2" }],
+                traces: [
+                  {
+                    id: "trace-1",
+                    signal: "vin",
+                    sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+                    axisId: "y2",
+                    visible: true
+                  }
+                ],
+                nextAxisNumber: 3
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y2"
+            }
+          },
+          reason: "setTraceAxis:lane-drag"
         }
       }
     ]);

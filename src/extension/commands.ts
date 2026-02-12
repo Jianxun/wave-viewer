@@ -4,7 +4,7 @@ import { exportPlotSpecV1 } from "../core/spec/exportSpec";
 import { importPlotSpecV1 } from "../core/spec/importSpec";
 import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from "../core/dataset/types";
 import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
-import { applyDropSignalAction } from "./workspaceActions";
+import { applyDropSignalAction, applySetTraceAxisAction } from "./workspaceActions";
 import {
   createSidePanelTraceInjectedPayload,
   createViewerBindingUpdatedPayload,
@@ -207,6 +207,54 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
             reason: transaction.reason
           })
         );
+        return;
+      }
+
+      if (message.type === "webview/intent/setTraceAxis") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored setTraceAxis because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        const axisId = message.payload.axisId;
+        if (!isAxisId(axisId)) {
+          deps.logDebug?.("Ignored invalid webview setTraceAxis message payload.", {
+            payload: message.payload,
+            error: `Invalid axis id: ${axisId}`
+          });
+          return;
+        }
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "setTraceAxis:lane-drag",
+            mutate: (workspace) => applySetTraceAxisAction(workspace, message.payload),
+            selectActiveAxis: () => ({
+              plotId: message.payload.plotId,
+              axisId
+            })
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview setTraceAxis message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
         return;
       }
 

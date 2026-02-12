@@ -239,12 +239,49 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview intent setTraceAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/setTraceAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "y2",
+        requestId: "req-3"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/setTraceAxis",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "y2",
+        requestId: "req-3"
+      }
+    });
+  });
+
   it("rejects malformed webview intent setActiveAxis payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/intent/setActiveAxis", {
         viewerId: "viewer-1",
         plotId: "plot-1",
         requestId: "req-2"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent setTraceAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/setTraceAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        traceId: "trace-1",
+        axisId: "axis-two",
+        requestId: "req-3"
       })
     );
     expect(parsed).toBeUndefined();

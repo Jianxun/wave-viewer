@@ -37,7 +37,11 @@ import {
 } from "./extension/commands";
 import { buildWebviewHtml } from "./extension/webviewHtml";
 import { createViewerSessionRegistry } from "./extension/viewerSessions";
-import { applyDropSignalAction, applySidePanelSignalAction } from "./extension/workspaceActions";
+import {
+  applyDropSignalAction,
+  applySetTraceAxisAction,
+  applySidePanelSignalAction
+} from "./extension/workspaceActions";
 import type { LoadedDatasetRecord, WebviewPanelLike } from "./extension/types";
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
@@ -55,6 +59,7 @@ export {
 
 export {
   applyDropSignalAction,
+  applySetTraceAxisAction,
   applySidePanelSignalAction,
   buildWebviewHtml,
   createHostStateStore,
