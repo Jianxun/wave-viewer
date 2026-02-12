@@ -238,6 +238,15 @@ function createReferenceOnlySpecYaml(datasetPath: string): string {
 }
 
 describe("T-002 extension shell smoke", () => {
+  it("allows data/blob image sources in webview CSP for Plotly PNG export", () => {
+    const template = fs.readFileSync(
+      path.resolve(process.cwd(), "src/webview/index.html"),
+      "utf8"
+    );
+
+    expect(template).toContain("img-src __CSP_SOURCE__ data: blob:;");
+  });
+
   it("exports the command id", () => {
     expect(OPEN_VIEWER_COMMAND).toBe("waveViewer.openViewer");
   });
