@@ -28,16 +28,6 @@ import { extractSignalFromDropData, hasSupportedDropSignalType } from "./dropSig
 type HostMessage =
   | ProtocolEnvelope<"host/init", { title: string }>
   | ProtocolEnvelope<"host/viewerBindingUpdated", { viewerId: string; datasetPath?: string }>
-  | ProtocolEnvelope<
-      "host/datasetLoaded",
-      {
-        path: string;
-        fileName: string;
-        rowCount: number;
-        columns: Array<{ name: string; values: number[] }>;
-        defaultXSignal: string;
-      }
-    >
   | ProtocolEnvelope<"host/workspaceLoaded", { workspace: WorkspaceState }>
   | ProtocolEnvelope<"host/workspacePatched", { workspace: WorkspaceState; reason: string }>
   | ProtocolEnvelope<"host/sidePanelQuickAdd", { signal: string }>
@@ -60,14 +50,12 @@ type HostMessage =
 const vscode = acquireVsCodeApi();
 
 let workspace: WorkspaceState | undefined;
-let signalNames: string[] = [];
 const traceTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>();
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
 const bridgeStatusEl = getRequiredElement("bridge-status");
 const datasetStatusEl = getRequiredElement("dataset-status");
-const xSignalSelectEl = getRequiredElement<HTMLSelectElement>("x-signal-select");
 const signalListEl = getRequiredElement("signal-list");
 const traceListEl = getRequiredElement("trace-list");
 const axisManagerEl = getRequiredElement("axis-manager");
@@ -224,7 +212,6 @@ async function renderWorkspace(): Promise<void> {
 
   const activePlot = getActivePlot(workspace);
   activePlotTitleEl.textContent = activePlot.name;
-  renderXSignalSelector(activePlot.xSignal);
 
   renderTabs({
     container: tabsEl,
@@ -253,30 +240,8 @@ async function renderWorkspace(): Promise<void> {
 
   renderSignalList({
     container: signalListEl,
-    signals: signalNames,
     axes: activePlot.axes,
-    traces: activePlot.traces,
-    onAddTrace: ({ signal, axisChoice }) => {
-      if (axisChoice === "create-new") {
-        dispatch({ type: "axis/add" });
-        const refreshed = workspace ? getActivePlot(workspace) : undefined;
-        const newestAxis = refreshed?.axes[refreshed.axes.length - 1]?.id;
-        if (!newestAxis) {
-          return;
-        }
-        dispatch({ type: "trace/add", payload: { signal, axisId: newestAxis } });
-        return;
-      }
-
-      dispatch({ type: "trace/add", payload: { signal, axisId: axisChoice } });
-    },
-    onQuickAdd: ({ signal }) => {
-      postDropSignal({
-        signal,
-        target: resolvePreferredDropTarget(),
-        source: "axis-row"
-      });
-    }
+    traces: activePlot.traces
   });
 
   renderTraceList({
@@ -338,32 +303,12 @@ async function renderWorkspace(): Promise<void> {
   );
 }
 
-function renderXSignalSelector(activeXSignal: string): void {
-  xSignalSelectEl.replaceChildren();
-
-  for (const signalName of signalNames) {
-    xSignalSelectEl.add(new Option(signalName, signalName, signalName === activeXSignal));
-  }
-
-  if (xSignalSelectEl.value !== activeXSignal && signalNames.includes(activeXSignal)) {
-    xSignalSelectEl.value = activeXSignal;
-  }
-}
-
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
   return "Unknown state update failure.";
 }
-
-xSignalSelectEl.addEventListener("change", () => {
-  if (!workspace || !xSignalSelectEl.value) {
-    return;
-  }
-
-  dispatch({ type: "plot/setXSignal", payload: { xSignal: xSignalSelectEl.value } });
-});
 
 plotCanvasEl.addEventListener("dragenter", (event) => {
   if (!event.dataTransfer || !hasSupportedDropSignalType(event.dataTransfer)) {
@@ -425,32 +370,16 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
 
   if (message.type === "host/init") {
     bridgeStatusEl.textContent = `Connected: ${message.payload.title}`;
-    return;
-  }
-
-  if (message.type === "host/datasetLoaded") {
-    signalNames = message.payload.columns.map((column) => column.name);
-    const initialXSignal = signalNames.includes(message.payload.defaultXSignal)
-      ? message.payload.defaultXSignal
-      : signalNames[0] ?? "";
-
-    if (!initialXSignal) {
-      datasetStatusEl.textContent = `Loaded ${message.payload.fileName} but no numeric signals were provided.`;
-      return;
+    if (!workspace) {
+      workspace = createWorkspaceState("x");
+      datasetStatusEl.textContent = "Tuple-only mode: waiting for injected traces.";
+      void renderWorkspace();
     }
-
-    workspace = createWorkspaceState(initialXSignal);
-    datasetStatusEl.textContent = `Loaded ${message.payload.fileName} (${message.payload.rowCount} rows)`;
-    void renderWorkspace();
     return;
   }
 
   if (message.type === "host/viewerBindingUpdated") {
-    if (message.payload.datasetPath) {
-      bridgeStatusEl.textContent = `Bound ${message.payload.viewerId} -> ${message.payload.datasetPath}`;
-    } else {
-      bridgeStatusEl.textContent = `Viewer ${message.payload.viewerId} is unbound.`;
-    }
+    bridgeStatusEl.textContent = `Viewer ${message.payload.viewerId} ready for tuple traces.`;
     return;
   }
 
@@ -480,7 +409,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
     const tuple = message.payload.trace;
     traceTuplesBySourceId.set(tuple.sourceId, tuple);
     if (!workspace) {
-      return;
+      workspace = createWorkspaceState(tuple.xName);
     }
     const activePlot = getActivePlot(workspace);
     if (activePlot.traces.some((trace) => trace.sourceId === tuple.sourceId)) {

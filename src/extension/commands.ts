@@ -6,7 +6,6 @@ import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from 
 import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
 import { applyDropSignalAction } from "./workspaceActions";
 import {
-  createDatasetLoadedPayload,
   createSidePanelTraceInjectedPayload,
   createViewerBindingUpdatedPayload,
   getAddedTraces,
@@ -124,20 +123,13 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       void panel.webview.postMessage(
         createProtocolEnvelope(
           "host/viewerBindingUpdated",
-          createViewerBindingUpdatedPayload(viewerId, datasetPath)
+          createViewerBindingUpdatedPayload(viewerId)
         )
       );
 
       if (!datasetPath || !normalizedDataset) {
         return;
       }
-
-      void panel.webview.postMessage(
-        createProtocolEnvelope(
-          "host/datasetLoaded",
-          createDatasetLoadedPayload(datasetPath, normalizedDataset)
-        )
-      );
 
       const cachedWorkspace = deps.getCachedWorkspace?.(datasetPath);
       if (cachedWorkspace) {

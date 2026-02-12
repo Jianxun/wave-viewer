@@ -93,7 +93,7 @@ body {
 .plot-drop-overlay.drag-active {
   opacity: 1;
   visibility: visible;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .plot-drop-lane {

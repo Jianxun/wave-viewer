@@ -273,19 +273,14 @@ export function runResolvedSidePanelSignalAction(
 
   if (!boundPanel && standalonePanel === panel) {
     deps.clearStandalonePanel(panel);
-    void panel.webview.postMessage(
-      createProtocolEnvelope(
-        "host/datasetLoaded",
-        createDatasetLoadedPayload(deps.documentPath, deps.loadedDataset)
-      )
-    );
-    void panel.webview.postMessage(
-      createProtocolEnvelope(
-        "host/viewerBindingUpdated",
-        createViewerBindingUpdatedPayload(viewerId, deps.documentPath)
-      )
-    );
   }
+
+  void panel.webview.postMessage(
+    createProtocolEnvelope(
+      "host/viewerBindingUpdated",
+      createViewerBindingUpdatedPayload(viewerId)
+    )
+  );
 
   for (const trace of getAddedTraces(workspace, nextWorkspace)) {
     void panel.webview.postMessage(
@@ -318,19 +313,14 @@ export function runResolvedSidePanelSignalAction(
 export function runResolvedSidePanelQuickAdd(deps: RunResolvedSidePanelQuickAddDeps): boolean {
   if (deps.targetViewer.bindDataset) {
     deps.bindViewerToDataset(deps.targetViewer.viewerId, deps.documentPath);
-    void deps.targetViewer.panel.webview.postMessage(
-      createProtocolEnvelope(
-        "host/datasetLoaded",
-        createDatasetLoadedPayload(deps.documentPath, deps.loadedDataset)
-      )
-    );
-    void deps.targetViewer.panel.webview.postMessage(
-      createProtocolEnvelope(
-        "host/viewerBindingUpdated",
-        createViewerBindingUpdatedPayload(deps.targetViewer.viewerId, deps.documentPath)
-      )
-    );
   }
+
+  void deps.targetViewer.panel.webview.postMessage(
+    createProtocolEnvelope(
+      "host/viewerBindingUpdated",
+      createViewerBindingUpdatedPayload(deps.targetViewer.viewerId)
+    )
+  );
 
   let traceInjectionPayload:
     | Extract<HostToWebviewMessage, { type: "host/sidePanelTraceInjected" }>["payload"]
