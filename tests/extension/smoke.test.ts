@@ -14,6 +14,7 @@ import {
   createViewerSessionRegistry,
   createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
+  computeLayoutWatchTransition,
   createHostStateStore,
   createLayoutExternalEditController,
   createOpenViewerCommand,
@@ -944,6 +945,36 @@ describe("T-047 layout autosave persistence", () => {
 });
 
 describe("T-048 external layout edit reloads", () => {
+  it("treats idempotent rebinds as no-op for layout watch refs", () => {
+    expect(
+      computeLayoutWatchTransition(
+        "/workspace/layouts/lab.wave-viewer.yaml",
+        "/workspace/layouts/lab.wave-viewer.yaml"
+      )
+    ).toEqual({ shouldWatchNext: false });
+  });
+
+  it("rebinds across layouts by unwatching old and watching new", () => {
+    expect(
+      computeLayoutWatchTransition(
+        "/workspace/layouts/a.wave-viewer.yaml",
+        "/workspace/layouts/b.wave-viewer.yaml"
+      )
+    ).toEqual({
+      layoutUriToUnwatch: "/workspace/layouts/a.wave-viewer.yaml",
+      shouldWatchNext: true
+    });
+  });
+
+  it("drops watch when viewer loses layout binding", () => {
+    expect(
+      computeLayoutWatchTransition("/workspace/layouts/a.wave-viewer.yaml", undefined)
+    ).toEqual({
+      layoutUriToUnwatch: "/workspace/layouts/a.wave-viewer.yaml",
+      shouldWatchNext: false
+    });
+  });
+
   it("reloads host state from external layout edits and broadcasts one patch per content hash", () => {
     const panelFixture = createPanelFixture();
     const readTextFile = vi.fn(() =>

@@ -122,6 +122,19 @@ export type {
 const DEFAULT_LAYOUT_AUTOSAVE_DEBOUNCE_MS = 200;
 const DEFAULT_LAYOUT_EXTERNAL_EDIT_DEBOUNCE_MS = 80;
 
+export function computeLayoutWatchTransition(
+  previousLayoutUri: string | undefined,
+  nextLayoutUri: string | undefined
+): { layoutUriToUnwatch?: string; shouldWatchNext: boolean } {
+  if (previousLayoutUri === nextLayoutUri) {
+    return { shouldWatchNext: false };
+  }
+  return {
+    layoutUriToUnwatch: previousLayoutUri,
+    shouldWatchNext: nextLayoutUri !== undefined
+  };
+}
+
 export function toDeterministicLayoutYaml(datasetPath: string, workspace: WorkspaceState): string {
   const yamlText = exportPlotSpecV1({ datasetPath, workspace });
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
@@ -563,25 +576,32 @@ export function activate(context: VSCode.ExtensionContext): void {
     const previousLayoutUri = layoutByViewerId.get(viewerId);
     viewerSessions.bindViewerToDataset(viewerId, datasetPath);
     const contextForViewer = viewerSessions.getViewerSessionContext(viewerId);
-    if (previousLayoutUri && previousLayoutUri !== contextForViewer?.layoutUri) {
-      layoutExternalEdit.unwatchLayout(previousLayoutUri);
+    const nextLayoutUri = contextForViewer?.layoutUri;
+    const transition = computeLayoutWatchTransition(previousLayoutUri, nextLayoutUri);
+    if (transition.layoutUriToUnwatch) {
+      layoutExternalEdit.unwatchLayout(transition.layoutUriToUnwatch);
     }
     if (!contextForViewer) {
       layoutByViewerId.delete(viewerId);
       return;
     }
     layoutByViewerId.set(viewerId, contextForViewer.layoutUri);
-    layoutExternalEdit.watchLayout(contextForViewer.layoutUri);
+    if (transition.shouldWatchNext) {
+      layoutExternalEdit.watchLayout(contextForViewer.layoutUri);
+    }
   };
 
   const bindViewerToLayout = (viewerId: string, layoutUri: string, datasetPath: string): void => {
     const previousLayoutUri = layoutByViewerId.get(viewerId);
     viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
-    if (previousLayoutUri && previousLayoutUri !== layoutUri) {
-      layoutExternalEdit.unwatchLayout(previousLayoutUri);
+    const transition = computeLayoutWatchTransition(previousLayoutUri, layoutUri);
+    if (transition.layoutUriToUnwatch) {
+      layoutExternalEdit.unwatchLayout(transition.layoutUriToUnwatch);
     }
     layoutByViewerId.set(viewerId, layoutUri);
-    layoutExternalEdit.watchLayout(layoutUri);
+    if (transition.shouldWatchNext) {
+      layoutExternalEdit.watchLayout(layoutUri);
+    }
   };
 
   const registerPanelSession = (documentPath: string | undefined, panel: WebviewPanelLike): string => {
