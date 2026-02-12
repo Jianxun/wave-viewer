@@ -47,4 +47,15 @@ describe("T-049 export spec path serialization", () => {
 
     expect(yamlText).toContain("path: /workspace/examples/simulations/ota.spice.csv");
   });
+
+  it("keeps absolute dataset.path for windows cross-drive layout and dataset", () => {
+    const yamlText = exportPlotSpecV1({
+      datasetPath: "D:\\data\\ota.spice.csv",
+      workspace: WORKSPACE,
+      specPath: "C:\\layouts\\lab.wave-viewer.yaml"
+    });
+
+    expect(yamlText).toContain("path: D:/data/ota.spice.csv");
+    expect(yamlText).not.toContain("path: ./D:/data/ota.spice.csv");
+  });
 });

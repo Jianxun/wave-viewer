@@ -76,16 +76,37 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
 }
 
+const WINDOWS_ABSOLUTE_PATH_PREFIX = /^(?:[a-zA-Z]:[\\/]|\\\\)/;
+
 function serializeDatasetPath(datasetPath: string, specPath?: string): string {
   if (!specPath) {
     return datasetPath;
   }
 
-  const absoluteDatasetPath = path.resolve(datasetPath);
-  const relativePath = path.relative(path.dirname(path.resolve(specPath)), absoluteDatasetPath);
-  const normalizedPath = relativePath.split(path.sep).join("/");
+  const pathImpl = selectPathModule(datasetPath, specPath);
+  const absoluteDatasetPath = pathImpl.resolve(datasetPath);
+  const relativePath = pathImpl.relative(pathImpl.dirname(pathImpl.resolve(specPath)), absoluteDatasetPath);
+  if (pathImpl.isAbsolute(relativePath)) {
+    return normalizePathSeparators(relativePath);
+  }
+  const normalizedPath = normalizePathSeparators(relativePath);
   if (normalizedPath.length === 0) {
-    return `./${path.basename(absoluteDatasetPath)}`;
+    return `./${pathImpl.basename(absoluteDatasetPath)}`;
   }
   return normalizedPath.startsWith(".") ? normalizedPath : `./${normalizedPath}`;
+}
+
+function selectPathModule(
+  datasetPath: string,
+  specPath: string
+): typeof path.win32 | typeof path.posix {
+  return isWindowsPathLike(datasetPath) || isWindowsPathLike(specPath) ? path.win32 : path.posix;
+}
+
+function isWindowsPathLike(filePath: string): boolean {
+  return WINDOWS_ABSOLUTE_PATH_PREFIX.test(filePath);
+}
+
+function normalizePathSeparators(filePath: string): string {
+  return filePath.replaceAll("\\", "/");
 }
