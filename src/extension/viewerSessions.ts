@@ -1,4 +1,9 @@
-import type { ViewerSessionRegistry, WebviewPanelLike, ViewerSessionRoute } from "./types";
+import type {
+  LayoutBindingTarget,
+  ViewerSessionRegistry,
+  WebviewPanelLike,
+  ViewerSessionRoute
+} from "./types";
 
 function toFallbackLayoutUri(datasetPath: string): string {
   return `${datasetPath}.wave-viewer.yaml`;
@@ -106,6 +111,20 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
         addDatasetIndex(datasetPath, viewerId);
       }
       session.layoutUri = layoutUri;
+    },
+    getViewerBindingsForLayout(layoutUri: string): LayoutBindingTarget[] {
+      const bindings: LayoutBindingTarget[] = [];
+      for (const [viewerId, session] of viewerById.entries()) {
+        if (session.layoutUri !== layoutUri || !session.datasetPath) {
+          continue;
+        }
+        bindings.push({
+          viewerId,
+          datasetPath: session.datasetPath,
+          panel: session.panel
+        });
+      }
+      return bindings;
     },
     getDatasetPathForViewer(viewerId: string): string | undefined {
       return getSession(viewerId)?.datasetPath;
