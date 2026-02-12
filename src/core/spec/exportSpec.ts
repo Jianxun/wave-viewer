@@ -68,8 +68,9 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     }
   };
 
-  return stringify(spec, {
+  const yamlText = stringify(spec, {
     indent: 2,
     lineWidth: 0
   });
+  return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
 }
