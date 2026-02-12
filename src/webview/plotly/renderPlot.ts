@@ -42,8 +42,12 @@ export function createPlotRenderer(payload: {
     const figure = buildPlotlyFigure({ plot, traceTuplesBySourceId });
 
     await plotly.react(payload.container, figure.data, figure.layout, {
+      staticPlot: false,
+      editable: false,
       responsive: true,
+      displayModeBar: true,
       displaylogo: false,
+      scrollZoom: true,
       modeBarButtonsToRemove: ["select2d", "lasso2d"]
     });
 
