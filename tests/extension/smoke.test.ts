@@ -1088,6 +1088,66 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("handles validated addAxis intent via host transaction and activates the new lane", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/addAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        afterAxisId: "y1",
+        requestId: "req-add-axis-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }, { id: "y3" }, { id: "y2" }],
+                traces: [],
+                nextAxisNumber: 4
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y3"
+            }
+          },
+          reason: "addAxis:lane-click"
+        }
+      }
+    ]);
+  });
+
   it("ignores invalid dropSignal payloads and does not mutate workspace", async () => {
     const { deps, panelFixture, logDebug, setCachedWorkspace } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -1866,14 +1926,15 @@ describe("T-039 lane activation intent wiring", () => {
 });
 
 describe("T-040 new-lane drop target placement and insertion anchor wiring", () => {
-  it("places the new-lane drop target in signal list and wires afterAxisId in drop intents", () => {
+  it("places the new-lane creation target in signal list and wires click creation intent", () => {
     const signalListSource = fs.readFileSync(path.resolve("src/webview/components/SignalList.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
     const axisManagerSource = fs.readFileSync(path.resolve("src/webview/components/AxisManager.ts"), "utf8");
 
-    expect(signalListSource).toContain('body.textContent = "Drop signal here to create a new lane";');
+    expect(signalListSource).toContain('body.textContent = "Click here to create a new lane";');
+    expect(signalListSource).toContain("options.onCreateLane(options.afterAxisId);");
     expect(signalListSource).toContain('target: { kind: "new-axis", afterAxisId: lane.axisId }');
-    expect(mainSource).toContain("onDropSignal: ({ signal, target }) => {");
+    expect(mainSource).toContain('createProtocolEnvelope("webview/intent/addAxis"');
     expect(axisManagerSource).not.toContain("Drop signal here to create a new axis");
   });
 });

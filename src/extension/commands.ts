@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { exportPlotSpecV1 } from "../core/spec/exportSpec";
 import { importPlotSpecV1 } from "../core/spec/importSpec";
 import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from "../core/dataset/types";
+import { reduceWorkspaceState } from "../webview/state/reducer";
 import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
 import { applyDropSignalAction, applySetTraceAxisAction } from "./workspaceActions";
 import {
@@ -255,6 +256,48 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
             error: getErrorMessage(error)
           });
         }
+        return;
+      }
+
+      if (message.type === "webview/intent/addAxis") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored addAxis because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        const transaction = deps.commitHostStateTransaction({
+          datasetPath: resolvedDatasetPath,
+          defaultXSignal: resolvedDataset.defaultXSignal,
+          reason: "addAxis:lane-click",
+          mutate: (workspace) =>
+            reduceWorkspaceState(workspace, {
+              type: "axis/add",
+              payload: {
+                plotId: message.payload.plotId,
+                afterAxisId: message.payload.afterAxisId
+              }
+            }),
+          selectActiveAxis: ({ previous, nextWorkspace }) => {
+            const newAxisId = findNewAxisId(previous.workspace, nextWorkspace, message.payload.plotId);
+            if (!newAxisId) {
+              return undefined;
+            }
+            return { plotId: message.payload.plotId, axisId: newAxisId };
+          }
+        });
+
+        void panel.webview.postMessage(
+          createProtocolEnvelope("host/statePatch", {
+            revision: transaction.next.revision,
+            workspace: transaction.next.workspace,
+            viewerState: transaction.next.viewerState,
+            reason: transaction.reason
+          })
+        );
         return;
       }
 

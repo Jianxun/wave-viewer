@@ -83,6 +83,15 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/addAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        afterAxisId?: `y${number}`;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/dropSignal",
       {
         viewerId: string;

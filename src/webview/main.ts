@@ -208,6 +208,21 @@ function postSetTraceAxis(traceId: string, axisId: AxisId): void {
   );
 }
 
+function postAddAxis(afterAxisId: AxisId): void {
+  if (!workspace) {
+    return;
+  }
+
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/addAxis", {
+      viewerId,
+      plotId: getActivePlot(workspace).id,
+      afterAxisId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
 function renderCanvasDropOverlay(axes: ReadonlyArray<{ id: AxisId }>): void {
   plotDropOverlayEl.replaceChildren();
   const laneDomains = getAxisLaneDomains(axes);
@@ -337,6 +352,7 @@ async function renderWorkspace(): Promise<void> {
       void renderWorkspace();
       postSetActiveAxis(newAxisId);
     },
+    onCreateLane: (afterAxisId) => postAddAxis(afterAxisId),
     onSetAxis: (traceId, axisId) => postSetTraceAxis(traceId, axisId),
     onActivateLane: (axisId) => postSetActiveAxis(axisId),
     onSetVisible: (traceId, visible) =>

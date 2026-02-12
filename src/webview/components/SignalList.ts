@@ -12,6 +12,7 @@ export type SignalListProps = {
   parseDroppedSignal(event: DragEvent): string | undefined;
   onDropSignal(payload: { signal: string; target: DropSignalTarget }): void;
   onDropTraceToNewLane(payload: { traceId: string; afterAxisId: AxisId }): void;
+  onCreateLane(afterAxisId: AxisId): void;
   onSetAxis(traceId: string, axisId: AxisId): void;
   onActivateLane(axisId: AxisId): void;
   onSetVisible(traceId: string, visible: boolean): void;
@@ -183,6 +184,7 @@ export function renderSignalList(props: SignalListProps): void {
           parseDroppedSignal: props.parseDroppedSignal,
           onDropTraceToNewLane: (traceId, afterAxisId) =>
             props.onDropTraceToNewLane({ traceId, afterAxisId }),
+          onCreateLane: (afterAxisId) => props.onCreateLane(afterAxisId),
           onDropSignal: (signal) =>
             props.onDropSignal({
               signal,
@@ -230,6 +232,7 @@ function createSection(titleText: string): { section: HTMLElement; body: HTMLEle
 function createDropToNewLaneSection(options: {
   traces: TraceState[];
   afterAxisId: AxisId;
+  onCreateLane(afterAxisId: AxisId): void;
   canDropSignal(event: DragEvent): boolean;
   parseDroppedSignal(event: DragEvent): string | undefined;
   onDropTraceToNewLane(traceId: string, afterAxisId: AxisId): void;
@@ -238,14 +241,15 @@ function createDropToNewLaneSection(options: {
   const section = document.createElement("section");
   section.className = "signal-panel-section";
 
-  const body = document.createElement("div");
-  body.className = "list-row axis-row-new-target drop-target";
-  body.textContent = "Drop signal here to create a new lane";
+  const body = document.createElement("button");
+  body.type = "button";
+  body.className = "list-row axis-row-new-target drop-target chip-button";
+  body.textContent = "Click here to create a new lane";
+  body.addEventListener("click", () => {
+    options.onCreateLane(options.afterAxisId);
+  });
   body.addEventListener("dragenter", (event) => {
     if (!event.dataTransfer) {
-      return;
-    }
-    if (!hasTraceChipDrop(event.dataTransfer) && !options.canDropSignal(event)) {
       return;
     }
     event.preventDefault();
@@ -253,9 +257,6 @@ function createDropToNewLaneSection(options: {
   });
   body.addEventListener("dragover", (event) => {
     if (!event.dataTransfer) {
-      return;
-    }
-    if (!hasTraceChipDrop(event.dataTransfer) && !options.canDropSignal(event)) {
       return;
     }
     event.preventDefault();
@@ -279,6 +280,7 @@ function createDropToNewLaneSection(options: {
     const trace = options.traces.find((entry) => entry.id === traceId);
     if (trace) {
       event.preventDefault();
+      event.stopImmediatePropagation();
       options.onDropTraceToNewLane(trace.id, options.afterAxisId);
       return;
     }
@@ -350,6 +352,11 @@ function addDropHandlers(options: {
     const signal = options.parseDroppedSignal(event);
     setActive(false);
     if (!signal) {
+      if (event.dataTransfer) {
+        console.debug("[wave-viewer] Ignored drop on new-lane target: no signal payload resolved.", {
+          types: Array.from(event.dataTransfer.types)
+        });
+      }
       return;
     }
     event.preventDefault();

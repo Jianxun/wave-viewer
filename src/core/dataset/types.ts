@@ -48,6 +48,7 @@ export type WebviewToHostMessageType =
   | "webview/intent/setActivePlot"
   | "webview/intent/setActiveAxis"
   | "webview/intent/setTraceAxis"
+  | "webview/intent/addAxis"
   | "webview/intent/dropSignal"
   | "webview/intent/addSignalToActiveAxis"
   | "webview/intent/addSignalToNewAxis";
@@ -93,6 +94,10 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<
       "webview/intent/setTraceAxis",
       { viewerId: string; plotId: string; traceId: string; axisId: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/addAxis",
+      { viewerId: string; plotId: string; afterAxisId?: `y${number}`; requestId: string }
     >
   | ProtocolEnvelope<
       "webview/intent/dropSignal",
@@ -218,6 +223,7 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/setActivePlot" ||
     type === "webview/intent/setActiveAxis" ||
     type === "webview/intent/setTraceAxis" ||
+    type === "webview/intent/addAxis" ||
     type === "webview/intent/dropSignal" ||
     type === "webview/intent/addSignalToActiveAxis" ||
     type === "webview/intent/addSignalToNewAxis"
@@ -319,6 +325,15 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
       isNonEmptyString(payload.plotId) &&
       isNonEmptyString(payload.traceId) &&
       isAxisId(payload.axisId) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/addAxis") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      (payload.afterAxisId === undefined || isAxisId(payload.afterAxisId)) &&
       isNonEmptyString(payload.requestId)
     );
   }
