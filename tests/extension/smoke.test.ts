@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
   createOpenViewerCommand,
   createRemoveLoadedFileCommand,
@@ -19,9 +20,11 @@ import {
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
+  runResolvedSidePanelSignalAction,
   resolveSidePanelSelection,
   type CommandDeps,
   type HostToWebviewMessage,
+  type LoadedDatasetRecord,
   type WebviewLike,
   type WebviewPanelLike
 } from "../../src/extension";
@@ -146,6 +149,22 @@ function createWorkspaceFixture(): WorkspaceState {
         nextAxisNumber: 2
       }
     ]
+  };
+}
+
+function createLoadedDatasetFixture(
+  datasetPath = "/workspace/examples/simulations/ota.spice.csv"
+): LoadedDatasetRecord {
+  return {
+    dataset: {
+      path: datasetPath,
+      rowCount: 3,
+      columns: [
+        { name: "time", values: [0, 1, 2] },
+        { name: "vin", values: [1, 2, 3] }
+      ]
+    },
+    defaultXSignal: "time"
   };
 }
 
@@ -829,5 +848,97 @@ describe("T-023 canvas drop overlay interaction safety", () => {
     expect(source).toContain('plotCanvasEl.addEventListener("dragover"');
     expect(source).toContain('plotCanvasEl.addEventListener("dragleave"');
     expect(source).toContain('plotCanvasEl.addEventListener("drop"');
+  });
+});
+
+describe("T-025 standalone viewer side-panel routing", () => {
+  it("binds a standalone viewer to dataset action and posts datasetLoaded before patch", () => {
+    const panelFixture = createPanelFixture();
+    const showWarning = vi.fn();
+    const bindPanelToDataset = vi.fn();
+    let standalonePanel: WebviewPanelLike | undefined = panelFixture.panel;
+    let cachedWorkspace: WorkspaceState | undefined;
+
+    const nextWorkspace = runResolvedSidePanelSignalAction({
+      actionType: "add-to-plot",
+      documentPath: "/workspace/examples/simulations/ota.spice.csv",
+      loadedDataset: createLoadedDatasetFixture(),
+      signal: "vin",
+      getCachedWorkspace: () => cachedWorkspace,
+      setCachedWorkspace: (_documentPath, workspace) => {
+        cachedWorkspace = workspace;
+      },
+      getBoundPanel: () => undefined,
+      getStandalonePanel: () => standalonePanel,
+      bindPanelToDataset: (_documentPath, panel) => {
+        bindPanelToDataset();
+        expect(panel).toBe(panelFixture.panel);
+      },
+      clearStandalonePanel: (panel) => {
+        if (standalonePanel === panel) {
+          standalonePanel = undefined;
+        }
+      },
+      showWarning
+    });
+
+    expect(showWarning).not.toHaveBeenCalled();
+    expect(bindPanelToDataset).toHaveBeenCalledTimes(1);
+    expect(standalonePanel).toBeUndefined();
+    expect(nextWorkspace.plots[0]?.traces).toEqual([
+      { id: "trace-1", signal: "vin", axisId: "y1", visible: true }
+    ]);
+    expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
+      "host/datasetLoaded",
+      "host/workspacePatched"
+    ]);
+    expect(panelFixture.sentMessages[0]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/datasetLoaded",
+      payload: {
+        path: "/workspace/examples/simulations/ota.spice.csv",
+        fileName: "ota.spice.csv",
+        rowCount: 3,
+        columns: [
+          { name: "time", values: [0, 1, 2] },
+          { name: "vin", values: [1, 2, 3] }
+        ],
+        defaultXSignal: "time"
+      }
+    });
+    expect(panelFixture.sentMessages[1]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/workspacePatched",
+      payload: {
+        workspace: nextWorkspace,
+        reason: "sidePanel:add-to-plot"
+      }
+    });
+  });
+
+  it("shows actionable warning when no viewer target can accept the action", () => {
+    const showWarning = vi.fn();
+    const nextWorkspace = runResolvedSidePanelSignalAction({
+      actionType: "add-to-plot",
+      documentPath: "/workspace/examples/simulations/ota.spice.csv",
+      loadedDataset: createLoadedDatasetFixture(),
+      signal: "vin",
+      getCachedWorkspace: () => undefined,
+      setCachedWorkspace: () => undefined,
+      getBoundPanel: () => undefined,
+      getStandalonePanel: () => undefined,
+      bindPanelToDataset: () => undefined,
+      clearStandalonePanel: () => undefined,
+      showWarning
+    });
+
+    expect(nextWorkspace.plots[0]?.traces).toEqual([
+      { id: "trace-1", signal: "vin", axisId: "y1", visible: true }
+    ]);
+    expect(showWarning).toHaveBeenCalledWith(
+      createNoTargetViewerWarning("add-to-plot", "/workspace/examples/simulations/ota.spice.csv")
+    );
+    expect(createNoTargetViewerWarning("add-to-plot", "/workspace/examples/simulations/ota.spice.csv"))
+      .toContain("Open Wave Viewer for that CSV and retry.");
   });
 });
