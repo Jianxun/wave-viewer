@@ -246,6 +246,37 @@ export type LayoutAutosaveController = {
   schedule(snapshot: LayoutAutosaveSnapshot): void;
   flush(datasetPath?: string): void;
   getLastSelfWriteMetadata(layoutUri: string): LayoutSelfWriteMetadata | undefined;
+  recordSelfWriteMetadata(metadata: LayoutSelfWriteMetadata): void;
+  dispose(): void;
+};
+
+export type LayoutWatchHandle = {
+  dispose(): void;
+};
+
+export type LayoutBindingTarget = {
+  viewerId: string;
+  datasetPath: string;
+  panel: WebviewPanelLike;
+};
+
+export type LayoutExternalEditControllerDeps = {
+  debounceMs?: number;
+  watchLayout(layoutUri: string, onChange: () => void): LayoutWatchHandle;
+  readTextFile(layoutUri: string): string;
+  readFileStats(layoutUri: string): { mtimeMs: number; sizeBytes: number } | undefined;
+  resolveBindingsForLayout(layoutUri: string): LayoutBindingTarget[];
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  applyImportedWorkspace(datasetPath: string, workspace: WorkspaceState): HostStateSnapshot;
+  getLastSelfWriteMetadata(layoutUri: string): LayoutSelfWriteMetadata | undefined;
+  showError(message: string): void;
+  logDebug?(message: string, details?: unknown): void;
+};
+
+export type LayoutExternalEditController = {
+  watchLayout(layoutUri: string): void;
+  unwatchLayout(layoutUri: string): void;
+  reloadLayout(layoutUri: string): void;
   dispose(): void;
 };
 
@@ -253,6 +284,7 @@ export type ViewerSessionRegistry = {
   registerPanel(panel: WebviewPanelLike, datasetPath?: string): string;
   bindViewerToDataset(viewerId: string, datasetPath: string): void;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
+  getViewerBindingsForLayout(layoutUri: string): LayoutBindingTarget[];
   getDatasetPathForViewer(viewerId: string): string | undefined;
   getViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;

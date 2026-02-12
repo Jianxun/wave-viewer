@@ -3,8 +3,9 @@ import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type * as VSCode from "vscode";
 
-import type { Dataset } from "./core/dataset/types";
+import { createProtocolEnvelope, type Dataset } from "./core/dataset/types";
 import { exportPlotSpecV1 } from "./core/spec/exportSpec";
+import { importPlotSpecV1 } from "./core/spec/importSpec";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
 import {
@@ -53,6 +54,9 @@ import type {
   LayoutAutosaveControllerDeps,
   LayoutAutosavePersistInput,
   LayoutAutosaveSnapshot,
+  LayoutBindingTarget,
+  LayoutExternalEditController,
+  LayoutExternalEditControllerDeps,
   LayoutSelfWriteMetadata,
   LoadedDatasetRecord,
   WebviewPanelLike
@@ -104,6 +108,9 @@ export type {
   LayoutAutosaveControllerDeps,
   LayoutAutosavePersistInput,
   LayoutAutosaveSnapshot,
+  LayoutBindingTarget,
+  LayoutExternalEditController,
+  LayoutExternalEditControllerDeps,
   LayoutSelfWriteMetadata,
   LoadedDatasetRecord,
   SidePanelSignalAction,
@@ -113,6 +120,20 @@ export type {
 } from "./extension/types";
 
 const DEFAULT_LAYOUT_AUTOSAVE_DEBOUNCE_MS = 200;
+const DEFAULT_LAYOUT_EXTERNAL_EDIT_DEBOUNCE_MS = 80;
+
+export function computeLayoutWatchTransition(
+  previousLayoutUri: string | undefined,
+  nextLayoutUri: string | undefined
+): { layoutUriToUnwatch?: string; shouldWatchNext: boolean } {
+  if (previousLayoutUri === nextLayoutUri) {
+    return { shouldWatchNext: false };
+  }
+  return {
+    layoutUriToUnwatch: previousLayoutUri,
+    shouldWatchNext: nextLayoutUri !== undefined
+  };
+}
 
 export function toDeterministicLayoutYaml(datasetPath: string, workspace: WorkspaceState): string {
   const yamlText = exportPlotSpecV1({ datasetPath, workspace });
@@ -211,11 +232,209 @@ export function createLayoutAutosaveController(
     getLastSelfWriteMetadata(layoutUri) {
       return lastSelfWriteByLayoutUri.get(layoutUri);
     },
+    recordSelfWriteMetadata(metadata) {
+      lastSelfWriteByLayoutUri.set(metadata.layoutUri, metadata);
+    },
     dispose() {
       for (const pending of pendingByDatasetPath.values()) {
         clearTimeout(pending.timer);
       }
       pendingByDatasetPath.clear();
+    }
+  };
+}
+
+export function createLayoutExternalEditController(
+  deps: LayoutExternalEditControllerDeps
+): LayoutExternalEditController {
+  const debounceMs = deps.debounceMs ?? DEFAULT_LAYOUT_EXTERNAL_EDIT_DEBOUNCE_MS;
+  const watchersByLayoutUri = new Map<string, { handle: { dispose(): void }; refCount: number }>();
+  const lastAppliedHashByLayoutUri = new Map<string, string>();
+  const timersByLayoutUri = new Map<string, ReturnType<typeof setTimeout>>();
+  const reloadingLayoutUris = new Set<string>();
+  const pendingReloadLayoutUris = new Set<string>();
+
+  const applyReload = (layoutUri: string): void => {
+    const bindings = deps.resolveBindingsForLayout(layoutUri);
+    if (bindings.length === 0) {
+      deps.logDebug?.("Skipped layout external reload because no viewers are bound.", {
+        layoutUri
+      });
+      return;
+    }
+
+    let yamlText: string;
+    try {
+      yamlText = deps.readTextFile(layoutUri);
+    } catch (error) {
+      deps.showError(
+        `Wave Viewer layout reload failed for ${layoutUri}: ${getErrorMessage(error)}`
+      );
+      return;
+    }
+
+    const contentHash = createHash("sha256").update(yamlText).digest("hex");
+    if (lastAppliedHashByLayoutUri.get(layoutUri) === contentHash) {
+      deps.logDebug?.("Skipped layout external reload because content hash is unchanged.", {
+        layoutUri
+      });
+      return;
+    }
+
+    const lastSelfWrite = deps.getLastSelfWriteMetadata(layoutUri);
+    if (lastSelfWrite && contentHash === lastSelfWrite.contentHash) {
+      const stats = deps.readFileStats(layoutUri);
+      const matchesSelfWrite =
+        stats !== undefined &&
+        Math.abs(stats.mtimeMs - lastSelfWrite.mtimeMs) < 1 &&
+        stats.sizeBytes === lastSelfWrite.sizeBytes;
+      if (matchesSelfWrite) {
+        lastAppliedHashByLayoutUri.set(layoutUri, contentHash);
+        deps.logDebug?.("Suppressed layout external reload because change matches self write.", {
+          layoutUri,
+          revision: lastSelfWrite.revision
+        });
+        return;
+      }
+    }
+
+    const uniqueByDatasetPath = new Map<string, LayoutBindingTarget>();
+    for (const binding of bindings) {
+      if (!uniqueByDatasetPath.has(binding.datasetPath)) {
+        uniqueByDatasetPath.set(binding.datasetPath, binding);
+      }
+    }
+
+    const patchByDatasetPath = new Map<
+      string,
+      {
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: { activePlotId: string; activeAxisByPlotId: Record<string, `y${number}`> };
+      }
+    >();
+
+    for (const [datasetPath] of uniqueByDatasetPath.entries()) {
+      try {
+        const loaded = deps.loadDataset(datasetPath);
+        const imported = importPlotSpecV1({
+          yamlText,
+          availableSignals: loaded.dataset.columns.map((column) => column.name)
+        });
+        if (imported.datasetPath !== datasetPath) {
+          throw new Error(
+            `Wave Viewer reference-only spec points to '${imported.datasetPath}', but bound dataset is '${datasetPath}'.`
+          );
+        }
+        const snapshot = deps.applyImportedWorkspace(datasetPath, imported.workspace);
+        patchByDatasetPath.set(datasetPath, {
+          revision: snapshot.revision,
+          workspace: snapshot.workspace,
+          viewerState: snapshot.viewerState
+        });
+      } catch (error) {
+        deps.showError(
+          `Wave Viewer layout reload failed for ${layoutUri}: ${getErrorMessage(error)}`
+        );
+        return;
+      }
+    }
+
+    for (const binding of bindings) {
+      const patch = patchByDatasetPath.get(binding.datasetPath);
+      if (!patch) {
+        continue;
+      }
+      void binding.panel.webview.postMessage(
+        createProtocolEnvelope("host/statePatch", {
+          revision: patch.revision,
+          workspace: patch.workspace,
+          viewerState: patch.viewerState,
+          reason: "layoutExternalEdit:file-watch"
+        })
+      );
+    }
+    lastAppliedHashByLayoutUri.set(layoutUri, contentHash);
+  };
+
+  const runReload = (layoutUri: string): void => {
+    if (reloadingLayoutUris.has(layoutUri)) {
+      pendingReloadLayoutUris.add(layoutUri);
+      return;
+    }
+
+    reloadingLayoutUris.add(layoutUri);
+    try {
+      applyReload(layoutUri);
+    } finally {
+      reloadingLayoutUris.delete(layoutUri);
+      if (pendingReloadLayoutUris.has(layoutUri)) {
+        pendingReloadLayoutUris.delete(layoutUri);
+        runReload(layoutUri);
+      }
+    }
+  };
+
+  return {
+    watchLayout(layoutUri) {
+      const existing = watchersByLayoutUri.get(layoutUri);
+      if (existing) {
+        existing.refCount += 1;
+        return;
+      }
+      const handle = deps.watchLayout(layoutUri, () => {
+        const existingTimer = timersByLayoutUri.get(layoutUri);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        if (debounceMs <= 0) {
+          timersByLayoutUri.delete(layoutUri);
+          runReload(layoutUri);
+          return;
+        }
+        const timer = setTimeout(() => {
+          timersByLayoutUri.delete(layoutUri);
+          runReload(layoutUri);
+        }, debounceMs);
+        timersByLayoutUri.set(layoutUri, timer);
+      });
+      watchersByLayoutUri.set(layoutUri, { handle, refCount: 1 });
+    },
+    unwatchLayout(layoutUri) {
+      const watched = watchersByLayoutUri.get(layoutUri);
+      if (!watched) {
+        return;
+      }
+      watched.refCount -= 1;
+      if (watched.refCount > 0) {
+        return;
+      }
+      const existingTimer = timersByLayoutUri.get(layoutUri);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        timersByLayoutUri.delete(layoutUri);
+      }
+      watched.handle.dispose();
+      watchersByLayoutUri.delete(layoutUri);
+      reloadingLayoutUris.delete(layoutUri);
+      pendingReloadLayoutUris.delete(layoutUri);
+      lastAppliedHashByLayoutUri.delete(layoutUri);
+    },
+    reloadLayout(layoutUri) {
+      runReload(layoutUri);
+    },
+    dispose() {
+      for (const timer of timersByLayoutUri.values()) {
+        clearTimeout(timer);
+      }
+      timersByLayoutUri.clear();
+      for (const watcher of watchersByLayoutUri.values()) {
+        watcher.handle.dispose();
+      }
+      watchersByLayoutUri.clear();
+      reloadingLayoutUris.clear();
+      pendingReloadLayoutUris.clear();
+      lastAppliedHashByLayoutUri.clear();
     }
   };
 }
@@ -254,6 +473,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const removedDatasetPathSet = new Set<string>();
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
   const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
+  const layoutByViewerId = new Map<string, string>();
 
   const commitHostStateTransaction = (
     transaction: Parameters<typeof hostStateStore.commitTransaction>[0]
@@ -308,6 +528,105 @@ export function activate(context: VSCode.ExtensionContext): void {
     return existed;
   }
 
+  const loadDataset = (documentPath: string): { dataset: Dataset; defaultXSignal: string } => {
+    const csvText = fs.readFileSync(documentPath, "utf8");
+    const dataset = parseCsv({ path: documentPath, csvText });
+    const defaultXSignal = selectDefaultX(dataset);
+    return { dataset, defaultXSignal };
+  };
+
+  const layoutExternalEdit = createLayoutExternalEditController({
+    watchLayout: (layoutUri, onChange) => {
+      const parentDirectory = path.dirname(layoutUri);
+      const watchedName = path.basename(layoutUri);
+      const watcher = fs.watch(parentDirectory, { persistent: false }, (_eventType, fileName) => {
+        if (!fileName || fileName.toString() === watchedName) {
+          onChange();
+        }
+      });
+      return {
+        dispose: () => {
+          watcher.close();
+        }
+      };
+    },
+    readTextFile: (layoutUri) => fs.readFileSync(layoutUri, "utf8"),
+    readFileStats: (layoutUri) => {
+      try {
+        const stats = fs.statSync(layoutUri);
+        return { mtimeMs: stats.mtimeMs, sizeBytes: stats.size };
+      } catch {
+        return undefined;
+      }
+    },
+    resolveBindingsForLayout: (layoutUri) => viewerSessions.getViewerBindingsForLayout(layoutUri),
+    loadDataset,
+    applyImportedWorkspace: (datasetPath, workspace) =>
+      hostStateStore.setWorkspace(datasetPath, workspace),
+    getLastSelfWriteMetadata: (layoutUri) => layoutAutosave.getLastSelfWriteMetadata(layoutUri),
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    logDebug: (message, details) => {
+      console.debug(`[wave-viewer] ${message}`, details);
+    }
+  });
+
+  const bindViewerToDataset = (viewerId: string, datasetPath: string): void => {
+    const previousLayoutUri = layoutByViewerId.get(viewerId);
+    viewerSessions.bindViewerToDataset(viewerId, datasetPath);
+    const contextForViewer = viewerSessions.getViewerSessionContext(viewerId);
+    const nextLayoutUri = contextForViewer?.layoutUri;
+    const transition = computeLayoutWatchTransition(previousLayoutUri, nextLayoutUri);
+    if (transition.layoutUriToUnwatch) {
+      layoutExternalEdit.unwatchLayout(transition.layoutUriToUnwatch);
+    }
+    if (!contextForViewer) {
+      layoutByViewerId.delete(viewerId);
+      return;
+    }
+    layoutByViewerId.set(viewerId, contextForViewer.layoutUri);
+    if (transition.shouldWatchNext) {
+      layoutExternalEdit.watchLayout(contextForViewer.layoutUri);
+    }
+  };
+
+  const bindViewerToLayout = (viewerId: string, layoutUri: string, datasetPath: string): void => {
+    const previousLayoutUri = layoutByViewerId.get(viewerId);
+    viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
+    const transition = computeLayoutWatchTransition(previousLayoutUri, layoutUri);
+    if (transition.layoutUriToUnwatch) {
+      layoutExternalEdit.unwatchLayout(transition.layoutUriToUnwatch);
+    }
+    layoutByViewerId.set(viewerId, layoutUri);
+    if (transition.shouldWatchNext) {
+      layoutExternalEdit.watchLayout(layoutUri);
+    }
+  };
+
+  const registerPanelSession = (documentPath: string | undefined, panel: WebviewPanelLike): string => {
+    const viewerId = viewerSessions.registerPanel(panel, documentPath);
+    const contextForViewer = viewerSessions.getViewerSessionContext(viewerId);
+    if (contextForViewer) {
+      layoutByViewerId.set(viewerId, contextForViewer.layoutUri);
+      layoutExternalEdit.watchLayout(contextForViewer.layoutUri);
+    }
+    panel.onDidDispose?.(() => {
+      const boundLayoutUri = layoutByViewerId.get(viewerId);
+      if (!boundLayoutUri) {
+        return;
+      }
+      layoutByViewerId.delete(viewerId);
+      layoutExternalEdit.unwatchLayout(boundLayoutUri);
+    });
+    return viewerId;
+  };
+
+  const persistLayoutFile = (layoutUri: string, yamlText: string, revision = 0): void => {
+    const metadata = writeLayoutFileAtomically(layoutUri, yamlText, revision);
+    layoutAutosave.recordSelfWriteMetadata(metadata);
+  };
+
   function runSidePanelSignalAction(actionType: "add-to-plot" | "add-to-new-axis" | "reveal-in-plot"): (item?: unknown) => void {
     return (item?: unknown) => {
       const selection = resolveSidePanelSelection({
@@ -344,7 +663,7 @@ export function activate(context: VSCode.ExtensionContext): void {
           const target = viewerSessions.resolveTargetViewerSession(documentPath);
           if (target && target.panel === panel) {
             if (target.bindDataset) {
-              viewerSessions.bindViewerToDataset(target.viewerId, documentPath);
+              bindViewerToDataset(target.viewerId, documentPath);
             }
             return target.viewerId;
           }
@@ -417,19 +736,12 @@ export function activate(context: VSCode.ExtensionContext): void {
             },
       targetViewer,
       bindViewerToDataset: (viewerId, datasetPath) => {
-        viewerSessions.bindViewerToDataset(viewerId, datasetPath);
+        bindViewerToDataset(viewerId, datasetPath);
       },
       showError: (message) => {
         void vscode.window.showErrorMessage(message);
       }
     });
-  };
-
-  const loadDataset = (documentPath: string): { dataset: Dataset; defaultXSignal: string } => {
-    const csvText = fs.readFileSync(documentPath, "utf8");
-    const dataset = parseCsv({ path: documentPath, csvText });
-    const defaultXSignal = selectDefaultX(dataset);
-    return { dataset, defaultXSignal };
   };
 
   const command = createOpenViewerCommand({
@@ -454,7 +766,7 @@ export function activate(context: VSCode.ExtensionContext): void {
         enableScripts: true,
         retainContextWhenHidden: true
       }) as unknown as WebviewPanelLike,
-    onPanelCreated: (documentPath, panel) => viewerSessions.registerPanel(panel, documentPath),
+    onPanelCreated: (documentPath, panel) => registerPanelSession(documentPath, panel),
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     },
@@ -528,9 +840,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     setCachedWorkspace: (documentPath, workspace) => {
       return hostStateStore.setWorkspace(documentPath, workspace);
     },
-    bindViewerToLayout: (viewerId, layoutUri, datasetPath) => {
-      viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
-    },
+    bindViewerToLayout,
     getPanelForViewer: (viewerId) => viewerSessions.getPanelForViewer(viewerId),
     logDebug: (message, details) => {
       console.debug(`[wave-viewer] ${message}`, details);
@@ -549,7 +859,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     loadDataset,
     getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     writeTextFile: (filePath, text) => {
-      writeLayoutFileAtomically(filePath, text);
+      persistLayoutFile(filePath, text);
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
@@ -573,11 +883,9 @@ export function activate(context: VSCode.ExtensionContext): void {
       return result?.fsPath;
     },
     writeTextFile: (filePath, text) => {
-      writeLayoutFileAtomically(filePath, text);
+      persistLayoutFile(filePath, text);
     },
-    bindViewerToLayout: (viewerId, layoutUri, datasetPath) => {
-      viewerSessions.bindViewerToLayout(viewerId, layoutUri, datasetPath);
-    },
+    bindViewerToLayout,
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     },
@@ -632,6 +940,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   });
 
   context.subscriptions.push({ dispose: () => layoutAutosave.dispose() });
+  context.subscriptions.push({ dispose: () => layoutExternalEdit.dispose() });
   context.subscriptions.push(signalTreeView);
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_LAYOUT_COMMAND, openLayoutCommand));
@@ -669,6 +978,13 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(REMOVE_LOADED_FILE_COMMAND, removeLoadedFileCommand)
   );
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Unknown error.";
 }
 
 export function deactivate(): void {

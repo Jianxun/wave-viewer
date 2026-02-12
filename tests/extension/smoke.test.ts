@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset/types";
@@ -13,7 +14,9 @@ import {
   createViewerSessionRegistry,
   createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
+  computeLayoutWatchTransition,
   createHostStateStore,
+  createLayoutExternalEditController,
   createOpenViewerCommand,
   createLayoutAutosaveController,
   createRemoveLoadedFileCommand,
@@ -937,6 +940,271 @@ describe("T-047 layout autosave persistence", () => {
       expect(siblingNames).toEqual(["lab.wave-viewer.yaml"]);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("T-048 external layout edit reloads", () => {
+  it("treats idempotent rebinds as no-op for layout watch refs", () => {
+    expect(
+      computeLayoutWatchTransition(
+        "/workspace/layouts/lab.wave-viewer.yaml",
+        "/workspace/layouts/lab.wave-viewer.yaml"
+      )
+    ).toEqual({ shouldWatchNext: false });
+  });
+
+  it("rebinds across layouts by unwatching old and watching new", () => {
+    expect(
+      computeLayoutWatchTransition(
+        "/workspace/layouts/a.wave-viewer.yaml",
+        "/workspace/layouts/b.wave-viewer.yaml"
+      )
+    ).toEqual({
+      layoutUriToUnwatch: "/workspace/layouts/a.wave-viewer.yaml",
+      shouldWatchNext: true
+    });
+  });
+
+  it("drops watch when viewer loses layout binding", () => {
+    expect(
+      computeLayoutWatchTransition("/workspace/layouts/a.wave-viewer.yaml", undefined)
+    ).toEqual({
+      layoutUriToUnwatch: "/workspace/layouts/a.wave-viewer.yaml",
+      shouldWatchNext: false
+    });
+  });
+
+  it("reloads host state from external layout edits and broadcasts one patch per content hash", () => {
+    const panelFixture = createPanelFixture();
+    const readTextFile = vi.fn(() =>
+      createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv")
+    );
+    const loadDataset = vi.fn(() => createLoadedDatasetFixture());
+    const applyImportedWorkspace = vi.fn((datasetPath: string, workspace: WorkspaceState) => ({
+      workspace,
+      revision: 7,
+      viewerState: {
+        activePlotId: workspace.activePlotId,
+        activeAxisByPlotId: { "plot-1": "y1" as const }
+      },
+      datasetPath
+    }));
+    const showError = vi.fn();
+    let watchedHandler: (() => void) | undefined;
+    const controller = createLayoutExternalEditController({
+      debounceMs: 0,
+      watchLayout: (_layoutUri, onChange) => {
+        watchedHandler = onChange;
+        return {
+          dispose: () => {
+            watchedHandler = undefined;
+          }
+        };
+      },
+      readTextFile,
+      readFileStats: () => ({ mtimeMs: 1200, sizeBytes: 512 }),
+      resolveBindingsForLayout: () => [
+        {
+          viewerId: "viewer-1",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          panel: panelFixture.panel
+        }
+      ],
+      loadDataset,
+      applyImportedWorkspace,
+      getLastSelfWriteMetadata: () => undefined,
+      showError
+    });
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    watchedHandler?.();
+    watchedHandler?.();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(loadDataset).toHaveBeenCalledTimes(1);
+    expect(applyImportedWorkspace).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 7,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: { "plot-1": "y1" as const }
+          },
+          reason: "layoutExternalEdit:file-watch"
+        }
+      }
+    ]);
+
+    controller.dispose();
+  });
+
+  it("suppresses watcher reload for known self-written layout content", () => {
+    const panelFixture = createPanelFixture();
+    const yamlText = createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv");
+    const contentHash = createHash("sha256").update(yamlText).digest("hex");
+    const applyImportedWorkspace = vi.fn();
+    let watchedHandler: (() => void) | undefined;
+    const controller = createLayoutExternalEditController({
+      debounceMs: 0,
+      watchLayout: (_layoutUri, onChange) => {
+        watchedHandler = onChange;
+        return { dispose: () => undefined };
+      },
+      readTextFile: () => yamlText,
+      readFileStats: () => ({ mtimeMs: 500, sizeBytes: yamlText.length }),
+      resolveBindingsForLayout: () => [
+        {
+          viewerId: "viewer-1",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          panel: panelFixture.panel
+        }
+      ],
+      loadDataset: () => createLoadedDatasetFixture(),
+      applyImportedWorkspace,
+      getLastSelfWriteMetadata: () => ({
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml",
+        tempUri: "/workspace/layouts/lab.wave-viewer.yaml.tmp-1",
+        nonce: "nonce-1",
+        revision: 9,
+        writtenAtMs: 1000,
+        mtimeMs: 500,
+        sizeBytes: yamlText.length,
+        contentHash
+      }),
+      showError: vi.fn()
+    });
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    watchedHandler?.();
+
+    expect(applyImportedWorkspace).not.toHaveBeenCalled();
+    expect(panelFixture.sentMessages).toEqual([]);
+
+    controller.dispose();
+  });
+
+  it("keeps previous host state when external layout edit is invalid", () => {
+    const panelFixture = createPanelFixture();
+    const applyImportedWorkspace = vi.fn();
+    const showError = vi.fn();
+    let watchedHandler: (() => void) | undefined;
+    const controller = createLayoutExternalEditController({
+      debounceMs: 0,
+      watchLayout: (_layoutUri, onChange) => {
+        watchedHandler = onChange;
+        return { dispose: () => undefined };
+      },
+      readTextFile: () => "version: nope",
+      readFileStats: () => ({ mtimeMs: 500, sizeBytes: 13 }),
+      resolveBindingsForLayout: () => [
+        {
+          viewerId: "viewer-1",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          panel: panelFixture.panel
+        }
+      ],
+      loadDataset: () => createLoadedDatasetFixture(),
+      applyImportedWorkspace,
+      getLastSelfWriteMetadata: () => undefined,
+      showError
+    });
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    watchedHandler?.();
+
+    expect(applyImportedWorkspace).not.toHaveBeenCalled();
+    expect(panelFixture.sentMessages).toEqual([]);
+    expect(showError).toHaveBeenCalledWith(
+      "Wave Viewer layout reload failed for /workspace/layouts/lab.wave-viewer.yaml: Unsupported plot spec version: nope."
+    );
+
+    controller.dispose();
+  });
+
+  it("keeps one watcher per layout and disposes only after final unwatch", () => {
+    const disposeHandle = vi.fn();
+    const watchLayout = vi.fn((_layoutUri: string, _onChange: () => void) => ({
+      dispose: disposeHandle
+    }));
+    const controller = createLayoutExternalEditController({
+      debounceMs: 0,
+      watchLayout,
+      readTextFile: () => "",
+      readFileStats: () => undefined,
+      resolveBindingsForLayout: () => [],
+      loadDataset: () => createLoadedDatasetFixture(),
+      applyImportedWorkspace: vi.fn(),
+      getLastSelfWriteMetadata: () => undefined,
+      showError: vi.fn()
+    });
+
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+    controller.unwatchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    expect(watchLayout).toHaveBeenCalledTimes(1);
+    expect(disposeHandle).not.toHaveBeenCalled();
+
+    controller.unwatchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    expect(disposeHandle).toHaveBeenCalledTimes(1);
+
+    controller.dispose();
+  });
+
+  it("cancels debounced reload when layout is fully unwatched", () => {
+    vi.useFakeTimers();
+    try {
+      let watchedHandler: (() => void) | undefined;
+      const applyImportedWorkspace = vi.fn();
+      const controller = createLayoutExternalEditController({
+        debounceMs: 100,
+        watchLayout: (_layoutUri, onChange) => {
+          watchedHandler = onChange;
+          return { dispose: () => undefined };
+        },
+        readTextFile: () => createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv"),
+        readFileStats: () => ({ mtimeMs: 1, sizeBytes: 1 }),
+        resolveBindingsForLayout: () => [
+          {
+            viewerId: "viewer-1",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            panel: createPanelFixture().panel
+          }
+        ],
+        loadDataset: () => createLoadedDatasetFixture(),
+        applyImportedWorkspace,
+        getLastSelfWriteMetadata: () => undefined,
+        showError: vi.fn()
+      });
+
+      controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+      watchedHandler?.();
+      controller.unwatchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+      vi.advanceTimersByTime(100);
+
+      expect(applyImportedWorkspace).not.toHaveBeenCalled();
+
+      controller.dispose();
+    } finally {
+      vi.useRealTimers();
     }
   });
 });
