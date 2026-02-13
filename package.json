@@ -15,14 +15,10 @@
   "activationEvents": [
     "onCommand:waveViewer.openViewer",
     "onCommand:waveViewer.openLayout",
-    "onCommand:waveViewer.saveLayout",
     "onCommand:waveViewer.saveLayoutAs",
-    "onCommand:waveViewer.exportPlotSpec",
     "onCommand:waveViewer.exportFrozenBundle",
-    "onCommand:waveViewer.importPlotSpec",
     "onCommand:waveViewer.signalBrowser.addToPlot",
     "onCommand:waveViewer.signalBrowser.addToNewAxis",
-    "onCommand:waveViewer.signalBrowser.revealInPlot",
     "onCommand:waveViewer.signalBrowser.loadCsvFiles",
     "onCommand:waveViewer.signalBrowser.reloadAllFiles",
     "onCommand:waveViewer.signalBrowser.removeLoadedFile",
@@ -40,24 +36,12 @@
         "title": "Wave Viewer: Open Layout (YAML)"
       },
       {
-        "command": "waveViewer.saveLayout",
-        "title": "Wave Viewer: Save Layout"
-      },
-      {
         "command": "waveViewer.saveLayoutAs",
         "title": "Wave Viewer: Save Layout As..."
       },
       {
-        "command": "waveViewer.exportPlotSpec",
-        "title": "Wave Viewer: Export Plot Spec (YAML)"
-      },
-      {
         "command": "waveViewer.exportFrozenBundle",
         "title": "Wave Viewer: Export Frozen Bundle"
-      },
-      {
-        "command": "waveViewer.importPlotSpec",
-        "title": "Wave Viewer: Import Plot Spec (YAML)"
       },
       {
         "command": "waveViewer.signalBrowser.addToPlot",
@@ -66,10 +50,6 @@
       {
         "command": "waveViewer.signalBrowser.addToNewAxis",
         "title": "Wave Viewer: Add Signal to New Axis"
-      },
-      {
-        "command": "waveViewer.signalBrowser.revealInPlot",
-        "title": "Wave Viewer: Reveal Signal in Plot"
       },
       {
         "command": "waveViewer.signalBrowser.loadCsvFiles",
@@ -103,11 +83,6 @@
           "command": "waveViewer.signalBrowser.addToNewAxis",
           "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
           "group": "navigation@2"
-        },
-        {
-          "command": "waveViewer.signalBrowser.revealInPlot",
-          "when": "view == waveViewer.signalBrowser && viewItem == waveViewer.signal",
-          "group": "navigation@3"
         },
         {
           "command": "waveViewer.signalBrowser.removeLoadedFile",

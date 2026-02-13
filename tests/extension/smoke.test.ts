@@ -29,10 +29,8 @@ import {
   OPEN_VIEWER_COMMAND,
   OPEN_LAYOUT_COMMAND,
   REMOVE_LOADED_FILE_COMMAND,
-  REVEAL_SIGNAL_IN_PLOT_COMMAND,
   RELOAD_ALL_FILES_COMMAND,
   SAVE_LAYOUT_AS_COMMAND,
-  SAVE_LAYOUT_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
@@ -625,7 +623,6 @@ describe("T-030 reference-only spec import workflow", () => {
 describe("T-046 explicit layout commands", () => {
   it("exports explicit layout command ids", () => {
     expect(OPEN_LAYOUT_COMMAND).toBe("waveViewer.openLayout");
-    expect(SAVE_LAYOUT_COMMAND).toBe("waveViewer.saveLayout");
     expect(SAVE_LAYOUT_AS_COMMAND).toBe("waveViewer.saveLayoutAs");
   });
 
@@ -1632,7 +1629,6 @@ describe("T-013 side-panel signal actions", () => {
     expect(SIGNAL_BROWSER_QUICK_ADD_COMMAND).toBe("waveViewer.signalBrowser.quickAdd");
     expect(SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND).toBe("waveViewer.signalBrowser.addToPlot");
     expect(SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND).toBe("waveViewer.signalBrowser.addToNewAxis");
-    expect(REVEAL_SIGNAL_IN_PLOT_COMMAND).toBe("waveViewer.signalBrowser.revealInPlot");
     expect(LOAD_CSV_FILES_COMMAND).toBe("waveViewer.signalBrowser.loadCsvFiles");
     expect(RELOAD_ALL_FILES_COMMAND).toBe("waveViewer.signalBrowser.reloadAllFiles");
     expect(REMOVE_LOADED_FILE_COMMAND).toBe("waveViewer.signalBrowser.removeLoadedFile");
@@ -2045,7 +2041,7 @@ describe("T-018 normalized protocol handling", () => {
                 id: "plot-1",
                 name: "Plot 1",
                 xSignal: "time",
-                axes: [{ id: "y1" }],
+                axes: [{ id: "y1", title: "Voltage (V)" }],
                 traces: [
                   {
                     id: "trace-1",
@@ -2692,7 +2688,7 @@ describe("T-018 normalized protocol handling", () => {
                 id: "plot-1",
                 name: "Plot 1",
                 xSignal: "time",
-                axes: [{ id: "y1" }],
+                axes: [{ id: "y1", title: "Voltage (V)" }],
                 traces: [
                   {
                     id: "trace-1",

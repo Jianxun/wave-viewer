@@ -84,6 +84,32 @@ current_sprint:
       - tests/extension/smoke.test.ts
       - doc/specs/wave-viewer-mvp.md
       - agents/context/contract.md
+  - id: T-054
+    title: Add destructive reset actions for layout and active plot
+    owner: Executor
+    dod:
+      - Add a `waveViewer.clearLayout` command (Command Palette) that confirms intent, then resets the bound workspace to one empty plot (`plot-1`) with one empty lane (`y1`) and no traces.
+      - Add an in-viewer `Clear Plot` control for the active plot that confirms intent, then clears only that plot (remove all traces + extra lanes, keep plot tab and current x signal).
+      - Ensure both actions run through host-authoritative state transactions so autosave/external reload/session behavior remains consistent.
+      - Keep current dataset and layout bindings intact for both flows; `clearLayout` must not create/rebind a new layout file.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm test -- tests/unit/webview/workspaceState.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-054.md
+    files:
+      - src/extension.ts
+      - src/extension/commands.ts
+      - src/extension/types.ts
+      - src/webview/main.ts
+      - src/webview/state/workspaceState.ts
+      - src/webview/state/reducer.ts
+      - src/webview/index.html
+      - src/webview/styles.css
+      - package.json
+      - tests/extension/smoke.test.ts
+      - tests/unit/webview/workspaceState.test.ts
 backlog: []
 exploration_candidates:
   - Evaluate adding a one-shot CLI migrator from legacy v1 layout YAML to v2 outside MVP core scope.
