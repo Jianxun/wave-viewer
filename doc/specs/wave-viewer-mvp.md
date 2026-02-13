@@ -3,11 +3,11 @@
 ## 1. Scope
 
 ### 1.1 Goal
-Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enables interactive plotting with Plotly, then exports a deterministic YAML spec for replay.
+Build a VS Code extension (`wave-viewer`) that loads CSV waveform data and enables interactive plotting with Plotly, then exports deterministic YAML layout artifacts for replay.
 
 ### 1.2 In Scope (MVP)
 - CSV input only.
-- Launch viewer from a CSV file in VS Code.
+- Launch viewer from the Wave Viewer command surface (with or without an active CSV editor).
 - Primary workflow is side-panel-first signal discovery and plotting actions.
 - Main viewer webview is focused on plotting, axis management, and lane-level interactions.
 - Transitional fallback keeps in-webview signal controls available until side-panel workflow is implemented and stabilized.
@@ -16,7 +16,7 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 - Signal plotted multiple times across different Y-axes (trace instances).
 - N-axis-capable data model (`y1`, `y2`, `y3`, ...) rendered as vertically stacked non-overlapping Y-axis domains in a single Plotly figure.
 - One shared X-axis and one rangeslider per plot tab.
-- Export/import deterministic YAML plot spec.
+- Export/import deterministic YAML layout artifacts.
 
 ### 1.3 Out of Scope (MVP)
 - Non-CSV formats.
@@ -39,8 +39,7 @@ Build a VS Code extension (`wave-viewer`) that opens CSV waveform data and enabl
 - CSV does not require a `time` column.
 
 ### 2.3 Default X Signal
-- If a `time` column exists, default X to `time`.
-- Else default X to first numeric column.
+- Default X to the first dataset column in source CSV header order.
 - User may override X at any time per plot tab.
 
 ## 3. UI and Interaction Model
@@ -146,7 +145,7 @@ type WorkspaceState = {
 - This design intentionally avoids multi-canvas subplot synchronization mechanisms.
 - Detailed execution target: `doc/specs/domain-stacked-shared-x-implementation.md`.
 
-## 7. YAML Spec (Deterministic Replay)
+## 7. YAML Layout Artifact (Deterministic Replay)
 
 ### 7.1 Purpose
 Capture enough state so importing the YAML reproduces the same plot workspace from the same dataset.
@@ -220,7 +219,7 @@ plots:
   - same signal on multiple axes
 - Host/webview protocol tests for:
   - message schema validation
-  - `webview/dropSignal` handling for axis-target and new-axis-target paths
+  - `webview/intent/dropSignal` handling for axis-target and new-axis-target paths
   - deterministic convergence from all signal-add entry points
 - Spec round-trip tests:
   - state -> YAML -> state equality for deterministic fields

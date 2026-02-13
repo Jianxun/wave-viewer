@@ -12,6 +12,6 @@ T-052:
   pr: 61
   merged: true
 T-053:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 62
+  merged: true

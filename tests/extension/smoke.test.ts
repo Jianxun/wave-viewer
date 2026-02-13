@@ -1232,10 +1232,10 @@ describe("T-047 layout autosave persistence", () => {
     const layoutPath = path.join(tempDir, "lab.wave-viewer.yaml");
 
     try {
-      const metadata = writeLayoutFileAtomically(layoutPath, "version: 1");
+      const metadata = writeLayoutFileAtomically(layoutPath, "version: 2");
 
       expect(fs.existsSync(layoutPath)).toBe(true);
-      expect(fs.readFileSync(layoutPath, "utf8")).toBe("version: 1\n");
+      expect(fs.readFileSync(layoutPath, "utf8")).toBe("version: 2\n");
       expect(metadata.layoutUri).toBe(layoutPath);
       expect(metadata.tempUri).toContain(`${layoutPath}.tmp-`);
       expect(metadata.sizeBytes).toBeGreaterThan(0);

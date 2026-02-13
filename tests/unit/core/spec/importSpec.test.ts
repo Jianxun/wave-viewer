@@ -22,6 +22,26 @@ function createSpecYaml(datasetPath: string): string {
 }
 
 describe("T-050 import spec v2 path resolution", () => {
+  it("accepts v2 specs that omit mode", () => {
+    const yamlText = createSpecYaml("/workspace/examples/simulations/ota.spice.csv");
+
+    const parsed = importPlotSpecV1({
+      yamlText,
+      availableSignals: ["time", "vin"]
+    });
+
+    expect(parsed.workspace.activePlotId).toBe("plot-1");
+    expect(parsed.workspace.plots).toHaveLength(1);
+    expect(parsed.workspace.plots[0]?.traces).toEqual([
+      {
+        id: "trace-1",
+        signal: "vin",
+        axisId: "y1",
+        visible: true
+      }
+    ]);
+  });
+
   it("resolves relative dataset.path against layout file location", () => {
     const layoutPath = path.resolve("/workspace/layouts/lab.wave-viewer.yaml");
     const yamlText = createSpecYaml("../examples/simulations/ota.spice.csv");
@@ -70,5 +90,30 @@ describe("T-050 import spec v2 path resolution", () => {
         availableSignals: ["time"]
       })
     ).toThrow("Unsupported plot spec version: 1. Supported version is 2.");
+  });
+
+  it("rejects v2 specs that include mode", () => {
+    const yamlText = [
+      "version: 2",
+      "mode: portable",
+      "dataset:",
+      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      signal: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals: {}"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time"]
+      })
+    ).toThrow("Plot spec mode is not supported in v2 layout schema.");
   });
 });
