@@ -1350,7 +1350,15 @@ export function createExportFrozenBundleCommand(
     const datasetExports: Array<{ datasetId: string; path: string; csvText: string }> = [];
     const missingSignalsByDataset: string[] = [];
     for (const referencedDataset of referencedDatasets) {
-      const loadedDataset = deps.loadDataset(referencedDataset.path);
+      let loadedDataset: { dataset: Dataset; defaultXSignal: string };
+      try {
+        loadedDataset = deps.loadDataset(referencedDataset.path);
+      } catch (error) {
+        deps.showError(
+          `Frozen export failed: could not load dataset '${referencedDataset.path}': ${getErrorMessage(error)}`
+        );
+        return;
+      }
       const availableSignals = new Set(loadedDataset.dataset.columns.map((column) => column.name));
       const requiredSignals = requiredSignalsByDatasetPath.get(referencedDataset.path) ?? [];
       const selectedSignalNames = requiredSignals.length > 0 ? requiredSignals : [loadedDataset.defaultXSignal];

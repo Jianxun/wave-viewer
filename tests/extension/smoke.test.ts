@@ -1527,6 +1527,74 @@ describe("T-052 frozen bundle export", () => {
     expect(writeTextFile).not.toHaveBeenCalled();
   });
 
+  it("fails export when a secondary referenced dataset cannot be loaded", async () => {
+    const showError = vi.fn();
+    const writeTextFile = vi.fn();
+    const loadDataset = vi.fn((documentPath: string) => {
+      if (documentPath === "/workspace/examples/run-a.csv") {
+        return {
+          dataset: {
+            path: documentPath,
+            rowCount: 2,
+            columns: [
+              { name: "time_a", values: [0, 1] },
+              { name: "vin_a", values: [10, 11] }
+            ]
+          },
+          defaultXSignal: "time_a"
+        };
+      }
+      if (documentPath === "/workspace/examples/run-b.csv") {
+        throw new Error("File missing.");
+      }
+      throw new Error(`Unknown dataset path: ${documentPath}`);
+    });
+    const command = createExportFrozenBundleCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/run-a.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset,
+      getCachedWorkspace: () => ({
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time_b",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-b", signal: "vin_b", sourceId: "/workspace/examples/run-b.csv::vin_b", axisId: "y1", visible: true }],
+            nextAxisNumber: 2
+          },
+          {
+            id: "plot-2",
+            name: "Plot 2",
+            xSignal: "time_a",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-a", signal: "vin_a", sourceId: "/workspace/examples/run-a.csv::vin_a", axisId: "y1", visible: true }],
+            nextAxisNumber: 2
+          }
+        ]
+      }),
+      resolveLayoutXDatasetPathMap: () => ({
+        "plot-1": "/workspace/examples/run-b.csv",
+        "plot-2": "/workspace/examples/run-a.csv"
+      }),
+      showSaveDialog: async () => "/workspace/exports/snapshot.frozen.wave-viewer.yaml",
+      writeTextFile,
+      showError,
+      showInformation: vi.fn()
+    });
+
+    await command();
+
+    expect(showError).toHaveBeenCalledWith(
+      "Frozen export failed: could not load dataset '/workspace/examples/run-b.csv': File missing."
+    );
+    expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
   it("fails export when a generated frozen CSV would overwrite an active interactive dataset", async () => {
     const showError = vi.fn();
     const writeTextFile = vi.fn();
