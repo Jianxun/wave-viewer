@@ -4,7 +4,7 @@ T-054:
   pr: 64
   merged: true
 T-055:
-  status: request_changes
+  status: ready_for_review
   pr: 65
   merged: false
 T-056:
