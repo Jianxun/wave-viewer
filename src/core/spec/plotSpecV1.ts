@@ -2,16 +2,20 @@ import type { WorkspaceState } from "../../webview/state/workspaceState";
 
 export const PLOT_SPEC_V2_VERSION = 2;
 
+export type PlotSpecSignalRefV2 = {
+  dataset: string;
+  signal: string;
+};
+
 export type PlotSpecLaneV2 = {
   id: string;
   label?: string;
   range?: [number, number];
   scale?: "linear" | "log";
-  signals: Record<string, string>;
+  signals: Record<string, PlotSpecSignalRefV2>;
 };
 
-export type PlotSpecXConfigV2 = {
-  signal: string;
+export type PlotSpecXConfigV2 = PlotSpecSignalRefV2 & {
   label?: string;
   range?: [number, number];
 };
@@ -25,9 +29,11 @@ export type PlotSpecPlotV2 = {
 
 export type PlotSpecV2 = {
   version: typeof PLOT_SPEC_V2_VERSION;
-  dataset: {
+  datasets: Array<{
+    id: string;
     path: string;
-  };
+  }>;
+  active_dataset: string;
   active_plot: string;
   plots: PlotSpecPlotV2[];
 };
