@@ -167,6 +167,14 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/clearPlot",
+      {
+        viewerId: string;
+        plotId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/dropSignal",
       {
         viewerId: string;
@@ -427,6 +435,16 @@ export type SaveLayoutCommandDeps = {
   writeTextFile(filePath: string, text: string): void;
   showError(message: string): void;
   showInformation(message: string): void;
+};
+
+export type ClearLayoutCommandDeps = {
+  getActiveViewerId(): string | undefined;
+  resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  commitHostStateTransaction(transaction: HostStateTransaction): HostStateTransactionResult;
+  getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
+  showWarning(message: string): PromiseLike<string | undefined>;
+  showError(message: string): void;
 };
 
 export type SaveLayoutAsCommandDeps = {

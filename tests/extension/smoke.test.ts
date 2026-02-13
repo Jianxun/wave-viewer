@@ -7,6 +7,7 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createClearLayoutCommand,
   createExportFrozenBundleCommand,
   createOpenLayoutCommand,
   createSaveLayoutAsCommand,
@@ -26,6 +27,7 @@ import {
   isCsvFile,
   LOAD_CSV_FILES_COMMAND,
   EXPORT_FROZEN_BUNDLE_COMMAND,
+  CLEAR_LAYOUT_COMMAND,
   OPEN_VIEWER_COMMAND,
   OPEN_LAYOUT_COMMAND,
   REMOVE_LOADED_FILE_COMMAND,
@@ -624,6 +626,95 @@ describe("T-046 explicit layout commands", () => {
   it("exports explicit layout command ids", () => {
     expect(OPEN_LAYOUT_COMMAND).toBe("waveViewer.openLayout");
     expect(SAVE_LAYOUT_AS_COMMAND).toBe("waveViewer.saveLayoutAs");
+    expect(CLEAR_LAYOUT_COMMAND).toBe("waveViewer.clearLayout");
+  });
+
+  it("clears the bound layout workspace through a host transaction", async () => {
+    const store = createHostStateStore();
+    const panelFixture = createPanelFixture();
+    const showError = vi.fn();
+    const showWarning = vi.fn(async () => "Clear Layout");
+    const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
+
+    store.setWorkspace(datasetPath, {
+      activePlotId: "plot-2",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [{ id: "trace-1", signal: "vin", axisId: "y2", visible: true }],
+          nextAxisNumber: 3
+        },
+        {
+          id: "plot-2",
+          name: "Scope B",
+          xSignal: "frequency",
+          axes: [{ id: "y1" }],
+          traces: [{ id: "trace-2", signal: "vout", axisId: "y1", visible: true }],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+
+    const command = createClearLayoutCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath,
+        layoutUri: `${datasetPath}.wave-viewer.yaml`
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: datasetPath,
+          rowCount: 3,
+          columns: [
+            { name: "time", values: [0, 1, 2] },
+            { name: "frequency", values: [1, 2, 3] },
+            { name: "vin", values: [1, 2, 3] }
+          ]
+        },
+        defaultXSignal: "time"
+      }),
+      commitHostStateTransaction: (transaction) => store.commitTransaction(transaction),
+      getPanelForViewer: () => panelFixture.panel,
+      showWarning,
+      showError
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "frequency",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y1"
+            }
+          },
+          reason: "clearLayout:command"
+        }
+      }
+    ]);
   });
 
   it("opens a selected layout into the active viewer session", async () => {
@@ -2402,6 +2493,82 @@ describe("T-018 normalized protocol handling", () => {
     ]);
   });
 
+  it("handles validated clearPlot intent via host transaction and posts statePatch", async () => {
+    const initialWorkspace: WorkspaceState = {
+      activePlotId: "plot-2",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [{ id: "trace-1", signal: "vin", axisId: "y2", visible: true }],
+          nextAxisNumber: 3
+        },
+        {
+          id: "plot-2",
+          name: "Scope B",
+          xSignal: "frequency",
+          axes: [{ id: "y1" }, { id: "y2" }],
+          traces: [{ id: "trace-2", signal: "vout", axisId: "y2", visible: true }],
+          nextAxisNumber: 3
+        }
+      ]
+    };
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/clearPlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-2",
+        requestId: "req-clear-plot-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-2",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }, { id: "y2" }],
+                traces: [{ id: "trace-1", signal: "vin", axisId: "y2", visible: true }],
+                nextAxisNumber: 3
+              },
+              {
+                id: "plot-2",
+                name: "Scope B",
+                xSignal: "frequency",
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-2",
+            activeAxisByPlotId: {
+              "plot-1": "y1",
+              "plot-2": "y1"
+            }
+          },
+          reason: "clearPlot:plot-header"
+        }
+      }
+    ]);
+  });
+
   it("handles validated renamePlot intent via host transaction and trims the name", async () => {
     const { deps, panelFixture } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -3359,13 +3526,18 @@ describe("lane-board lane controls", () => {
 describe("T-041 plot tab lifecycle host intents", () => {
   it("wires tab add/select/remove actions to host intents from webview", () => {
     const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+    const htmlSource = fs.readFileSync(path.resolve("src/webview/index.html"), "utf8");
 
     expect(source).toContain('createProtocolEnvelope("webview/intent/setActivePlot"');
     expect(source).toContain('createProtocolEnvelope("webview/intent/addPlot"');
     expect(source).toContain('createProtocolEnvelope("webview/intent/removePlot"');
+    expect(source).toContain('createProtocolEnvelope("webview/intent/clearPlot"');
     expect(source).toContain("onSelect: (plotId) => postSetActivePlot(plotId)");
     expect(source).toContain("onAdd: () => postAddPlot(activePlot.xSignal)");
     expect(source).toContain("onRemove: (plotId) => postRemovePlot(plotId)");
+    expect(source).toContain("getRequiredElement<HTMLButtonElement>(\"clear-plot-button\")");
+    expect(source).toContain("Clear active plot?");
+    expect(htmlSource).toContain('id="clear-plot-button"');
     expect(source).not.toContain('onAdd: () =>\n      dispatch({\n        type: "plot/add"');
     expect(source).not.toContain('onRemove: (plotId) => dispatch({ type: "plot/remove", payload: { plotId } })');
   });
