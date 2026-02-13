@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { exportPlotSpecV1 } from "../../../../src/core/spec/exportSpec";
+import { collectExportPlotDatasets, exportPlotSpecV1 } from "../../../../src/core/spec/exportSpec";
 import type { WorkspaceState } from "../../../../src/webview/state/workspaceState";
 
 const WORKSPACE: WorkspaceState = {
@@ -137,5 +137,48 @@ describe("T-050 export spec v2 path serialization", () => {
     expect(yamlText).toContain("x:");
     expect(yamlText).toContain("dataset: dataset-2");
     expect(yamlText).toContain("signal: time_b");
+  });
+
+  it("collects deterministic dataset ids for export order", () => {
+    const datasets = collectExportPlotDatasets({
+      datasetPath: "/workspace/examples/run-a.csv",
+      workspace: {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time_a",
+            axes: [{ id: "y1" }],
+            traces: [
+              {
+                id: "trace-run-b",
+                signal: "vin_b",
+                sourceId: "/workspace/examples/run-b.csv::vin_b",
+                axisId: "y1",
+                visible: true
+              },
+              {
+                id: "trace-run-c",
+                signal: "vin_c",
+                sourceId: "/workspace/examples/run-c.csv::vin_c",
+                axisId: "y1",
+                visible: true
+              }
+            ],
+            nextAxisNumber: 2
+          }
+        ]
+      },
+      xDatasetPathByPlotId: {
+        "plot-1": "/workspace/examples/run-b.csv"
+      }
+    });
+
+    expect(datasets).toEqual([
+      { id: "dataset-1", path: "/workspace/examples/run-a.csv" },
+      { id: "dataset-2", path: "/workspace/examples/run-b.csv" },
+      { id: "dataset-3", path: "/workspace/examples/run-c.csv" }
+    ]);
   });
 });

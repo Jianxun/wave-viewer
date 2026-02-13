@@ -1,7 +1,7 @@
 import * as path from "node:path";
 
 import { serializeDatasetToCsv } from "../core/csv/parseCsv";
-import { exportPlotSpecV1 } from "../core/spec/exportSpec";
+import { collectExportPlotDatasets, exportPlotSpecV1 } from "../core/spec/exportSpec";
 import {
   importPlotSpecV1,
   readPlotSpecDatasetPathV1,
@@ -1320,48 +1320,101 @@ export function createExportFrozenBundleCommand(
     }
 
     const frozenLayoutPath = toFrozenLayoutPath(selectedPath);
-    const frozenCsvPath = toFrozenCsvPath(frozenLayoutPath);
     if (path.resolve(frozenLayoutPath) === path.resolve(context.layoutUri)) {
       deps.showError("Frozen export failed: target layout path cannot overwrite the active interactive layout.");
       return;
     }
-    if (path.resolve(frozenCsvPath) === path.resolve(context.datasetPath)) {
-      deps.showError("Frozen export failed: target CSV path cannot overwrite the active interactive CSV.");
-      return;
+    const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
+    const xDatasetPathByPlotId = deps.resolveLayoutXDatasetPathMap?.(context.layoutUri) ?? {};
+    const referencedDatasets = collectExportPlotDatasets({
+      datasetPath: context.datasetPath,
+      workspace: context.workspace,
+      xDatasetPathByPlotId
+    });
+    const frozenCsvPathByDatasetId = new Map<string, string>();
+    const activeInteractiveDatasetPaths = new Set(referencedDatasets.map((dataset) => path.resolve(dataset.path)));
+    for (const dataset of referencedDatasets) {
+      const frozenCsvPath = toFrozenCsvPathForDatasetId(frozenLayoutPath, dataset.id);
+      frozenCsvPathByDatasetId.set(dataset.id, frozenCsvPath);
+      if (activeInteractiveDatasetPaths.has(path.resolve(frozenCsvPath))) {
+        deps.showError("Frozen export failed: target CSV path cannot overwrite an active interactive CSV.");
+        return;
+      }
     }
 
-    const requiredSignals = collectRequiredSignals(context.workspace);
-    const availableSignals = new Set(context.dataset.columns.map((column) => column.name));
-    const missingSignals = requiredSignals.filter((signal) => !availableSignals.has(signal));
-    if (missingSignals.length > 0) {
+    const requiredSignalsByDatasetPath = collectRequiredSignalsByDatasetPath(
+      context.datasetPath,
+      context.workspace,
+      xDatasetPathByPlotId
+    );
+    const datasetExports: Array<{ datasetId: string; path: string; csvText: string }> = [];
+    const missingSignalsByDataset: string[] = [];
+    for (const referencedDataset of referencedDatasets) {
+      const loadedDataset = deps.loadDataset(referencedDataset.path);
+      const availableSignals = new Set(loadedDataset.dataset.columns.map((column) => column.name));
+      const requiredSignals = requiredSignalsByDatasetPath.get(referencedDataset.path) ?? [];
+      const selectedSignalNames = requiredSignals.length > 0 ? requiredSignals : [loadedDataset.defaultXSignal];
+      const missingSignals = selectedSignalNames.filter((signal) => !availableSignals.has(signal));
+      if (missingSignals.length > 0) {
+        missingSignalsByDataset.push(`${referencedDataset.id}: ${missingSignals.join(", ")}`);
+        continue;
+      }
+
+      const selectedSignalSet = new Set(selectedSignalNames);
+      const orderedSignalNames = loadedDataset.dataset.columns
+        .map((column) => column.name)
+        .filter((columnName) => selectedSignalSet.has(columnName));
+      const frozenCsvPath = frozenCsvPathByDatasetId.get(referencedDataset.id);
+      if (!frozenCsvPath) {
+        throw new Error(`Missing frozen CSV path for dataset id ${referencedDataset.id}.`);
+      }
+      datasetExports.push({
+        datasetId: referencedDataset.id,
+        path: frozenCsvPath,
+        csvText: serializeDatasetToCsv({
+          dataset: loadedDataset.dataset,
+          signalNames: orderedSignalNames
+        })
+      });
+    }
+    if (missingSignalsByDataset.length > 0) {
       deps.showError(
-        `Frozen export failed: workspace references missing dataset signal(s): ${missingSignals.join(", ")}.`
+        `Frozen export failed: workspace references missing dataset signal(s): ${missingSignalsByDataset.join("; ")}.`
       );
       return;
     }
 
-    const requiredSignalSet = new Set(requiredSignals);
-    const orderedSignalNames = context.dataset.columns
-      .map((column) => column.name)
-      .filter((signalName) => requiredSignalSet.has(signalName));
-    const csvText = serializeDatasetToCsv({
-      dataset: context.dataset,
-      signalNames: orderedSignalNames
-    });
-    const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
-    const xDatasetPathByPlotId = deps.resolveLayoutXDatasetPathMap?.(context.layoutUri);
+    const frozenDatasetPathByPath = new Map(
+      referencedDatasets.map((dataset) => [dataset.path, frozenCsvPathByDatasetId.get(dataset.id) ?? ""])
+    );
+    const frozenXDatasetPathByPlotId = rewriteXDatasetPathMap(
+      xDatasetPathByPlotId,
+      frozenDatasetPathByPath
+    );
+    const frozenWorkspace = rewriteWorkspaceTraceSourceDatasets(
+      context.workspace,
+      context.datasetPath,
+      frozenDatasetPathByPath
+    );
+    const frozenActiveDatasetPath = frozenDatasetPathByPath.get(context.datasetPath);
+    if (!frozenActiveDatasetPath) {
+      throw new Error("Missing frozen active dataset path for frozen layout export.");
+    }
     const yamlText = exportPlotSpecV1({
-      datasetPath: frozenCsvPath,
-      workspace: context.workspace,
+      datasetPath: frozenActiveDatasetPath,
+      workspace: frozenWorkspace,
       specPath: frozenLayoutPath,
       laneIdByAxisIdByPlotId,
-      xDatasetPathByPlotId
+      xDatasetPathByPlotId: frozenXDatasetPathByPlotId
     });
 
-    deps.writeTextFile(frozenCsvPath, csvText);
+    for (const datasetExport of datasetExports) {
+      deps.writeTextFile(datasetExport.path, datasetExport.csvText);
+    }
     deps.writeTextFile(frozenLayoutPath, yamlText);
+    const frozenCsvPaths = datasetExports.map((datasetExport) => datasetExport.path);
     deps.showInformation(
-      `Wave Viewer frozen bundle exported to ${frozenLayoutPath} and ${frozenCsvPath}`
+      `Wave Viewer frozen bundle exported to ${frozenLayoutPath} and dataset CSVs: ${frozenCsvPaths.join(", ")}`
     );
   };
 }
@@ -1370,24 +1423,36 @@ function isSameDatasetReference(leftPath: string, rightPath: string): boolean {
   return path.resolve(leftPath) === path.resolve(rightPath);
 }
 
-function collectRequiredSignals(workspace: WorkspaceState): string[] {
-  const requiredSignals: string[] = [];
-  const seen = new Set<string>();
-  const add = (signal: string): void => {
-    if (!seen.has(signal)) {
-      seen.add(signal);
-      requiredSignals.push(signal);
+function collectRequiredSignalsByDatasetPath(
+  activeDatasetPath: string,
+  workspace: WorkspaceState,
+  xDatasetPathByPlotId: LayoutPlotXDatasetPathMap
+): Map<string, string[]> {
+  const requiredSignalsByDatasetPath = new Map<string, string[]>();
+  const seenByDatasetPath = new Map<string, Set<string>>();
+  const add = (datasetPath: string, signal: string): void => {
+    if (!requiredSignalsByDatasetPath.has(datasetPath)) {
+      requiredSignalsByDatasetPath.set(datasetPath, []);
+      seenByDatasetPath.set(datasetPath, new Set<string>());
     }
+    const seen = seenByDatasetPath.get(datasetPath);
+    if (!seen || seen.has(signal)) {
+      return;
+    }
+    seen.add(signal);
+    requiredSignalsByDatasetPath.get(datasetPath)?.push(signal);
   };
 
   for (const plot of workspace.plots) {
-    add(plot.xSignal);
+    const xDatasetPath = getPlotXDatasetPath(plot.id, xDatasetPathByPlotId, activeDatasetPath);
+    add(xDatasetPath, plot.xSignal);
     for (const trace of plot.traces) {
-      add(trace.signal);
+      const traceDatasetPath = getTraceDatasetPath(trace.sourceId, activeDatasetPath);
+      add(traceDatasetPath, trace.signal);
     }
   }
 
-  return requiredSignals;
+  return requiredSignalsByDatasetPath;
 }
 
 function collectReferencedDatasetPaths(
@@ -1430,11 +1495,82 @@ function toFrozenLayoutPath(filePath: string): string {
   return `${filePath.replace(/(\.wave-viewer)?\.(ya?ml)$/i, "").replace(/\.csv$/i, "")}.frozen.wave-viewer.yaml`;
 }
 
-function toFrozenCsvPath(frozenLayoutPath: string): string {
+function toFrozenCsvPathForDatasetId(frozenLayoutPath: string, datasetId: string): string {
   if (!/\.frozen\.wave-viewer\.ya?ml$/i.test(frozenLayoutPath)) {
-    return `${frozenLayoutPath}.frozen.csv`;
+    return `${frozenLayoutPath}.${datasetId}.frozen.csv`;
   }
-  return `${frozenLayoutPath.replace(/\.frozen\.wave-viewer\.ya?ml$/i, "")}.frozen.csv`;
+  return `${frozenLayoutPath.replace(/\.frozen\.wave-viewer\.ya?ml$/i, "")}.${datasetId}.frozen.csv`;
+}
+
+function rewriteXDatasetPathMap(
+  xDatasetPathByPlotId: LayoutPlotXDatasetPathMap,
+  frozenDatasetPathByPath: Map<string, string>
+): LayoutPlotXDatasetPathMap {
+  const rewritten: LayoutPlotXDatasetPathMap = {};
+  for (const [plotId, datasetPath] of Object.entries(xDatasetPathByPlotId)) {
+    rewritten[plotId] = frozenDatasetPathByPath.get(datasetPath) ?? datasetPath;
+  }
+  return rewritten;
+}
+
+function rewriteWorkspaceTraceSourceDatasets(
+  workspace: WorkspaceState,
+  activeDatasetPath: string,
+  frozenDatasetPathByPath: Map<string, string>
+): WorkspaceState {
+  return {
+    ...workspace,
+    plots: workspace.plots.map((plot) => ({
+      ...plot,
+      traces: plot.traces.map((trace) => ({
+        ...trace,
+        sourceId: rewriteTraceSourceId(trace.sourceId, activeDatasetPath, frozenDatasetPathByPath)
+      }))
+    }))
+  };
+}
+
+function rewriteTraceSourceId(
+  sourceId: string | undefined,
+  activeDatasetPath: string,
+  frozenDatasetPathByPath: Map<string, string>
+): string | undefined {
+  if (!sourceId) {
+    return sourceId;
+  }
+  const separatorIndex = sourceId.lastIndexOf("::");
+  if (separatorIndex <= 0) {
+    return sourceId;
+  }
+  const datasetPath = sourceId.slice(0, separatorIndex).trim();
+  const signal = sourceId.slice(separatorIndex + 2);
+  const normalizedDatasetPath = datasetPath.length > 0 ? datasetPath : activeDatasetPath;
+  const frozenDatasetPath = frozenDatasetPathByPath.get(normalizedDatasetPath);
+  if (!frozenDatasetPath) {
+    return sourceId;
+  }
+  return `${frozenDatasetPath}::${signal}`;
+}
+
+function getPlotXDatasetPath(
+  plotId: string,
+  xDatasetPathByPlotId: LayoutPlotXDatasetPathMap | undefined,
+  fallbackPath: string
+): string {
+  const candidate = xDatasetPathByPlotId?.[plotId]?.trim();
+  return candidate && candidate.length > 0 ? candidate : fallbackPath;
+}
+
+function getTraceDatasetPath(sourceId: string | undefined, fallbackPath: string): string {
+  if (!sourceId) {
+    return fallbackPath;
+  }
+  const separatorIndex = sourceId.lastIndexOf("::");
+  if (separatorIndex <= 0) {
+    return fallbackPath;
+  }
+  const candidate = sourceId.slice(0, separatorIndex).trim();
+  return candidate.length > 0 ? candidate : fallbackPath;
 }
 
 function getErrorMessage(error: unknown): string {

@@ -4,9 +4,17 @@ import { stringify } from "yaml";
 import type { ExportPlotSpecInput, PlotSpecLaneV2, PlotSpecPlotV2, PlotSpecV2 } from "./plotSpecV1";
 import { PLOT_SPEC_V2_VERSION } from "./plotSpecV1";
 
-export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
-  const registry = createDatasetRegistry(input.datasetPath);
+export type ExportPlotDatasetEntry = {
+  id: string;
+  path: string;
+};
 
+export function collectExportPlotDatasets(input: {
+  datasetPath: string;
+  workspace: ExportPlotSpecInput["workspace"];
+  xDatasetPathByPlotId?: Record<string, string>;
+}): ExportPlotDatasetEntry[] {
+  const registry = createDatasetRegistry(input.datasetPath);
   for (const plot of input.workspace.plots) {
     const xDatasetPath = getPlotXDatasetPath(plot.id, input.xDatasetPathByPlotId, input.datasetPath);
     registry.register(xDatasetPath);
@@ -14,11 +22,25 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
       registry.register(getTraceDatasetPath(trace.sourceId, input.datasetPath));
     }
   }
+  return registry.entries();
+}
 
-  const activeDatasetId = registry.idFor(input.datasetPath);
+export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
+  const datasets = collectExportPlotDatasets(input);
+  const datasetIdByPath = new Map(datasets.map((entry) => [entry.path, entry.id]));
+  const idForDatasetPath = (datasetPath: string): string => {
+    const normalized = datasetPath.trim();
+    const datasetId = datasetIdByPath.get(normalized);
+    if (!datasetId) {
+      throw new Error(`Missing dataset id for export path '${datasetPath}'.`);
+    }
+    return datasetId;
+  };
+
+  const activeDatasetId = idForDatasetPath(input.datasetPath);
   const spec: PlotSpecV2 = {
     version: PLOT_SPEC_V2_VERSION,
-    datasets: registry.entries().map((entry) => ({
+    datasets: datasets.map((entry) => ({
       id: entry.id,
       path: serializeDatasetPath(entry.path, input.specPath)
     })),
@@ -62,7 +84,7 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
         const traceLabel = trace.id.trim().length > 0 ? trace.id : `trace-${Object.keys(lane.signals).length + 1}`;
         const datasetPath = getTraceDatasetPath(trace.sourceId, input.datasetPath);
         lane.signals[traceLabel] = {
-          dataset: registry.idFor(datasetPath),
+          dataset: idForDatasetPath(datasetPath),
           signal: trace.signal
         };
       }
@@ -72,7 +94,7 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
         id: plot.id,
         name: plot.name,
         x: {
-          dataset: registry.idFor(xDatasetPath),
+          dataset: idForDatasetPath(xDatasetPath),
           signal: plot.xSignal
         },
         y: [...lanesByAxisId.values()]
