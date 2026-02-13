@@ -443,4 +443,16 @@ export type SaveLayoutAsCommandDeps = {
   showInformation(message: string): void;
 };
 
+export type ExportFrozenBundleCommandDeps = {
+  getActiveViewerId(): string | undefined;
+  resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
+  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
+  resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
+  showSaveDialog(defaultPath: string): Promise<string | undefined>;
+  writeTextFile(filePath: string, text: string): void;
+  showError(message: string): void;
+  showInformation(message: string): void;
+};
+
 export type ExtensionContextLike = Pick<VSCode.ExtensionContext, "extensionUri" | "subscriptions">;

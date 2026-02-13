@@ -18,6 +18,7 @@
     "onCommand:waveViewer.saveLayout",
     "onCommand:waveViewer.saveLayoutAs",
     "onCommand:waveViewer.exportPlotSpec",
+    "onCommand:waveViewer.exportFrozenBundle",
     "onCommand:waveViewer.importPlotSpec",
     "onCommand:waveViewer.signalBrowser.addToPlot",
     "onCommand:waveViewer.signalBrowser.addToNewAxis",
@@ -49,6 +50,10 @@
       {
         "command": "waveViewer.exportPlotSpec",
         "title": "Wave Viewer: Export Plot Spec (YAML)"
+      },
+      {
+        "command": "waveViewer.exportFrozenBundle",
+        "title": "Wave Viewer: Export Frozen Bundle"
       },
       {
         "command": "waveViewer.importPlotSpec",

@@ -5,6 +5,11 @@ export type ParseCsvInput = {
   csvText: string;
 };
 
+export type SerializeDatasetToCsvInput = {
+  dataset: Dataset;
+  signalNames: readonly string[];
+};
+
 export function parseCsv(input: ParseCsvInput): Dataset {
   const lines = splitCsvLines(input.csvText);
   if (lines.length === 0) {
@@ -63,6 +68,28 @@ export function parseCsv(input: ParseCsvInput): Dataset {
     rowCount: rawRows.length,
     columns: numericColumns
   };
+}
+
+export function serializeDatasetToCsv(input: SerializeDatasetToCsvInput): string {
+  const selectedColumns = input.signalNames.map((signalName) => {
+    const column = input.dataset.columns.find((candidate) => candidate.name === signalName);
+    if (!column) {
+      throw new Error(`Missing dataset signal column '${signalName}' for CSV export.`);
+    }
+    if (column.values.length !== input.dataset.rowCount) {
+      throw new Error(
+        `Signal column '${signalName}' has ${column.values.length} samples, expected ${input.dataset.rowCount}.`
+      );
+    }
+    return column;
+  });
+
+  const lines: string[] = [selectedColumns.map((column) => column.name).join(",")];
+  for (let rowIndex = 0; rowIndex < input.dataset.rowCount; rowIndex += 1) {
+    lines.push(selectedColumns.map((column) => String(column.values[rowIndex])).join(","));
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 function splitCsvLines(csvText: string): string[] {

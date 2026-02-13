@@ -1,5 +1,6 @@
 import * as path from "node:path";
 
+import { serializeDatasetToCsv } from "../core/csv/parseCsv";
 import { exportPlotSpecV1 } from "../core/spec/exportSpec";
 import { importPlotSpecV1, readPlotSpecDatasetPathV1 } from "../core/spec/importSpec";
 import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from "../core/dataset/types";
@@ -23,7 +24,8 @@ import type {
   ReloadAllLoadedFilesCommandDeps,
   RemoveLoadedFileCommandDeps,
   SaveLayoutAsCommandDeps,
-  SaveLayoutCommandDeps
+  SaveLayoutCommandDeps,
+  ExportFrozenBundleCommandDeps
 } from "./types";
 import { resolveDatasetPathFromCommandArgument } from "./signalTree";
 
@@ -1018,6 +1020,7 @@ function resolveSaveLayoutContext(deps: SaveLayoutContextDeps): {
   datasetPath: string;
   layoutUri: string;
   workspace: WorkspaceState;
+  dataset: Dataset;
 } | undefined {
   const viewerId = deps.getActiveViewerId();
   if (!viewerId) {
@@ -1047,7 +1050,8 @@ function resolveSaveLayoutContext(deps: SaveLayoutContextDeps): {
     viewerId,
     datasetPath: context.datasetPath,
     layoutUri: context.layoutUri,
-    workspace
+    workspace,
+    dataset: normalizedDataset.dataset
   };
 }
 
@@ -1098,8 +1102,102 @@ export function createSaveLayoutAsCommand(deps: SaveLayoutAsCommandDeps): () => 
   };
 }
 
+export function createExportFrozenBundleCommand(
+  deps: ExportFrozenBundleCommandDeps
+): () => Promise<void> {
+  return async () => {
+    const context = resolveSaveLayoutContext(deps);
+    if (!context) {
+      return;
+    }
+
+    const defaultLayoutPath = toFrozenLayoutPath(context.layoutUri);
+    const selectedPath = await deps.showSaveDialog(defaultLayoutPath);
+    if (!selectedPath) {
+      return;
+    }
+
+    const frozenLayoutPath = toFrozenLayoutPath(selectedPath);
+    const frozenCsvPath = toFrozenCsvPath(frozenLayoutPath);
+    if (path.resolve(frozenLayoutPath) === path.resolve(context.layoutUri)) {
+      deps.showError("Frozen export failed: target layout path cannot overwrite the active interactive layout.");
+      return;
+    }
+    if (path.resolve(frozenCsvPath) === path.resolve(context.datasetPath)) {
+      deps.showError("Frozen export failed: target CSV path cannot overwrite the active interactive CSV.");
+      return;
+    }
+
+    const requiredSignals = collectRequiredSignals(context.workspace);
+    const availableSignals = new Set(context.dataset.columns.map((column) => column.name));
+    const missingSignals = requiredSignals.filter((signal) => !availableSignals.has(signal));
+    if (missingSignals.length > 0) {
+      deps.showError(
+        `Frozen export failed: workspace references missing dataset signal(s): ${missingSignals.join(", ")}.`
+      );
+      return;
+    }
+
+    const requiredSignalSet = new Set(requiredSignals);
+    const orderedSignalNames = context.dataset.columns
+      .map((column) => column.name)
+      .filter((signalName) => requiredSignalSet.has(signalName));
+    const csvText = serializeDatasetToCsv({
+      dataset: context.dataset,
+      signalNames: orderedSignalNames
+    });
+    const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
+    const yamlText = exportPlotSpecV1({
+      datasetPath: frozenCsvPath,
+      workspace: context.workspace,
+      specPath: frozenLayoutPath,
+      laneIdByAxisIdByPlotId
+    });
+
+    deps.writeTextFile(frozenCsvPath, csvText);
+    deps.writeTextFile(frozenLayoutPath, yamlText);
+    deps.showInformation(
+      `Wave Viewer frozen bundle exported to ${frozenLayoutPath} and ${frozenCsvPath}`
+    );
+  };
+}
+
 function isSameDatasetReference(leftPath: string, rightPath: string): boolean {
   return path.resolve(leftPath) === path.resolve(rightPath);
+}
+
+function collectRequiredSignals(workspace: WorkspaceState): string[] {
+  const requiredSignals: string[] = [];
+  const seen = new Set<string>();
+  const add = (signal: string): void => {
+    if (!seen.has(signal)) {
+      seen.add(signal);
+      requiredSignals.push(signal);
+    }
+  };
+
+  for (const plot of workspace.plots) {
+    add(plot.xSignal);
+    for (const trace of plot.traces) {
+      add(trace.signal);
+    }
+  }
+
+  return requiredSignals;
+}
+
+function toFrozenLayoutPath(filePath: string): string {
+  if (/\.frozen\.wave-viewer\.ya?ml$/i.test(filePath)) {
+    return filePath;
+  }
+  return `${filePath.replace(/(\.wave-viewer)?\.(ya?ml)$/i, "").replace(/\.csv$/i, "")}.frozen.wave-viewer.yaml`;
+}
+
+function toFrozenCsvPath(frozenLayoutPath: string): string {
+  if (!/\.frozen\.wave-viewer\.ya?ml$/i.test(frozenLayoutPath)) {
+    return `${frozenLayoutPath}.frozen.csv`;
+  }
+  return `${frozenLayoutPath.replace(/\.frozen\.wave-viewer\.ya?ml$/i, "")}.frozen.csv`;
 }
 
 function getErrorMessage(error: unknown): string {
