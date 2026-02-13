@@ -846,6 +846,53 @@ export function createLoadCsvFilesCommand(deps: LoadCsvFilesCommandDeps): () => 
       try {
         const loaded = deps.loadDataset(documentPath);
         deps.registerLoadedDataset(documentPath, loaded);
+        const sidecarLayoutPath = `${documentPath}.wave-viewer.yaml`;
+
+        let workspace = createWorkspaceState(loaded.defaultXSignal);
+        let laneIdByAxisIdByPlotId: LayoutAxisLaneIdMap | undefined;
+        let xDatasetPathByPlotId: LayoutPlotXDatasetPathMap | undefined;
+
+        const hasExistingSidecar =
+          deps.fileExists !== undefined && deps.readTextFile !== undefined
+            ? deps.fileExists(sidecarLayoutPath)
+            : false;
+
+        if (hasExistingSidecar) {
+          const yamlText = deps.readTextFile!(sidecarLayoutPath);
+          const datasetPath = readPlotSpecDatasetPathV1(yamlText, sidecarLayoutPath);
+          const sidecarDataset = deps.loadDataset(datasetPath);
+          deps.registerLoadedDataset(datasetPath, sidecarDataset);
+          const imported = importPlotSpecV1({
+            yamlText,
+            availableSignals: sidecarDataset.dataset.columns.map((column) => column.name),
+            specPath: sidecarLayoutPath
+          });
+          workspace = imported.workspace;
+          laneIdByAxisIdByPlotId = imported.laneIdByAxisIdByPlotId;
+          xDatasetPathByPlotId = imported.xDatasetPathByPlotId;
+        } else if (deps.writeTextFile) {
+          const yamlText = exportPlotSpecV1({
+            datasetPath: documentPath,
+            workspace,
+            specPath: sidecarLayoutPath
+          });
+          deps.writeTextFile(sidecarLayoutPath, yamlText);
+        }
+
+        deps.setCachedWorkspace?.(documentPath, workspace);
+        if (laneIdByAxisIdByPlotId) {
+          deps.recordLayoutAxisLaneIdMap?.(sidecarLayoutPath, laneIdByAxisIdByPlotId);
+        }
+        if (xDatasetPathByPlotId) {
+          deps.recordLayoutXDatasetPathMap?.(sidecarLayoutPath, xDatasetPathByPlotId);
+        }
+
+        if (deps.openViewerForDataset && deps.bindViewerToLayout) {
+          const viewerId = await deps.openViewerForDataset(documentPath);
+          if (viewerId) {
+            deps.bindViewerToLayout(viewerId, sidecarLayoutPath, documentPath);
+          }
+        }
       } catch (error) {
         deps.showError(`Failed to load '${documentPath}': ${getErrorMessage(error)}`);
       }
@@ -989,18 +1036,13 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
 
 export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Promise<void> {
   return async () => {
-    const activeViewerId = deps.getActiveViewerId();
-    if (!activeViewerId) {
-      deps.showError("Focus a Wave Viewer panel before running Open Layout.");
-      return;
-    }
-
     const layoutPath = await deps.showOpenDialog();
     if (!layoutPath) {
       return;
     }
 
     let parsed: ReturnType<typeof importPlotSpecV1>;
+    let activeViewerId = deps.getActiveViewerId();
     let loadedDataset: { dataset: Dataset; defaultXSignal: string };
     try {
       const yamlText = deps.readTextFile(layoutPath);
@@ -1011,8 +1053,29 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
         availableSignals: loadedDataset.dataset.columns.map((column) => column.name),
         specPath: layoutPath
       });
+
+      const referencedDatasetPaths = collectReferencedDatasetPaths(
+        parsed.datasetPath,
+        parsed.workspace,
+        parsed.xDatasetPathByPlotId
+      );
+      for (const referencedDatasetPath of referencedDatasetPaths) {
+        const loadedReferencedDataset =
+          referencedDatasetPath === parsed.datasetPath
+            ? loadedDataset
+            : deps.loadDataset(referencedDatasetPath);
+        deps.registerLoadedDataset?.(referencedDatasetPath, loadedReferencedDataset);
+      }
     } catch (error) {
       deps.showError(getErrorMessage(error));
+      return;
+    }
+
+    if (!activeViewerId) {
+      activeViewerId = await deps.ensureViewerForDataset?.(parsed.datasetPath);
+    }
+    if (!activeViewerId) {
+      deps.showError("Focus a Wave Viewer panel before running Open Layout.");
       return;
     }
 
@@ -1296,6 +1359,39 @@ function collectRequiredSignals(workspace: WorkspaceState): string[] {
   }
 
   return requiredSignals;
+}
+
+function collectReferencedDatasetPaths(
+  activeDatasetPath: string,
+  workspace: WorkspaceState,
+  xDatasetPathByPlotId: LayoutPlotXDatasetPathMap
+): string[] {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  const add = (datasetPath: string | undefined): void => {
+    if (!datasetPath || seen.has(datasetPath)) {
+      return;
+    }
+    seen.add(datasetPath);
+    paths.push(datasetPath);
+  };
+
+  add(activeDatasetPath);
+  for (const datasetPath of Object.values(xDatasetPathByPlotId)) {
+    add(datasetPath);
+  }
+  for (const plot of workspace.plots) {
+    for (const trace of plot.traces) {
+      const sourceId = trace.sourceId ?? "";
+      const separatorIndex = sourceId.lastIndexOf("::");
+      if (separatorIndex <= 0) {
+        continue;
+      }
+      add(sourceId.slice(0, separatorIndex));
+    }
+  }
+
+  return paths;
 }
 
 function toFrozenLayoutPath(filePath: string): string {

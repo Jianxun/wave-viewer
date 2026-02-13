@@ -256,6 +256,31 @@ function createReferenceOnlySpecYaml(datasetPath: string): string {
   ].join("\n");
 }
 
+function createMultiDatasetSpecYaml(primaryDatasetPath: string, secondaryDatasetPath: string): string {
+  return [
+    "version: 2",
+    "datasets:",
+    "  - id: ds-a",
+    `    path: ${primaryDatasetPath}`,
+    "  - id: ds-b",
+    `    path: ${secondaryDatasetPath}`,
+    "active_dataset: ds-a",
+    "active_plot: plot-1",
+    "plots:",
+    "  - id: plot-1",
+    "    name: Plot 1",
+    "    x:",
+    "      dataset: ds-a",
+    "      signal: time",
+    "    y:",
+    "      - id: lane-main",
+    "        signals:",
+    "          vin:",
+    "            dataset: ds-b",
+    "            signal: vin"
+  ].join("\n");
+}
+
 describe("T-002 extension shell smoke", () => {
   it("allows data/blob image sources in webview CSP for Plotly PNG export", () => {
     const template = fs.readFileSync(
@@ -902,13 +927,28 @@ describe("T-046 explicit layout commands", () => {
     );
   });
 
-  it("shows a clear error when no viewer is focused for open layout", async () => {
+  it("auto-opens and binds a viewer when no viewer is focused for open layout", async () => {
     const showError = vi.fn();
+    const showInformation = vi.fn();
+    const panelFixture = createPanelFixture();
+    const bindViewerToLayout = vi.fn();
+    const registerLoadedDataset = vi.fn();
     const command = createOpenLayoutCommand({
       getActiveViewerId: () => undefined,
       showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
-      readTextFile: vi.fn(),
-      loadDataset: vi.fn(),
+      readTextFile: () =>
+        createMultiDatasetSpecYaml(
+          "/workspace/examples/simulations/ota.spice.csv",
+          "/workspace/examples/simulations/alt.csv"
+        ),
+      loadDataset: (documentPath) => ({
+        dataset: {
+          path: documentPath,
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
       setCachedWorkspace: vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
         workspace,
         revision: 0,
@@ -917,16 +957,41 @@ describe("T-046 explicit layout commands", () => {
           activeAxisByPlotId: { "plot-1": "y1" as const }
         }
       })),
-      bindViewerToLayout: vi.fn(),
-      getPanelForViewer: vi.fn(),
+      bindViewerToLayout,
+      getPanelForViewer: () => panelFixture.panel,
+      ensureViewerForDataset: async () => "viewer-9",
+      registerLoadedDataset,
       showError,
-      showInformation: vi.fn()
+      showInformation
     });
 
     await command();
 
-    expect(showError).toHaveBeenCalledWith(
-      "Focus a Wave Viewer panel before running Open Layout."
+    expect(showError).not.toHaveBeenCalled();
+    expect(bindViewerToLayout).toHaveBeenCalledWith(
+      "viewer-9",
+      "/workspace/layouts/lab.wave-viewer.yaml",
+      "/workspace/examples/simulations/ota.spice.csv"
+    );
+    expect(registerLoadedDataset).toHaveBeenCalledTimes(2);
+    expect(registerLoadedDataset).toHaveBeenNthCalledWith(1, "/workspace/examples/simulations/ota.spice.csv", {
+      dataset: {
+        path: "/workspace/examples/simulations/ota.spice.csv",
+        rowCount: 3,
+        columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(registerLoadedDataset).toHaveBeenNthCalledWith(2, "/workspace/examples/simulations/alt.csv", {
+      dataset: {
+        path: "/workspace/examples/simulations/alt.csv",
+        rowCount: 3,
+        columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer layout opened from /workspace/layouts/lab.wave-viewer.yaml"
     );
   });
 
@@ -1938,6 +2003,114 @@ describe("T-021 explorer load/reload actions", () => {
     });
     expect(showError).toHaveBeenCalledWith(
       "Failed to reload '/workspace/examples/bad.csv': File missing."
+    );
+  });
+
+  it("imports existing sidecar layout on csv load and opens viewer bound to that layout", async () => {
+    const registerLoadedDataset = vi.fn();
+    const setCachedWorkspace = vi.fn();
+    const bindViewerToLayout = vi.fn();
+    const openViewerForDataset = vi.fn(async () => "viewer-5");
+    const showError = vi.fn();
+    const command = createLoadCsvFilesCommand({
+      showOpenDialog: async () => ["/workspace/examples/a.csv"],
+      loadDataset: (documentPath) => ({
+        dataset: {
+          path: documentPath,
+          rowCount: 2,
+          columns: [{ name: "time", values: [0, 1] }, { name: "vin", values: [1, 2] }]
+        },
+        defaultXSignal: "time"
+      }),
+      registerLoadedDataset,
+      fileExists: (filePath) => filePath === "/workspace/examples/a.csv.wave-viewer.yaml",
+      readTextFile: () =>
+        createReferenceOnlySpecYaml("/workspace/examples/a.csv"),
+      setCachedWorkspace,
+      openViewerForDataset,
+      bindViewerToLayout,
+      showError
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(setCachedWorkspace).toHaveBeenCalledWith("/workspace/examples/a.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+    expect(openViewerForDataset).toHaveBeenCalledWith("/workspace/examples/a.csv");
+    expect(bindViewerToLayout).toHaveBeenCalledWith(
+      "viewer-5",
+      "/workspace/examples/a.csv.wave-viewer.yaml",
+      "/workspace/examples/a.csv"
+    );
+  });
+
+  it("creates missing sidecar layout on csv load and opens viewer bound to the created layout", async () => {
+    const registerLoadedDataset = vi.fn();
+    const writeTextFile = vi.fn();
+    const setCachedWorkspace = vi.fn();
+    const bindViewerToLayout = vi.fn();
+    const openViewerForDataset = vi.fn(async () => "viewer-8");
+    const showError = vi.fn();
+    const command = createLoadCsvFilesCommand({
+      showOpenDialog: async () => ["/workspace/examples/new.csv"],
+      loadDataset: (documentPath) => ({
+        dataset: {
+          path: documentPath,
+          rowCount: 2,
+          columns: [{ name: "time", values: [0, 1] }, { name: "vin", values: [1, 2] }]
+        },
+        defaultXSignal: "time"
+      }),
+      registerLoadedDataset,
+      fileExists: () => false,
+      writeTextFile,
+      setCachedWorkspace,
+      openViewerForDataset,
+      bindViewerToLayout,
+      showError
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/workspace/examples/new.csv.wave-viewer.yaml",
+      expect.stringContaining("version: 2")
+    );
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/workspace/examples/new.csv.wave-viewer.yaml",
+      expect.stringContaining("path: ./new.csv")
+    );
+    expect(setCachedWorkspace).toHaveBeenCalledWith("/workspace/examples/new.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+    expect(openViewerForDataset).toHaveBeenCalledWith("/workspace/examples/new.csv");
+    expect(bindViewerToLayout).toHaveBeenCalledWith(
+      "viewer-8",
+      "/workspace/examples/new.csv.wave-viewer.yaml",
+      "/workspace/examples/new.csv"
     );
   });
 });
