@@ -20,6 +20,6 @@ T-058:
   pr: 68
   merged: true
 T-059:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 69
   merged: false
