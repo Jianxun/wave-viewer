@@ -17,6 +17,7 @@ import type {
   CommandDeps,
   ExportSpecCommandDeps,
   ImportSpecCommandDeps,
+  LayoutAxisLaneIdMap,
   LoadCsvFilesCommandDeps,
   OpenLayoutCommandDeps,
   ReloadAllLoadedFilesCommandDeps,
@@ -974,6 +975,7 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
       deps.logDebug
     );
     const snapshot = deps.setCachedWorkspace(parsed.datasetPath, hydratedReplay.workspace);
+    deps.recordLayoutAxisLaneIdMap?.(layoutPath, parsed.laneIdByAxisIdByPlotId);
     deps.bindViewerToLayout(activeViewerId, layoutPath, parsed.datasetPath);
     const panel = deps.getPanelForViewer(activeViewerId);
     if (panel) {
@@ -1056,10 +1058,12 @@ export function createSaveLayoutCommand(deps: SaveLayoutCommandDeps): () => Prom
       return;
     }
 
+    const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
     const yaml = exportPlotSpecV1({
       datasetPath: context.datasetPath,
       workspace: context.workspace,
-      specPath: context.layoutUri
+      specPath: context.layoutUri,
+      laneIdByAxisIdByPlotId
     });
     deps.writeTextFile(context.layoutUri, yaml);
     deps.showInformation(`Wave Viewer layout saved to ${context.layoutUri}`);
@@ -1078,12 +1082,17 @@ export function createSaveLayoutAsCommand(deps: SaveLayoutAsCommandDeps): () => 
       return;
     }
 
+    const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
     const yaml = exportPlotSpecV1({
       datasetPath: context.datasetPath,
       workspace: context.workspace,
-      specPath: savePath
+      specPath: savePath,
+      laneIdByAxisIdByPlotId
     });
     deps.writeTextFile(savePath, yaml);
+    if (laneIdByAxisIdByPlotId) {
+      deps.recordLayoutAxisLaneIdMap?.(savePath, cloneLaneIdMap(laneIdByAxisIdByPlotId));
+    }
     deps.bindViewerToLayout(context.viewerId, savePath, context.datasetPath);
     deps.showInformation(`Wave Viewer layout saved to ${savePath}`);
   };
@@ -1098,4 +1107,12 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Failed to load CSV dataset.";
+}
+
+function cloneLaneIdMap(source: LayoutAxisLaneIdMap): LayoutAxisLaneIdMap {
+  const clone: LayoutAxisLaneIdMap = {};
+  for (const [plotId, mapByAxis] of Object.entries(source)) {
+    clone[plotId] = { ...mapByAxis };
+  }
+  return clone;
 }

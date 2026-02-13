@@ -236,19 +236,18 @@ function createLoadedDatasetFixture(
 
 function createReferenceOnlySpecYaml(datasetPath: string): string {
   return [
-    "version: 1",
-    "mode: reference-only",
+    "version: 2",
     "dataset:",
     `  path: ${datasetPath}`,
-    "workspace:",
-    "  activePlotId: plot-1",
-    "  plots:",
-    "    - id: plot-1",
-    "      name: Plot 1",
-    "      xSignal: time",
-    "      axes:",
-    "        - id: y1",
-    "      traces: []"
+    "active_plot: plot-1",
+    "plots:",
+    "  - id: plot-1",
+    "    name: Plot 1",
+    "    x:",
+    "      signal: time",
+    "    y:",
+    "      - id: lane-main",
+    "        signals: {}"
   ].join("\n");
 }
 
@@ -632,6 +631,7 @@ describe("T-046 explicit layout commands", () => {
     const showError = vi.fn();
     const showInformation = vi.fn();
     const bindViewerToLayout = vi.fn();
+    const recordLayoutAxisLaneIdMap = vi.fn();
     const panelFixture = createPanelFixture();
     const setCachedWorkspace = vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
       workspace,
@@ -655,6 +655,7 @@ describe("T-046 explicit layout commands", () => {
       }),
       setCachedWorkspace,
       bindViewerToLayout,
+      recordLayoutAxisLaneIdMap,
       getPanelForViewer: () => panelFixture.panel,
       showError,
       showInformation
@@ -680,6 +681,10 @@ describe("T-046 explicit layout commands", () => {
       "viewer-1",
       "/workspace/layouts/lab.wave-viewer.yaml",
       "/workspace/examples/simulations/ota.spice.csv"
+    );
+    expect(recordLayoutAxisLaneIdMap).toHaveBeenCalledWith(
+      "/workspace/layouts/lab.wave-viewer.yaml",
+      { "plot-1": { y1: "lane-main" } }
     );
     expect(panelFixture.sentMessages.map((message) => message.type)).toEqual([
       "host/viewerBindingUpdated",
@@ -799,7 +804,9 @@ describe("T-046 explicit layout commands", () => {
 
     await command();
 
-    expect(showError).toHaveBeenCalledWith("Unsupported plot spec version: nope.");
+    expect(showError).toHaveBeenCalledWith(
+      "Unsupported plot spec version: nope. Supported version is 2."
+    );
   });
 
   it("shows a clear error when no viewer is focused for open layout", async () => {
@@ -861,8 +868,46 @@ describe("T-046 explicit layout commands", () => {
       "/workspace/layouts/lab.wave-viewer.yaml",
       expect.stringContaining("dataset:")
     );
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/workspace/layouts/lab.wave-viewer.yaml",
+      expect.stringContaining("- id: lane-1")
+    );
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer layout saved to /workspace/layouts/lab.wave-viewer.yaml"
+    );
+  });
+
+  it("preserves user-facing lane ids when saving a bound layout", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const writeTextFile = vi.fn();
+    const command = createSaveLayoutCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      getCachedWorkspace: () => createWorkspaceFixture(),
+      resolveLayoutAxisLaneIdMap: () => ({ "plot-1": { y1: "lane-io" } }),
+      writeTextFile,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/workspace/layouts/lab.wave-viewer.yaml",
+      expect.stringContaining("- id: lane-io")
     );
   });
 
@@ -1138,24 +1183,21 @@ describe("T-048 external layout edit reloads", () => {
     const panelFixture = createPanelFixture();
     const readTextFile = vi.fn(() =>
       [
-        "version: 1",
-        "mode: reference-only",
+        "version: 2",
         "dataset:",
         "  path: /workspace/examples/simulations/ota.spice.csv",
-        "workspace:",
-        "  activePlotId: plot-1",
-        "  plots:",
-        "    - id: plot-1",
-        "      name: Plot 1",
-        "      xSignal: time",
-        "      axes:",
-        "        - id: y1",
-        "        - id: y2",
-        "      traces:",
-        "        - id: trace-1",
-        "          signal: vin",
-        "          axisId: y2",
-        "          visible: true"
+        "active_plot: plot-1",
+        "plots:",
+        "  - id: plot-1",
+        "    name: Plot 1",
+        "    x:",
+        "      signal: time",
+        "    y:",
+        "      - id: lane-main",
+        "        signals: {}",
+        "      - id: lane-aux",
+        "        signals:",
+        "          trace-1: vin"
       ].join("\n")
     );
     const loadDataset = vi.fn(() => createLoadedDatasetFixture());
@@ -1328,7 +1370,7 @@ describe("T-048 external layout edit reloads", () => {
     expect(applyImportedWorkspace).not.toHaveBeenCalled();
     expect(panelFixture.sentMessages).toEqual([]);
     expect(showError).toHaveBeenCalledWith(
-      "Wave Viewer layout reload failed for /workspace/layouts/lab.wave-viewer.yaml: Unsupported plot spec version: nope."
+      "Wave Viewer layout reload failed for /workspace/layouts/lab.wave-viewer.yaml: Unsupported plot spec version: nope. Supported version is 2."
     );
 
     controller.dispose();
