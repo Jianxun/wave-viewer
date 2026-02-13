@@ -111,7 +111,7 @@ describe("plotly adapter", () => {
     expect(figure.layout.xaxis).toMatchObject({
       title: { text: "time" },
       anchor: "y2",
-      rangeslider: { visible: true, autorange: true, range: [0, 2] },
+      rangeslider: { visible: true, autorange: false, range: [0, 2] },
       autorange: true,
       fixedrange: false
     });
@@ -185,7 +185,8 @@ describe("plotly adapter", () => {
     expect((figure.layout.yaxis3 as { domain?: [number, number] }).domain?.[1]).toBeCloseTo(
       0.30666666666666664
     );
-    expect(figure.data.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y3"]);
+    const plottedTraces = figure.data.filter((trace) => trace.showlegend !== false);
+    expect(plottedTraces.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y3"]);
   });
 
   it("keeps shared x-axis tick anchoring stable when lane order changes", () => {
@@ -233,7 +234,8 @@ describe("plotly adapter", () => {
 
     expect(baseline.layout.xaxis).toMatchObject({ fixedrange: false, anchor: "y3" });
     expect(reordered.layout.xaxis).toMatchObject({ fixedrange: false, anchor: "y3" });
-    expect(reordered.data.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y"]);
+    const plottedTraces = reordered.data.filter((trace) => trace.showlegend !== false);
+    expect(plottedTraces.map((trace) => `${trace.name}@${trace.yaxis}`)).toEqual(["vin@y2", "vout@y"]);
   });
 
   it("uses full domain when a plot has one lane", () => {
@@ -246,6 +248,29 @@ describe("plotly adapter", () => {
 
     expect(figure.layout.xaxis).toMatchObject({ anchor: "y" });
     expect(figure.layout.yaxis).toMatchObject({ domain: [0, 1] });
+  });
+
+  it("adds hidden placeholder traces for empty lanes so bottom anchor remains valid", () => {
+    const figure = buildPlotlyFigure({
+      plot: createPlot({
+        axes: [{ id: "y1" }, { id: "y2" }, { id: "y3" }],
+        traces: [
+          {
+            id: "trace-1",
+            signal: "vin",
+            sourceId: "/workspace/examples/a.csv::vin",
+            axisId: "y1",
+            visible: true
+          }
+        ]
+      }),
+      traceTuplesBySourceId
+    });
+
+    expect(figure.layout.xaxis).toMatchObject({ anchor: "y3" });
+    const placeholders = figure.data.filter((trace) => trace.showlegend === false);
+    expect(placeholders).toHaveLength(2);
+    expect(placeholders.map((trace) => trace.yaxis)).toEqual(["y2", "y3"]);
   });
 
   it("returns axis lane domains using axis order and shared domain math", () => {
@@ -367,6 +392,11 @@ describe("plotly adapter", () => {
       x: [10, 100, 1000],
       y: [0.1, 0.2, 0.3],
       yaxis: "y2"
+    });
+    expect(figure.layout.xaxis.rangeslider).toMatchObject({
+      visible: true,
+      autorange: false,
+      range: [0, 1000]
     });
   });
 });

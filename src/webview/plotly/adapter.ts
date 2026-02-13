@@ -11,6 +11,8 @@ export type PlotlyTrace = {
   y: number[];
   yaxis: string;
   visible: boolean;
+  showlegend?: boolean;
+  hoverinfo?: "skip";
   line?: {
     color?: string;
     width?: number;
@@ -100,18 +102,21 @@ export function buildPlotlyFigure(payload: {
   plot: PlotState;
   traceTuplesBySourceId: ReadonlyMap<string, SidePanelTraceTuplePayload>;
 }): PlotlyFigure {
-  const firstTuple = payload.plot.traces
+  const traceTuples = payload.plot.traces
     .map((trace) => (trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined))
-    .find((entry) => entry !== undefined);
-  const xBounds = getBounds(firstTuple?.x ?? []);
+    .filter((entry): entry is SidePanelTraceTuplePayload => entry !== undefined);
+  const firstTuple = traceTuples[0];
+  const xBounds = getBoundsAcrossTuples(traceTuples);
   const axisMappings = buildRenderAxisMappings(payload.plot.axes);
   const axisMappingById = new Map(axisMappings.map((mapping) => [mapping.axisId, mapping] as const));
   const defaultTraceAxisRef = axisMappings[0]?.traceRef ?? "y";
   const bottomLaneTraceAxisRef = axisMappings[axisMappings.length - 1]?.traceRef ?? "y";
+  const axisIdsWithTraces = new Set<AxisId>();
 
   const data: PlotlyTrace[] = payload.plot.traces.map((trace) => {
     const tuple = trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined;
     const axisMap = axisMappingById.get(trace.axisId);
+    axisIdsWithTraces.add(trace.axisId);
 
     return {
       type: "scatter",
@@ -127,6 +132,28 @@ export function buildPlotlyFigure(payload: {
       }
     };
   });
+  const placeholderX = xBounds ?? [0, 1];
+
+  for (const mapping of axisMappings) {
+    if (axisIdsWithTraces.has(mapping.axisId)) {
+      continue;
+    }
+    data.push({
+      type: "scatter",
+      mode: "lines",
+      name: "",
+      x: placeholderX,
+      y: [0, 0],
+      yaxis: mapping.traceRef,
+      visible: true,
+      showlegend: false,
+      hoverinfo: "skip",
+      line: {
+        color: "rgba(0,0,0,0)",
+        width: 0
+      }
+    });
+  }
 
   const layout: PlotlyLayout = {
     margin: { l: 48, r: 48, t: 20, b: 44 },
@@ -143,7 +170,7 @@ export function buildPlotlyFigure(payload: {
       anchor: bottomLaneTraceAxisRef,
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
-      rangeslider: { visible: true, autorange: true, range: xBounds, thickness: 0.075 },
+      rangeslider: { visible: true, autorange: false, range: xBounds, thickness: 0.075 },
       automargin: true,
       fixedrange: false
     }
@@ -335,6 +362,32 @@ function getBounds(values: number[]): [number, number] | undefined {
     }
     if (value > max) {
       max = value;
+    }
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return undefined;
+  }
+
+  return [min, max];
+}
+
+function getBoundsAcrossTuples(
+  tuples: ReadonlyArray<Pick<SidePanelTraceTuplePayload, "x">>
+): [number, number] | undefined {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  for (const tuple of tuples) {
+    const tupleBounds = getBounds(tuple.x);
+    if (!tupleBounds) {
+      continue;
+    }
+    if (tupleBounds[0] < min) {
+      min = tupleBounds[0];
+    }
+    if (tupleBounds[1] > max) {
+      max = tupleBounds[1];
     }
   }
 

@@ -88,6 +88,8 @@ const plotRenderer = createPlotRenderer({
       return;
     }
 
+    const didResetXRange = eventData["xaxis.autorange"] === true;
+
     if (updates.xRange !== undefined || "xaxis.autorange" in eventData) {
       applyRelayoutUpdate({
         type: "plot/setXRange",
@@ -103,6 +105,10 @@ const plotRenderer = createPlotRenderer({
           patch: { range: axisUpdate.range }
         }
       });
+    }
+
+    if (didResetXRange) {
+      void renderWorkspace();
     }
   }
 });
