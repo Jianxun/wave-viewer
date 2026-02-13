@@ -55,6 +55,7 @@ import type {
   LayoutAutosaveControllerDeps,
   LayoutAutosavePersistInput,
   LayoutAutosaveSnapshot,
+  HostToWebviewMessage,
   LayoutBindingTarget,
   LayoutExternalEditController,
   LayoutExternalEditControllerDeps,

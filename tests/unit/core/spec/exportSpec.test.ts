@@ -11,13 +11,13 @@ const WORKSPACE: WorkspaceState = {
       name: "Plot 1",
       xSignal: "time",
       axes: [{ id: "y1" }],
-      traces: [],
+      traces: [{ id: "trace-vin", signal: "vin", axisId: "y1", visible: true }],
       nextAxisNumber: 2
     }
   ]
 };
 
-describe("T-049 export spec path serialization", () => {
+describe("T-050 export spec v2 path serialization", () => {
   it("writes relative dataset.path when layout and dataset are colocated", () => {
     const yamlText = exportPlotSpecV1({
       datasetPath: "/workspace/layouts/ota.spice.csv",
@@ -25,8 +25,12 @@ describe("T-049 export spec path serialization", () => {
       specPath: "/workspace/layouts/lab.wave-viewer.yaml"
     });
 
-    expect(yamlText).toContain("dataset:");
+    expect(yamlText).toContain("version: 2");
+    expect(yamlText).toContain("active_plot: plot-1");
     expect(yamlText).toContain("path: ./ota.spice.csv");
+    expect(yamlText).not.toContain("mode:");
+    expect(yamlText).toContain("y:");
+    expect(yamlText).toContain("trace-vin: vin");
   });
 
   it("writes portable relative dataset.path when layout is outside dataset folder", () => {

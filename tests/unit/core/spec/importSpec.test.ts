@@ -5,30 +5,30 @@ import { importPlotSpecV1, readPlotSpecDatasetPathV1 } from "../../../../src/cor
 
 function createSpecYaml(datasetPath: string): string {
   return [
-    "version: 1",
-    "mode: reference-only",
+    "version: 2",
     "dataset:",
     `  path: ${datasetPath}`,
-    "workspace:",
-    "  activePlotId: plot-1",
-    "  plots:",
-    "    - id: plot-1",
-    "      name: Plot 1",
-    "      xSignal: time",
-    "      axes:",
-    "        - id: y1",
-    "      traces: []"
+    "active_plot: plot-1",
+    "plots:",
+    "  - id: plot-1",
+    "    name: Plot 1",
+    "    x:",
+    "      signal: time",
+    "    y:",
+    "      - id: lane-main",
+    "        signals:",
+    "          trace-1: vin"
   ].join("\n");
 }
 
-describe("T-049 import spec path resolution", () => {
+describe("T-050 import spec v2 path resolution", () => {
   it("resolves relative dataset.path against layout file location", () => {
     const layoutPath = path.resolve("/workspace/layouts/lab.wave-viewer.yaml");
     const yamlText = createSpecYaml("../examples/simulations/ota.spice.csv");
 
     const parsed = importPlotSpecV1({
       yamlText,
-      availableSignals: ["time"],
+      availableSignals: ["time", "vin"],
       specPath: layoutPath
     });
 
@@ -41,7 +41,7 @@ describe("T-049 import spec path resolution", () => {
     expect(() =>
       importPlotSpecV1({
         yamlText,
-        availableSignals: ["time"]
+        availableSignals: ["time", "vin"]
       })
     ).toThrow("Plot spec dataset.path is relative but no spec file path was provided for resolution.");
   });
@@ -53,5 +53,22 @@ describe("T-049 import spec path resolution", () => {
     expect(readPlotSpecDatasetPathV1(yamlText, layoutPath)).toBe(
       path.resolve("/workspace/layouts/ota.spice.csv")
     );
+  });
+
+  it("rejects unsupported v1 specs", () => {
+    const yamlText = [
+      "version: 1",
+      "dataset:",
+      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "active_plot: plot-1",
+      "plots: []"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time"]
+      })
+    ).toThrow("Unsupported plot spec version: 1. Supported version is 2.");
   });
 });
