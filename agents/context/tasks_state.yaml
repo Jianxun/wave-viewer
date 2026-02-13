@@ -20,6 +20,6 @@ T-058:
   pr: 68
   merged: true
 T-059:
-  status: review_clean
+  status: done
   pr: 69
-  merged: false
+  merged: true
