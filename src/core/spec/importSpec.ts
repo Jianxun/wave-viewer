@@ -4,52 +4,35 @@ import { parse } from "yaml";
 import type {
   ImportPlotSpecInput,
   ImportPlotSpecResult,
-  PlotSpecAxisV1,
-  PlotSpecPlotV1,
-  PlotSpecTraceV1,
-  PlotSpecV1
+  PlotSpecLaneV2,
+  PlotSpecPlotV2,
+  PlotSpecV2
 } from "./plotSpecV1";
-import {
-  PLOT_SPEC_V1_VERSION,
-  PlotSpecImportError,
-  REFERENCE_ONLY_SPEC_MODE
-} from "./plotSpecV1";
+import { PLOT_SPEC_V2_VERSION, PlotSpecImportError } from "./plotSpecV1";
 
 export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResult {
   const parsed = parseYaml(input.yamlText);
   const spec = validateSpecShape(parsed);
   const availableSignals = new Set(input.availableSignals);
 
-  if (spec.workspace.plots.length === 0) {
-    throw new PlotSpecImportError("Plot spec must include at least one plot in workspace.plots.");
+  if (spec.plots.length === 0) {
+    throw new PlotSpecImportError("Plot spec must include at least one plot in plots.");
   }
 
-  const plotIds = new Set(spec.workspace.plots.map((plot) => plot.id));
-  if (!plotIds.has(spec.workspace.activePlotId)) {
-    throw new PlotSpecImportError(
-      `Active plot id ${spec.workspace.activePlotId} is missing from workspace.plots.`
-    );
+  const plotIds = new Set(spec.plots.map((plot) => plot.id));
+  if (!plotIds.has(spec.active_plot)) {
+    throw new PlotSpecImportError(`Active plot id ${spec.active_plot} is missing from plots.`);
   }
 
   const missingSignalsByPlot: string[] = [];
 
   const workspace = {
-    activePlotId: spec.workspace.activePlotId,
-    plots: spec.workspace.plots.map((plot) => {
-      if (!availableSignals.has(plot.xSignal)) {
-        const missingTraceSignals = collectMissingTraceSignals(plot, availableSignals);
-        const details =
-          missingTraceSignals.length > 0
-            ? `xSignal: ${plot.xSignal}; traces: ${missingTraceSignals.join(", ")}`
-            : `xSignal: ${plot.xSignal}`;
-        missingSignalsByPlot.push(`plot ${plot.id} (${details})`);
-      } else {
-        const missingTraceSignals = collectMissingTraceSignals(plot, availableSignals);
-        if (missingTraceSignals.length > 0) {
-          missingSignalsByPlot.push(`plot ${plot.id} (traces: ${missingTraceSignals.join(", ")})`);
-        }
+    activePlotId: spec.active_plot,
+    plots: spec.plots.map((plot) => {
+      const missingSignals = collectMissingSignals(plot, availableSignals);
+      if (missingSignals.length > 0) {
+        missingSignalsByPlot.push(`plot ${plot.id} (${missingSignals.join("; ")})`);
       }
-
       return toWorkspacePlot(plot);
     })
   };
@@ -78,25 +61,19 @@ function parseYaml(yamlText: string): unknown {
   }
 }
 
-function validateSpecShape(parsed: unknown): PlotSpecV1 {
+function validateSpecShape(parsed: unknown): PlotSpecV2 {
   if (!isRecord(parsed)) {
     throw new PlotSpecImportError("Plot spec root must be a YAML mapping.");
   }
 
-  if (parsed.version !== PLOT_SPEC_V1_VERSION) {
-    throw new PlotSpecImportError(`Unsupported plot spec version: ${String(parsed.version)}.`);
+  if (parsed.version !== PLOT_SPEC_V2_VERSION) {
+    throw new PlotSpecImportError(
+      `Unsupported plot spec version: ${String(parsed.version)}. Supported version is 2.`
+    );
   }
 
-  if (parsed.mode !== REFERENCE_ONLY_SPEC_MODE) {
-    if (parsed.mode === undefined) {
-      throw new PlotSpecImportError("Plot spec mode must be explicitly set to 'reference-only'.");
-    }
-    if (parsed.mode === "portable-archive") {
-      throw new PlotSpecImportError(
-        "Plot spec mode 'portable-archive' is not supported by this Wave Viewer version. Re-export as 'reference-only'."
-      );
-    }
-    throw new PlotSpecImportError(`Unsupported plot spec mode: ${String(parsed.mode)}.`);
+  if (Object.hasOwn(parsed, "mode")) {
+    throw new PlotSpecImportError("Plot spec mode is not supported in v2 layout schema.");
   }
 
   const dataset = parsed.dataset;
@@ -104,40 +81,32 @@ function validateSpecShape(parsed: unknown): PlotSpecV1 {
     throw new PlotSpecImportError("Plot spec dataset.path must be a non-empty string.");
   }
 
-  const workspace = parsed.workspace;
-  if (!isRecord(workspace)) {
-    throw new PlotSpecImportError("Plot spec workspace must be an object.");
+  if (typeof parsed.active_plot !== "string" || parsed.active_plot.trim().length === 0) {
+    throw new PlotSpecImportError("Plot spec active_plot must be a non-empty string.");
   }
 
-  if (typeof workspace.activePlotId !== "string" || workspace.activePlotId.trim().length === 0) {
-    throw new PlotSpecImportError("Plot spec workspace.activePlotId must be a non-empty string.");
+  if (!Array.isArray(parsed.plots)) {
+    throw new PlotSpecImportError("Plot spec plots must be an array.");
   }
 
-  if (!Array.isArray(workspace.plots)) {
-    throw new PlotSpecImportError("Plot spec workspace.plots must be an array.");
-  }
-
-  const plots = workspace.plots.map((entry, index) => validatePlot(entry, index));
+  const plots = parsed.plots.map((entry, index) => validatePlot(entry, index));
 
   return {
-    version: PLOT_SPEC_V1_VERSION,
-    mode: REFERENCE_ONLY_SPEC_MODE,
+    version: PLOT_SPEC_V2_VERSION,
     dataset: {
       path: dataset.path
     },
-    workspace: {
-      activePlotId: workspace.activePlotId,
-      plots
-    }
+    active_plot: parsed.active_plot,
+    plots
   };
 }
 
-function validatePlot(value: unknown, index: number): PlotSpecPlotV1 {
+function validatePlot(value: unknown, index: number): PlotSpecPlotV2 {
   if (!isRecord(value)) {
     throw new PlotSpecImportError(`Plot at index ${index} must be an object.`);
   }
 
-  const { id, name, xSignal, axes, traces, xRange } = value;
+  const { id, name, x, y } = value;
 
   if (typeof id !== "string" || id.trim().length === 0) {
     throw new PlotSpecImportError(`Plot at index ${index} has an invalid id.`);
@@ -145,153 +114,173 @@ function validatePlot(value: unknown, index: number): PlotSpecPlotV1 {
   if (typeof name !== "string" || name.trim().length === 0) {
     throw new PlotSpecImportError(`Plot ${id} has an invalid name.`);
   }
-  if (typeof xSignal !== "string" || xSignal.trim().length === 0) {
-    throw new PlotSpecImportError(`Plot ${id} has an invalid xSignal.`);
+  if (!isRecord(x)) {
+    throw new PlotSpecImportError(`Plot ${id} x must be an object.`);
   }
-  if (!Array.isArray(axes) || axes.length === 0) {
-    throw new PlotSpecImportError(`Plot ${id} must include at least one axis.`);
+  if (typeof x.signal !== "string" || x.signal.trim().length === 0) {
+    throw new PlotSpecImportError(`Plot ${id} x.signal must be a non-empty string.`);
   }
-  if (!Array.isArray(traces)) {
-    throw new PlotSpecImportError(`Plot ${id} traces must be an array.`);
-  }
-
-  const parsedAxes = axes.map((axis, axisIndex) => validateAxis(id, axis, axisIndex));
-  const axisIds = new Set(parsedAxes.map((axis) => axis.id));
-  if (axisIds.size !== parsedAxes.length) {
-    throw new PlotSpecImportError(`Plot ${id} contains duplicate axis ids.`);
+  if (x.label !== undefined && typeof x.label !== "string") {
+    throw new PlotSpecImportError(`Plot ${id} x.label must be a string when provided.`);
   }
 
-  const parsedTraces = traces.map((trace, traceIndex) => validateTrace(id, trace, traceIndex));
-  for (const trace of parsedTraces) {
-    if (!axisIds.has(trace.axisId)) {
-      throw new PlotSpecImportError(
-        `Plot ${id} trace ${trace.id} references unknown axis ${trace.axisId}.`
-      );
-    }
-  }
-
-  const normalized: PlotSpecPlotV1 = {
+  const normalized: PlotSpecPlotV2 = {
     id,
     name,
-    xSignal,
-    axes: parsedAxes,
-    traces: parsedTraces
+    x: {
+      signal: x.signal
+    },
+    y: []
   };
 
-  if (xRange !== undefined) {
-    normalized.xRange = parseNumberPair(xRange, `plot ${id} xRange`);
+  if (x.label !== undefined) {
+    normalized.x.label = x.label;
   }
+
+  if (x.range !== undefined) {
+    normalized.x.range = parseNumberPair(x.range, `plot ${id} x.range`);
+  }
+
+  if (!Array.isArray(y) || y.length === 0) {
+    throw new PlotSpecImportError(`Plot ${id} must include at least one lane in y.`);
+  }
+
+  normalized.y = y.map((lane, laneIndex) => validateLane(id, lane, laneIndex));
 
   return normalized;
 }
 
-function validateAxis(plotId: string, value: unknown, index: number): PlotSpecAxisV1 {
+function validateLane(plotId: string, value: unknown, laneIndex: number): PlotSpecLaneV2 {
   if (!isRecord(value)) {
-    throw new PlotSpecImportError(`Plot ${plotId} axis at index ${index} must be an object.`);
+    throw new PlotSpecImportError(`Plot ${plotId} lane at index ${laneIndex} must be an object.`);
   }
 
-  const { id, side, title, range, scale } = value;
-  if (!isAxisId(id)) {
-    throw new PlotSpecImportError(`Plot ${plotId} axis at index ${index} has invalid id.`);
-  }
-  if (side !== undefined) {
-    throw new PlotSpecImportError(
-      `Plot ${plotId} axis ${id} uses legacy field side. Re-export this workspace with the current Wave Viewer version.`
-    );
+  const { id, label, range, scale, signals } = value;
+
+  if (typeof id !== "string" || id.trim().length === 0) {
+    throw new PlotSpecImportError(`Plot ${plotId} lane at index ${laneIndex} has invalid id.`);
   }
 
-  const axis: PlotSpecAxisV1 = {
-    id
+  const lane: PlotSpecLaneV2 = {
+    id,
+    signals: {}
   };
 
-  if (title !== undefined) {
-    if (typeof title !== "string") {
-      throw new PlotSpecImportError(`Plot ${plotId} axis ${id} has invalid title.`);
+  if (label !== undefined) {
+    if (typeof label !== "string") {
+      throw new PlotSpecImportError(`Plot ${plotId} lane ${id} has invalid label.`);
     }
-    axis.title = title;
+    lane.label = label;
   }
 
   if (range !== undefined) {
-    axis.range = parseNumberPair(range, `plot ${plotId} axis ${id} range`);
+    lane.range = parseNumberPair(range, `plot ${plotId} lane ${id} range`);
   }
 
   if (scale !== undefined) {
     if (scale !== "linear" && scale !== "log") {
-      throw new PlotSpecImportError(`Plot ${plotId} axis ${id} has invalid scale.`);
+      throw new PlotSpecImportError(`Plot ${plotId} lane ${id} has invalid scale.`);
     }
-    axis.scale = scale;
+    lane.scale = scale;
   }
 
-  return axis;
+  if (!isRecord(signals)) {
+    throw new PlotSpecImportError(`Plot ${plotId} lane ${id} signals must be a mapping.`);
+  }
+
+  for (const [traceLabel, signal] of Object.entries(signals)) {
+    if (typeof signal !== "string" || signal.trim().length === 0) {
+      throw new PlotSpecImportError(`Plot ${plotId} lane ${id} has invalid signal entry '${traceLabel}'.`);
+    }
+    lane.signals[traceLabel] = signal;
+  }
+
+  return lane;
 }
 
-function validateTrace(plotId: string, value: unknown, index: number): PlotSpecTraceV1 {
-  if (!isRecord(value)) {
-    throw new PlotSpecImportError(`Plot ${plotId} trace at index ${index} must be an object.`);
-  }
+function toWorkspacePlot(plot: PlotSpecPlotV2) {
+  const usedTraceIds = new Set<string>();
+  let traceCounter = 0;
 
-  const { id, signal, axisId, visible, color, lineWidth } = value;
-  if (typeof id !== "string" || id.trim().length === 0) {
-    throw new PlotSpecImportError(`Plot ${plotId} trace at index ${index} has invalid id.`);
-  }
-  if (typeof signal !== "string" || signal.trim().length === 0) {
-    throw new PlotSpecImportError(`Plot ${plotId} trace ${id} has invalid signal.`);
-  }
-  if (!isAxisId(axisId)) {
-    throw new PlotSpecImportError(`Plot ${plotId} trace ${id} has invalid axisId.`);
-  }
-  if (typeof visible !== "boolean") {
-    throw new PlotSpecImportError(`Plot ${plotId} trace ${id} has invalid visible value.`);
-  }
+  const axes = plot.y.map((lane, laneIndex) => {
+    const axis: {
+      id: `y${number}`;
+      title?: string;
+      range?: [number, number];
+      scale?: "linear" | "log";
+    } = {
+      id: `y${laneIndex + 1}` as const
+    };
 
-  const trace: PlotSpecTraceV1 = {
-    id,
-    signal,
-    axisId,
-    visible
-  };
-
-  if (color !== undefined) {
-    if (typeof color !== "string") {
-      throw new PlotSpecImportError(`Plot ${plotId} trace ${id} has invalid color.`);
+    if (lane.label !== undefined) {
+      axis.title = lane.label;
     }
-    trace.color = color;
-  }
-
-  if (lineWidth !== undefined) {
-    if (typeof lineWidth !== "number" || !Number.isFinite(lineWidth)) {
-      throw new PlotSpecImportError(`Plot ${plotId} trace ${id} has invalid lineWidth.`);
+    if (lane.range !== undefined) {
+      axis.range = lane.range;
     }
-    trace.lineWidth = lineWidth;
-  }
+    if (lane.scale !== undefined) {
+      axis.scale = lane.scale;
+    }
 
-  return trace;
-}
+    return axis;
+  });
 
-function toWorkspacePlot(plot: PlotSpecPlotV1) {
-  const maxAxisNumber = plot.axes.reduce((max, axis) => {
-    const nextValue = Number.parseInt(axis.id.slice(1), 10);
-    return Number.isFinite(nextValue) && nextValue > max ? nextValue : max;
-  }, 0);
+  const traces = plot.y.flatMap((lane, laneIndex) => {
+    const axisId = `y${laneIndex + 1}` as const;
+    return Object.entries(lane.signals).map(([traceLabel, signal]) => {
+      traceCounter += 1;
+      const traceId = createUniqueTraceId(traceLabel.trim() || `trace-${traceCounter}`, usedTraceIds);
+      return {
+        id: traceId,
+        signal,
+        axisId,
+        visible: true
+      };
+    });
+  });
 
   return {
     id: plot.id,
     name: plot.name,
-    xSignal: plot.xSignal,
-    axes: plot.axes,
-    traces: plot.traces,
-    nextAxisNumber: maxAxisNumber + 1,
-    ...(plot.xRange !== undefined ? { xRange: plot.xRange } : {})
+    xSignal: plot.x.signal,
+    axes,
+    traces,
+    nextAxisNumber: axes.length + 1,
+    ...(plot.x.range !== undefined ? { xRange: plot.x.range } : {})
   };
 }
 
-function collectMissingTraceSignals(plot: PlotSpecPlotV1, availableSignals: Set<string>): string[] {
+function createUniqueTraceId(candidateId: string, usedIds: Set<string>): string {
+  if (!usedIds.has(candidateId)) {
+    usedIds.add(candidateId);
+    return candidateId;
+  }
+
+  let suffix = 2;
+  while (usedIds.has(`${candidateId}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  const nextId = `${candidateId}-${suffix}`;
+  usedIds.add(nextId);
+  return nextId;
+}
+
+function collectMissingSignals(plot: PlotSpecPlotV2, availableSignals: Set<string>): string[] {
   const missing = new Set<string>();
-  for (const trace of plot.traces) {
-    if (!availableSignals.has(trace.signal)) {
-      missing.add(trace.signal);
+
+  if (!availableSignals.has(plot.x.signal)) {
+    missing.add(`x.signal: ${plot.x.signal}`);
+  }
+
+  for (const lane of plot.y) {
+    for (const signal of Object.values(lane.signals)) {
+      if (!availableSignals.has(signal)) {
+        missing.add(`y.${lane.id}: ${signal}`);
+      }
     }
   }
+
   return [...missing.values()];
 }
 
@@ -307,10 +296,6 @@ function parseNumberPair(value: unknown, label: string): [number, number] {
   }
 
   return [left, right];
-}
-
-function isAxisId(value: unknown): value is `y${number}` {
-  return typeof value === "string" && /^y[1-9]\d*$/.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

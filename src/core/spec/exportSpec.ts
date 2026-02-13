@@ -1,72 +1,63 @@
 import * as path from "node:path";
 import { stringify } from "yaml";
 
-import type {
-  ExportPlotSpecInput,
-  PlotSpecAxisV1,
-  PlotSpecPlotV1,
-  PlotSpecTraceV1,
-  PlotSpecV1
-} from "./plotSpecV1";
-import { PLOT_SPEC_V1_VERSION, REFERENCE_ONLY_SPEC_MODE } from "./plotSpecV1";
+import type { ExportPlotSpecInput, PlotSpecLaneV2, PlotSpecPlotV2, PlotSpecV2 } from "./plotSpecV1";
+import { PLOT_SPEC_V2_VERSION } from "./plotSpecV1";
 
 export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
-  const spec: PlotSpecV1 = {
-    version: PLOT_SPEC_V1_VERSION,
-    mode: REFERENCE_ONLY_SPEC_MODE,
+  const spec: PlotSpecV2 = {
+    version: PLOT_SPEC_V2_VERSION,
     dataset: {
       path: serializeDatasetPath(input.datasetPath, input.specPath)
     },
-    workspace: {
-      activePlotId: input.workspace.activePlotId,
-      plots: input.workspace.plots.map((plot) => {
-        const specPlot: PlotSpecPlotV1 = {
-          id: plot.id,
-          name: plot.name,
-          xSignal: plot.xSignal,
-          axes: plot.axes.map((axis) => {
-            const specAxis: PlotSpecAxisV1 = {
-              id: axis.id
-            };
+    active_plot: input.workspace.activePlotId,
+    plots: input.workspace.plots.map((plot) => {
+      const lanesByAxisId = new Map<string, PlotSpecLaneV2>();
 
-            if (axis.title !== undefined) {
-              specAxis.title = axis.title;
-            }
-            if (axis.range !== undefined) {
-              specAxis.range = axis.range;
-            }
-            if (axis.scale !== undefined) {
-              specAxis.scale = axis.scale;
-            }
-
-            return specAxis;
-          }),
-          traces: plot.traces.map((trace) => {
-            const specTrace: PlotSpecTraceV1 = {
-              id: trace.id,
-              signal: trace.signal,
-              axisId: trace.axisId,
-              visible: trace.visible
-            };
-
-            if (trace.color !== undefined) {
-              specTrace.color = trace.color;
-            }
-            if (trace.lineWidth !== undefined) {
-              specTrace.lineWidth = trace.lineWidth;
-            }
-
-            return specTrace;
-          })
+      for (const axis of plot.axes) {
+        const lane: PlotSpecLaneV2 = {
+          id: axis.id,
+          signals: {}
         };
 
-        if (plot.xRange !== undefined) {
-          specPlot.xRange = plot.xRange;
+        if (axis.title !== undefined) {
+          lane.label = axis.title;
+        }
+        if (axis.range !== undefined) {
+          lane.range = axis.range;
+        }
+        if (axis.scale !== undefined) {
+          lane.scale = axis.scale;
         }
 
-        return specPlot;
-      })
-    }
+        lanesByAxisId.set(axis.id, lane);
+      }
+
+      for (const trace of plot.traces) {
+        const lane = lanesByAxisId.get(trace.axisId);
+        if (!lane) {
+          continue;
+        }
+
+        const traceLabel = trace.id.trim().length > 0 ? trace.id : `trace-${Object.keys(lane.signals).length + 1}`;
+        lane.signals[traceLabel] = trace.signal;
+      }
+
+      const specPlot: PlotSpecPlotV2 = {
+        id: plot.id,
+        name: plot.name,
+        x: {
+          signal: plot.xSignal
+        },
+        y: [...lanesByAxisId.values()]
+      };
+
+      if (plot.xRange !== undefined) {
+        specPlot.x.range = plot.xRange;
+      }
+
+      return specPlot;
+    })
   };
 
   const yamlText = stringify(spec, {

@@ -1,45 +1,35 @@
 import type { WorkspaceState } from "../../webview/state/workspaceState";
 
-export const PLOT_SPEC_V1_VERSION = 1;
-export const REFERENCE_ONLY_SPEC_MODE = "reference-only";
+export const PLOT_SPEC_V2_VERSION = 2;
 
-export type PlotSpecPersistenceMode = typeof REFERENCE_ONLY_SPEC_MODE | "portable-archive";
-
-export type PlotSpecAxisV1 = {
-  id: `y${number}`;
-  title?: string;
+export type PlotSpecLaneV2 = {
+  id: string;
+  label?: string;
   range?: [number, number];
   scale?: "linear" | "log";
+  signals: Record<string, string>;
 };
 
-export type PlotSpecTraceV1 = {
-  id: string;
+export type PlotSpecXConfigV2 = {
   signal: string;
-  axisId: `y${number}`;
-  visible: boolean;
-  color?: string;
-  lineWidth?: number;
+  label?: string;
+  range?: [number, number];
 };
 
-export type PlotSpecPlotV1 = {
+export type PlotSpecPlotV2 = {
   id: string;
   name: string;
-  xSignal: string;
-  axes: PlotSpecAxisV1[];
-  traces: PlotSpecTraceV1[];
-  xRange?: [number, number];
+  x: PlotSpecXConfigV2;
+  y: PlotSpecLaneV2[];
 };
 
-export type PlotSpecV1 = {
-  version: typeof PLOT_SPEC_V1_VERSION;
-  mode: PlotSpecPersistenceMode;
+export type PlotSpecV2 = {
+  version: typeof PLOT_SPEC_V2_VERSION;
   dataset: {
     path: string;
   };
-  workspace: {
-    activePlotId: string;
-    plots: PlotSpecPlotV1[];
-  };
+  active_plot: string;
+  plots: PlotSpecPlotV2[];
 };
 
 export type ExportPlotSpecInput = {
