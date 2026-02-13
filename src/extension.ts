@@ -30,6 +30,7 @@ import {
 } from "./extension/sidePanel";
 import { createHostStateStore } from "./extension/hostStateStore";
 import {
+  createClearLayoutCommand,
   createExportFrozenBundleCommand,
   createExportSpecCommand,
   createImportSpecCommand,
@@ -68,6 +69,7 @@ import type {
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
 export const OPEN_LAYOUT_COMMAND = "waveViewer.openLayout";
 export const SAVE_LAYOUT_AS_COMMAND = "waveViewer.saveLayoutAs";
+export const CLEAR_LAYOUT_COMMAND = "waveViewer.clearLayout";
 export const EXPORT_FROZEN_BUNDLE_COMMAND = "waveViewer.exportFrozenBundle";
 export {
   LOAD_CSV_FILES_COMMAND,
@@ -84,6 +86,7 @@ export {
   applySidePanelSignalAction,
   buildWebviewHtml,
   createExportSpecCommand,
+  createClearLayoutCommand,
   createHostStateStore,
   createExportFrozenBundleCommand,
   createImportSpecCommand,
@@ -908,6 +911,19 @@ export function activate(context: VSCode.ExtensionContext): void {
     }
   });
 
+  const clearLayoutCommand = createClearLayoutCommand({
+    getActiveViewerId: () => viewerSessions.getActiveViewerId(),
+    resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
+    loadDataset,
+    commitHostStateTransaction,
+    getPanelForViewer: (viewerId) => viewerSessions.getPanelForViewer(viewerId),
+    showWarning: (message) =>
+      vscode.window.showWarningMessage(message, { modal: true }, "Clear Layout"),
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    }
+  });
+
   const loadCsvFilesCommand = createLoadCsvFilesCommand({
     showOpenDialog: async () => {
       const result = await vscode.window.showOpenDialog({
@@ -961,6 +977,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(SAVE_LAYOUT_AS_COMMAND, saveLayoutAsCommand)
   );
+  context.subscriptions.push(vscode.commands.registerCommand(CLEAR_LAYOUT_COMMAND, clearLayoutCommand));
   context.subscriptions.push(
     vscode.commands.registerCommand(EXPORT_FROZEN_BUNDLE_COMMAND, exportFrozenBundleCommand)
   );

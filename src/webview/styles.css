@@ -54,6 +54,10 @@ body {
 }
 
 .plot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   border-bottom: 1px solid var(--panel-border);
   padding: 12px 14px;
 }

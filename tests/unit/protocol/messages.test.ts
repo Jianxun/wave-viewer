@@ -431,6 +431,26 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview intent clearPlot payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/clearPlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        requestId: "req-9"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/clearPlot",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        requestId: "req-9"
+      }
+    });
+  });
+
   it("rejects malformed webview intent setActiveAxis payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/intent/setActiveAxis", {
@@ -524,6 +544,16 @@ describe("protocol envelope validators", () => {
         viewerId: "viewer-1",
         plotId: "plot-1",
         requestId: "req-8"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent clearPlot payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/clearPlot", {
+        viewerId: "viewer-1",
+        requestId: "req-9"
       })
     );
     expect(parsed).toBeUndefined();

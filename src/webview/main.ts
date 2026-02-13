@@ -66,6 +66,7 @@ let lastAppliedRevision = -1;
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
+const clearPlotButtonEl = getRequiredElement<HTMLButtonElement>("clear-plot-button");
 const bridgeStatusEl = getRequiredElement("bridge-status");
 const datasetStatusEl = getRequiredElement("dataset-status");
 const signalListEl = getRequiredElement("signal-list");
@@ -334,6 +335,16 @@ function postRemoveTrace(traceId: string): void {
   );
 }
 
+function postClearPlot(plotId: string): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/clearPlot", {
+      viewerId,
+      plotId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
 function renderCanvasDropOverlay(axes: ReadonlyArray<{ id: AxisId }>): void {
   plotDropOverlayEl.replaceChildren();
   const laneDomains = getAxisLaneDomains(axes);
@@ -526,6 +537,19 @@ plotCanvasEl.addEventListener("drop", (event) => {
     target: { kind: "axis", axisId },
     source: "canvas-overlay"
   });
+});
+
+clearPlotButtonEl.addEventListener("click", () => {
+  if (!workspace) {
+    return;
+  }
+
+  const confirmed = window.confirm("Clear active plot?");
+  if (!confirmed) {
+    return;
+  }
+
+  postClearPlot(getActivePlot(workspace).id);
 });
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {

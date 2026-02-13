@@ -2,6 +2,8 @@ import {
   addAxis,
   addPlot,
   addTrace,
+  clearActivePlot,
+  clearLayout,
   reorderAxis,
   removeAxis,
   removePlot,
@@ -18,7 +20,9 @@ import {
 } from "./workspaceState";
 
 export type WorkspaceAction =
+  | { type: "workspace/clearLayout" }
   | { type: "plot/add"; payload?: { xSignal?: string; name?: string } }
+  | { type: "plot/clear"; payload?: { plotId?: string } }
   | { type: "plot/remove"; payload: { plotId: string } }
   | { type: "plot/rename"; payload: { plotId: string; name: string } }
   | { type: "plot/setActive"; payload: { plotId: string } }
@@ -62,8 +66,12 @@ export type WorkspaceAction =
 
 export function reduceWorkspaceState(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
   switch (action.type) {
+    case "workspace/clearLayout":
+      return clearLayout(state);
     case "plot/add":
       return addPlot(state, action.payload ?? {});
+    case "plot/clear":
+      return clearActivePlot(state, action.payload ?? {});
     case "plot/remove":
       return removePlot(state, action.payload);
     case "plot/rename":

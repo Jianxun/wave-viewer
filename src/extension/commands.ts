@@ -15,6 +15,7 @@ import {
   toTraceSourceId
 } from "./sidePanel";
 import type {
+  ClearLayoutCommandDeps,
   CommandDeps,
   ExportSpecCommandDeps,
   ImportSpecCommandDeps,
@@ -699,6 +700,51 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
+      if (message.type === "webview/intent/clearPlot") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored clearPlot because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "clearPlot:plot-header",
+            mutate: (workspace) =>
+              reduceWorkspaceState(
+                reduceWorkspaceState(workspace, {
+                  type: "plot/setActive",
+                  payload: { plotId: message.payload.plotId }
+                }),
+                {
+                  type: "plot/clear",
+                  payload: { plotId: message.payload.plotId }
+                }
+              )
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          deps.logDebug?.("Ignored invalid webview clearPlot message payload.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
       if (message.type !== "webview/ready") {
         deps.logDebug?.("Ignored unsupported webview message type.", message.type);
         return;
@@ -1071,6 +1117,61 @@ export function createSaveLayoutCommand(deps: SaveLayoutCommandDeps): () => Prom
     });
     deps.writeTextFile(context.layoutUri, yaml);
     deps.showInformation(`Wave Viewer layout saved to ${context.layoutUri}`);
+  };
+}
+
+export function createClearLayoutCommand(deps: ClearLayoutCommandDeps): () => Promise<void> {
+  return async () => {
+    const viewerId = deps.getActiveViewerId();
+    if (!viewerId) {
+      deps.showError("Focus a Wave Viewer panel before running Clear Layout.");
+      return;
+    }
+
+    const context = deps.resolveViewerSessionContext(viewerId);
+    if (!context) {
+      deps.showError("The focused viewer is not bound to a dataset/layout session.");
+      return;
+    }
+
+    const confirmation = await deps.showWarning(
+      "Clear the current Wave Viewer layout? This removes all plot tabs and traces."
+    );
+    if (confirmation !== "Clear Layout") {
+      return;
+    }
+
+    let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
+    try {
+      normalizedDataset = deps.loadDataset(context.datasetPath);
+    } catch (error) {
+      deps.showError(getErrorMessage(error));
+      return;
+    }
+
+    const transaction = deps.commitHostStateTransaction({
+      datasetPath: context.datasetPath,
+      defaultXSignal: normalizedDataset.defaultXSignal,
+      reason: "clearLayout:command",
+      mutate: (workspace) =>
+        reduceWorkspaceState(workspace, {
+          type: "workspace/clearLayout"
+        })
+    });
+
+    const panel = deps.getPanelForViewer(viewerId);
+    if (!panel) {
+      return;
+    }
+
+    void panel.webview.postMessage(
+      createProtocolEnvelope("host/statePatch", {
+        revision: transaction.next.revision,
+        workspace: transaction.next.workspace,
+        viewerState: transaction.next.viewerState,
+        reason: transaction.reason
+      })
+    );
   };
 }
 

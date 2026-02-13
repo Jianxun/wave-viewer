@@ -4,6 +4,8 @@ import {
   addAxis,
   addPlot,
   addTrace,
+  clearActivePlot,
+  clearLayout,
   createWorkspaceState,
   reorderAxis,
   removeAxis,
@@ -46,6 +48,51 @@ describe("workspaceState", () => {
     workspace = removePlot(workspace, { plotId: secondPlotId });
     expect(workspace.plots).toHaveLength(1);
     expect(workspace.activePlotId).toBe("plot-1");
+  });
+
+  it("clears only the active plot while keeping plot identity and x signal", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, { signal: "vin", axisId: "y2" });
+    workspace = addPlot(workspace, { xSignal: "frequency", name: "Scope B" });
+    workspace = addTrace(workspace, { signal: "vout", axisId: "y1" });
+
+    workspace = clearActivePlot(workspace);
+
+    const clearedPlot = workspace.plots.find((plot) => plot.id === workspace.activePlotId);
+    expect(clearedPlot).toMatchObject({
+      id: "plot-2",
+      name: "Scope B",
+      xSignal: "frequency",
+      axes: [{ id: "y1" }],
+      traces: [],
+      nextAxisNumber: 2
+    });
+    expect(workspace.plots[0]?.traces).toHaveLength(1);
+  });
+
+  it("clears layout to one empty plot and lane", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, { signal: "vin", axisId: "y2" });
+    workspace = addPlot(workspace, { xSignal: "frequency", name: "Scope B" });
+    workspace = addTrace(workspace, { signal: "vout", axisId: "y1" });
+
+    workspace = clearLayout(workspace);
+
+    expect(workspace).toEqual({
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "frequency",
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    });
   });
 
   it("adds trace instances to explicit axes and supports duplicate signals", () => {

@@ -16,6 +16,7 @@
     "onCommand:waveViewer.openViewer",
     "onCommand:waveViewer.openLayout",
     "onCommand:waveViewer.saveLayoutAs",
+    "onCommand:waveViewer.clearLayout",
     "onCommand:waveViewer.exportFrozenBundle",
     "onCommand:waveViewer.signalBrowser.addToPlot",
     "onCommand:waveViewer.signalBrowser.addToNewAxis",
@@ -38,6 +39,10 @@
       {
         "command": "waveViewer.saveLayoutAs",
         "title": "Wave Viewer: Save Layout As..."
+      },
+      {
+        "command": "waveViewer.clearLayout",
+        "title": "Wave Viewer: Clear Layout"
       },
       {
         "command": "waveViewer.exportFrozenBundle",
