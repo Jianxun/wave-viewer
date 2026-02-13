@@ -8,8 +8,8 @@ T-051:
   pr: 60
   merged: true
 T-052:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 61
   merged: false
 T-053:
   status: ready
