@@ -48,7 +48,7 @@ Build a VS Code extension (`wave-viewer`) that loads CSV waveform data and enabl
 ### 3.1 Surfaces
 - Side panel (primary discovery/action surface):
   - Signal tree for numeric signals from loaded datasets.
-  - Command/context actions (`Add to Plot`, `Add to New Axis`, `Reveal in Plot`).
+  - Command/context actions (`Add to Plot`, `Add to New Axis`).
   - Drag source for signal-to-lane drop workflows.
 - Main webview (primary manipulation/rendering surface):
   - Plot tab selector.
@@ -262,8 +262,9 @@ plots:
 - Smoke scenario:
   - load at least two CSV datasets
   - open viewer for one dataset and add traces from both datasets via side panel
+  - verify no-active-viewer command paths auto-open a viewer target
   - perform lane-targeted drag/drop
-  - export/import YAML and verify visual/state parity
+  - open layout YAML and verify dataset-qualified tuple replay
 - Execution policy during MVP:
   - CI gates are not required yet.
   - Follow `doc/specs/testing-strategy.md` and record skipped checks in task scratchpads.
