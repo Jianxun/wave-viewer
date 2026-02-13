@@ -20,6 +20,7 @@ import type {
   ExportSpecCommandDeps,
   ImportSpecCommandDeps,
   LayoutAxisLaneIdMap,
+  LayoutPlotXDatasetPathMap,
   LoadCsvFilesCommandDeps,
   OpenLayoutCommandDeps,
   ReloadAllLoadedFilesCommandDeps,
@@ -1024,6 +1025,7 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
     );
     const snapshot = deps.setCachedWorkspace(parsed.datasetPath, hydratedReplay.workspace);
     deps.recordLayoutAxisLaneIdMap?.(layoutPath, parsed.laneIdByAxisIdByPlotId);
+    deps.recordLayoutXDatasetPathMap?.(layoutPath, parsed.xDatasetPathByPlotId);
     deps.bindViewerToLayout(activeViewerId, layoutPath, parsed.datasetPath);
     const panel = deps.getPanelForViewer(activeViewerId);
     if (panel) {
@@ -1109,11 +1111,13 @@ export function createSaveLayoutCommand(deps: SaveLayoutCommandDeps): () => Prom
     }
 
     const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
+    const xDatasetPathByPlotId = deps.resolveLayoutXDatasetPathMap?.(context.layoutUri);
     const yaml = exportPlotSpecV1({
       datasetPath: context.datasetPath,
       workspace: context.workspace,
       specPath: context.layoutUri,
-      laneIdByAxisIdByPlotId
+      laneIdByAxisIdByPlotId,
+      xDatasetPathByPlotId
     });
     deps.writeTextFile(context.layoutUri, yaml);
     deps.showInformation(`Wave Viewer layout saved to ${context.layoutUri}`);
@@ -1188,15 +1192,20 @@ export function createSaveLayoutAsCommand(deps: SaveLayoutAsCommandDeps): () => 
     }
 
     const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
+    const xDatasetPathByPlotId = deps.resolveLayoutXDatasetPathMap?.(context.layoutUri);
     const yaml = exportPlotSpecV1({
       datasetPath: context.datasetPath,
       workspace: context.workspace,
       specPath: savePath,
-      laneIdByAxisIdByPlotId
+      laneIdByAxisIdByPlotId,
+      xDatasetPathByPlotId
     });
     deps.writeTextFile(savePath, yaml);
     if (laneIdByAxisIdByPlotId) {
       deps.recordLayoutAxisLaneIdMap?.(savePath, cloneLaneIdMap(laneIdByAxisIdByPlotId));
+    }
+    if (xDatasetPathByPlotId) {
+      deps.recordLayoutXDatasetPathMap?.(savePath, clonePlotXDatasetPathMap(xDatasetPathByPlotId));
     }
     deps.bindViewerToLayout(context.viewerId, savePath, context.datasetPath);
     deps.showInformation(`Wave Viewer layout saved to ${savePath}`);
@@ -1248,11 +1257,13 @@ export function createExportFrozenBundleCommand(
       signalNames: orderedSignalNames
     });
     const laneIdByAxisIdByPlotId = deps.resolveLayoutAxisLaneIdMap?.(context.layoutUri);
+    const xDatasetPathByPlotId = deps.resolveLayoutXDatasetPathMap?.(context.layoutUri);
     const yamlText = exportPlotSpecV1({
       datasetPath: frozenCsvPath,
       workspace: context.workspace,
       specPath: frozenLayoutPath,
-      laneIdByAxisIdByPlotId
+      laneIdByAxisIdByPlotId,
+      xDatasetPathByPlotId
     });
 
     deps.writeTextFile(frozenCsvPath, csvText);
@@ -1314,4 +1325,8 @@ function cloneLaneIdMap(source: LayoutAxisLaneIdMap): LayoutAxisLaneIdMap {
     clone[plotId] = { ...mapByAxis };
   }
   return clone;
+}
+
+function clonePlotXDatasetPathMap(source: LayoutPlotXDatasetPathMap): LayoutPlotXDatasetPathMap {
+  return { ...source };
 }

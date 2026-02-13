@@ -238,17 +238,23 @@ export type LayoutAutosaveSnapshot = {
 };
 
 export type LayoutAxisLaneIdMap = Record<string, Record<`y${number}`, string>>;
+export type LayoutPlotXDatasetPathMap = Record<string, string>;
 
 export type LayoutAutosavePersistInput = LayoutAutosaveSnapshot & {
   layoutUri: string;
   laneIdByAxisIdByPlotId?: LayoutAxisLaneIdMap;
+  xDatasetPathByPlotId?: LayoutPlotXDatasetPathMap;
 };
 
 export type LayoutAutosaveControllerDeps = {
   debounceMs?: number;
   resolveLayoutBinding(
     datasetPath: string
-  ): { layoutUri: string; laneIdByAxisIdByPlotId?: LayoutAxisLaneIdMap } | undefined;
+  ): {
+    layoutUri: string;
+    laneIdByAxisIdByPlotId?: LayoutAxisLaneIdMap;
+    xDatasetPathByPlotId?: LayoutPlotXDatasetPathMap;
+  } | undefined;
   persistLayout(input: LayoutAutosavePersistInput): LayoutSelfWriteMetadata;
   logDebug?(message: string, details?: unknown): void;
 };
@@ -280,6 +286,7 @@ export type LayoutExternalEditControllerDeps = {
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   applyImportedWorkspace(datasetPath: string, workspace: WorkspaceState): HostStateSnapshot;
   recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
+  recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
   getLastSelfWriteMetadata(layoutUri: string): LayoutSelfWriteMetadata | undefined;
   showError(message: string): void;
   logDebug?(message: string, details?: unknown): void;
@@ -420,6 +427,7 @@ export type OpenLayoutCommandDeps = {
   setCachedWorkspace(documentPath: string, workspace: WorkspaceState): HostStateSnapshot;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
   recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
+  recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
   logDebug?(message: string, details?: unknown): void;
   showError(message: string): void;
@@ -432,6 +440,7 @@ export type SaveLayoutCommandDeps = {
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
+  resolveLayoutXDatasetPathMap?(layoutUri: string): LayoutPlotXDatasetPathMap | undefined;
   writeTextFile(filePath: string, text: string): void;
   showError(message: string): void;
   showInformation(message: string): void;
@@ -453,10 +462,12 @@ export type SaveLayoutAsCommandDeps = {
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
+  resolveLayoutXDatasetPathMap?(layoutUri: string): LayoutPlotXDatasetPathMap | undefined;
   showSaveDialog(defaultPath: string): Promise<string | undefined>;
   writeTextFile(filePath: string, text: string): void;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
   recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
+  recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
   showError(message: string): void;
   showInformation(message: string): void;
 };
@@ -467,6 +478,7 @@ export type ExportFrozenBundleCommandDeps = {
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
+  resolveLayoutXDatasetPathMap?(layoutUri: string): LayoutPlotXDatasetPathMap | undefined;
   showSaveDialog(defaultPath: string): Promise<string | undefined>;
   writeTextFile(filePath: string, text: string): void;
   showError(message: string): void;

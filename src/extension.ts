@@ -53,6 +53,7 @@ import {
 import type { WorkspaceState } from "./webview/state/workspaceState";
 import type {
   LayoutAxisLaneIdMap,
+  LayoutPlotXDatasetPathMap,
   LayoutAutosaveController,
   LayoutAutosaveControllerDeps,
   LayoutAutosavePersistInput,
@@ -143,13 +144,15 @@ export function toDeterministicLayoutYaml(
   datasetPath: string,
   workspace: WorkspaceState,
   layoutUri?: string,
-  laneIdByAxisIdByPlotId?: LayoutAxisLaneIdMap
+  laneIdByAxisIdByPlotId?: LayoutAxisLaneIdMap,
+  xDatasetPathByPlotId?: LayoutPlotXDatasetPathMap
 ): string {
   const yamlText = exportPlotSpecV1({
     datasetPath,
     workspace,
     specPath: layoutUri,
-    laneIdByAxisIdByPlotId
+    laneIdByAxisIdByPlotId,
+    xDatasetPathByPlotId
   });
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
 }
@@ -230,7 +233,8 @@ export function createLayoutAutosaveController(
         datasetPath: snapshot.datasetPath,
         workspace: snapshot.workspace,
         revision: snapshot.revision,
-        laneIdByAxisIdByPlotId: binding.laneIdByAxisIdByPlotId
+        laneIdByAxisIdByPlotId: binding.laneIdByAxisIdByPlotId,
+        xDatasetPathByPlotId: binding.xDatasetPathByPlotId
       };
       const timer = setTimeout(() => flushDatasetPath(snapshot.datasetPath), debounceMs);
       pendingByDatasetPath.set(snapshot.datasetPath, { timer, payload });
@@ -355,6 +359,7 @@ export function createLayoutExternalEditController(
         );
         const snapshot = deps.applyImportedWorkspace(datasetPath, hydratedReplay.workspace);
         deps.recordLayoutAxisLaneIdMap?.(layoutUri, imported.laneIdByAxisIdByPlotId);
+        deps.recordLayoutXDatasetPathMap?.(layoutUri, imported.xDatasetPathByPlotId);
         patchByDatasetPath.set(datasetPath, {
           revision: snapshot.revision,
           workspace: snapshot.workspace,
@@ -484,6 +489,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const hostStateStore = createHostStateStore();
   const viewerSessions = createViewerSessionRegistry();
   const layoutLaneIdsByLayoutUri = new Map<string, LayoutAxisLaneIdMap>();
+  const layoutXDatasetPathByPlotIdByLayoutUri = new Map<string, LayoutPlotXDatasetPathMap>();
   const layoutAutosave = createLayoutAutosaveController({
     resolveLayoutBinding: (datasetPath) => {
       const target = viewerSessions.resolveTargetViewerSession(datasetPath);
@@ -496,7 +502,8 @@ export function activate(context: VSCode.ExtensionContext): void {
       }
       return {
         layoutUri: sessionContext.layoutUri,
-        laneIdByAxisIdByPlotId: layoutLaneIdsByLayoutUri.get(sessionContext.layoutUri)
+        laneIdByAxisIdByPlotId: layoutLaneIdsByLayoutUri.get(sessionContext.layoutUri),
+        xDatasetPathByPlotId: layoutXDatasetPathByPlotIdByLayoutUri.get(sessionContext.layoutUri)
       };
     },
     persistLayout: (input) =>
@@ -506,7 +513,8 @@ export function activate(context: VSCode.ExtensionContext): void {
           input.datasetPath,
           input.workspace,
           input.layoutUri,
-          input.laneIdByAxisIdByPlotId
+          input.laneIdByAxisIdByPlotId,
+          input.xDatasetPathByPlotId
         ),
         input.revision
       ),
@@ -610,6 +618,9 @@ export function activate(context: VSCode.ExtensionContext): void {
       hostStateStore.setWorkspace(datasetPath, workspace),
     recordLayoutAxisLaneIdMap: (layoutUri, mapping) => {
       layoutLaneIdsByLayoutUri.set(layoutUri, mapping);
+    },
+    recordLayoutXDatasetPathMap: (layoutUri, mapping) => {
+      layoutXDatasetPathByPlotIdByLayoutUri.set(layoutUri, mapping);
     },
     getLastSelfWriteMetadata: (layoutUri) => layoutAutosave.getLastSelfWriteMetadata(layoutUri),
     showError: (message) => {
@@ -831,6 +842,8 @@ export function activate(context: VSCode.ExtensionContext): void {
     loadDataset,
     getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     resolveLayoutAxisLaneIdMap: (layoutUri) => layoutLaneIdsByLayoutUri.get(layoutUri),
+    resolveLayoutXDatasetPathMap: (layoutUri) =>
+      layoutXDatasetPathByPlotIdByLayoutUri.get(layoutUri),
     showSaveDialog: async (defaultPath) => {
       const defaultUri = vscode.Uri.file(defaultPath);
       const result = await vscode.window.showSaveDialog({
@@ -870,6 +883,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     recordLayoutAxisLaneIdMap: (layoutUri, mapping) => {
       layoutLaneIdsByLayoutUri.set(layoutUri, mapping);
     },
+    recordLayoutXDatasetPathMap: (layoutUri, mapping) => {
+      layoutXDatasetPathByPlotIdByLayoutUri.set(layoutUri, mapping);
+    },
     getPanelForViewer: (viewerId) => viewerSessions.getPanelForViewer(viewerId),
     logDebug: (message, details) => {
       console.debug(`[wave-viewer] ${message}`, details);
@@ -888,6 +904,8 @@ export function activate(context: VSCode.ExtensionContext): void {
     loadDataset,
     getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
     resolveLayoutAxisLaneIdMap: (layoutUri) => layoutLaneIdsByLayoutUri.get(layoutUri),
+    resolveLayoutXDatasetPathMap: (layoutUri) =>
+      layoutXDatasetPathByPlotIdByLayoutUri.get(layoutUri),
     showSaveDialog: async (defaultPath) => {
       const defaultUri = vscode.Uri.file(defaultPath);
       const result = await vscode.window.showSaveDialog({
@@ -902,6 +920,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     bindViewerToLayout,
     recordLayoutAxisLaneIdMap: (layoutUri, mapping) => {
       layoutLaneIdsByLayoutUri.set(layoutUri, mapping);
+    },
+    recordLayoutXDatasetPathMap: (layoutUri, mapping) => {
+      layoutXDatasetPathByPlotIdByLayoutUri.set(layoutUri, mapping);
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);

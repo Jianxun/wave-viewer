@@ -6,18 +6,23 @@ import { importPlotSpecV1, readPlotSpecDatasetPathV1 } from "../../../../src/cor
 function createSpecYaml(datasetPath: string): string {
   return [
     "version: 2",
-    "dataset:",
-    `  path: ${datasetPath}`,
+    "datasets:",
+    "  - id: run-a",
+    `    path: ${datasetPath}`,
     "active_plot: plot-1",
+    "active_dataset: run-a",
     "plots:",
     "  - id: plot-1",
     "    name: Plot 1",
     "    x:",
+    "      dataset: run-a",
     "      signal: time",
     "    y:",
     "      - id: lane-main",
     "        signals:",
-    "          trace-1: vin"
+    "          trace-1:",
+    "            dataset: run-a",
+    "            signal: vin"
   ].join("\n");
 }
 
@@ -36,10 +41,14 @@ describe("T-050 import spec v2 path resolution", () => {
       {
         id: "trace-1",
         signal: "vin",
+        sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
         axisId: "y1",
         visible: true
       }
     ]);
+    expect(parsed.xDatasetPathByPlotId).toEqual({
+      "plot-1": "/workspace/examples/simulations/ota.spice.csv"
+    });
   });
 
   it("resolves relative dataset.path against layout file location", () => {
@@ -78,8 +87,8 @@ describe("T-050 import spec v2 path resolution", () => {
   it("rejects unsupported v1 specs", () => {
     const yamlText = [
       "version: 1",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "datasets: []",
+      "active_dataset: run-a",
       "active_plot: plot-1",
       "plots: []"
     ].join("\n");
@@ -96,13 +105,16 @@ describe("T-050 import spec v2 path resolution", () => {
     const yamlText = [
       "version: 2",
       "mode: portable",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
       "active_plot: plot-1",
       "plots:",
       "  - id: plot-1",
       "    name: Plot 1",
       "    x:",
+      "      dataset: run-a",
       "      signal: time",
       "    y:",
       "      - id: lane-main",
@@ -115,5 +127,106 @@ describe("T-050 import spec v2 path resolution", () => {
         availableSignals: ["time"]
       })
     ).toThrow("Plot spec mode is not supported in v2 layout schema.");
+  });
+
+  it("rejects legacy single-dataset v2 payloads", () => {
+    const yamlText = [
+      "version: 2",
+      "dataset:",
+      "  path: /workspace/examples/simulations/ota.spice.csv",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      signal: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-1: vin"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time", "vin"]
+      })
+    ).toThrow("Plot spec datasets must be a non-empty array.");
+  });
+
+  it("keeps per-plot x.dataset identity for export replay", () => {
+    const yamlText = [
+      "version: 2",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/run-a.csv",
+      "  - id: run-b",
+      "    path: /workspace/examples/run-b.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-b",
+      "      signal: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-a:",
+      "            dataset: run-a",
+      "            signal: vin"
+    ].join("\n");
+
+    const parsed = importPlotSpecV1({
+      yamlText,
+      availableSignals: {
+        "run-a": ["vin"],
+        "run-b": ["time"]
+      }
+    });
+
+    expect(parsed.datasetPath).toBe("/workspace/examples/run-a.csv");
+    expect(parsed.xDatasetPathByPlotId).toEqual({
+      "plot-1": "/workspace/examples/run-b.csv"
+    });
+  });
+
+  it("validates signals against dataset-specific availability maps", () => {
+    const yamlText = [
+      "version: 2",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/run-a.csv",
+      "  - id: run-b",
+      "    path: /workspace/examples/run-b.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-b",
+      "      signal: time_b",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-a:",
+      "            dataset: run-a",
+      "            signal: vin_a",
+      "          trace-b:",
+      "            dataset: run-b",
+      "            signal: vin_b"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: {
+          "run-a": ["vin_a"],
+          "run-b": ["time_b", "vin_b"]
+        }
+      })
+    ).not.toThrow();
   });
 });
