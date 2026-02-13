@@ -1134,6 +1134,123 @@ describe("T-048 external layout edit reloads", () => {
     controller.dispose();
   });
 
+  it("rehydrates tuples when external layout edits keep traces but change axis assignment", () => {
+    const panelFixture = createPanelFixture();
+    const readTextFile = vi.fn(() =>
+      [
+        "version: 1",
+        "mode: reference-only",
+        "dataset:",
+        "  path: /workspace/examples/simulations/ota.spice.csv",
+        "workspace:",
+        "  activePlotId: plot-1",
+        "  plots:",
+        "    - id: plot-1",
+        "      name: Plot 1",
+        "      xSignal: time",
+        "      axes:",
+        "        - id: y1",
+        "        - id: y2",
+        "      traces:",
+        "        - id: trace-1",
+        "          signal: vin",
+        "          axisId: y2",
+        "          visible: true"
+      ].join("\n")
+    );
+    const loadDataset = vi.fn(() => createLoadedDatasetFixture());
+    const applyImportedWorkspace = vi.fn((datasetPath: string, workspace: WorkspaceState) => ({
+      workspace,
+      revision: 8,
+      viewerState: {
+        activePlotId: workspace.activePlotId,
+        activeAxisByPlotId: { "plot-1": "y1" as const }
+      },
+      datasetPath
+    }));
+    let watchedHandler: (() => void) | undefined;
+    const controller = createLayoutExternalEditController({
+      debounceMs: 0,
+      watchLayout: (_layoutUri, onChange) => {
+        watchedHandler = onChange;
+        return { dispose: () => undefined };
+      },
+      readTextFile,
+      readFileStats: () => ({ mtimeMs: 1200, sizeBytes: 1024 }),
+      resolveBindingsForLayout: () => [
+        {
+          viewerId: "viewer-1",
+          datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+          panel: panelFixture.panel
+        }
+      ],
+      loadDataset,
+      applyImportedWorkspace,
+      getLastSelfWriteMetadata: () => undefined,
+      showError: vi.fn()
+    });
+    controller.watchLayout("/workspace/layouts/lab.wave-viewer.yaml");
+
+    watchedHandler?.();
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/tupleUpsert",
+        payload: {
+          tuples: [
+            {
+              traceId: "trace-1",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+              datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+              xName: "time",
+              yName: "vin",
+              x: [0, 1, 2],
+              y: [1, 2, 3]
+            }
+          ]
+        }
+      },
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 8,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                axes: [{ id: "y1" }, { id: "y2" }],
+                traces: [
+                  {
+                    id: "trace-1",
+                    signal: "vin",
+                    axisId: "y2",
+                    visible: true,
+                    sourceId: "/workspace/examples/simulations/ota.spice.csv::vin"
+                  }
+                ],
+                nextAxisNumber: 3
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: { "plot-1": "y1" as const }
+          },
+          reason: "layoutExternalEdit:file-watch"
+        }
+      }
+    ]);
+
+    expect(loadDataset).toHaveBeenCalledTimes(1);
+    expect(applyImportedWorkspace).toHaveBeenCalledTimes(1);
+    controller.dispose();
+  });
+
   it("suppresses watcher reload for known self-written layout content", () => {
     const panelFixture = createPanelFixture();
     const yamlText = createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv");

@@ -152,23 +152,62 @@ type WorkspaceState = {
 Capture enough state so importing the YAML reproduces the same plot workspace from the same dataset.
 
 ### 7.2 Spec Requirements
+- Supported schema is `version: 2` only (MVP clean refactor).
 - Include:
-  - version
-  - dataset path reference (absolute or layout-relative)
-  - plots, axes, traces, x-signal, ranges, visibility, order
+  - `version`
+  - `dataset.path` reference (absolute or layout-relative)
+  - `active_plot`
+  - `plots[]` with per-plot `x` config:
+    - required `x.signal`
+    - optional `x.label`
+    - optional `x.range`
+  - `plots[].y[]` lane groups with:
+    - required lane `id` (human-editable)
+    - optional lane `label`, `scale`, `range`
+    - `signals` map (`label -> dataset signal`)
 - Exclude:
   - transient UI-only state not affecting rendered output.
-- Explicit `*.wave-viewer.yaml` files are the primary persistence artifact.
-- Compatibility fallback remains supported for `<csv>.wave-viewer.yaml` sidecar identity when no explicit layout is bound.
+  - `mode` field (not part of v2 schema).
+  - per-trace `visible` field (import defaults to visible).
+- Explicit `*.wave-viewer.yaml` files are the primary interactive persistence artifact.
+- `<csv>.wave-viewer.yaml` fallback identity remains supported when no explicit layout is bound.
 - When a layout file and CSV are colocated, exports should prefer relative dataset references (for example `./trace.csv`) to reduce machine-specific path coupling.
+- Frozen/exportable snapshots are produced as separate artifacts:
+  - `<name>.frozen.csv`
+  - `<name>.frozen.wave-viewer.yaml` (same v2 schema, referencing frozen CSV)
+  - Frozen export must not rebind or overwrite the active interactive layout file.
+
+Example:
+```yaml
+version: 2
+dataset:
+  path: ./tb.spice.csv
+active_plot: plot-1
+plots:
+  - id: plot-1
+    name: Inverter Chain Transient
+    x:
+      signal: TIME
+      label: Time (s)
+    y:
+      - id: lane-io
+        label: Voltage (V)
+        signals:
+          V_IN: V(IN)
+          V_OUT: V(OUT)
+      - id: lane-a
+        signals:
+          V_A: V(A)
+```
 
 ### 7.3 Determinism Guarantees
 - Given identical CSV and YAML spec, reconstructed workspace must match:
   - plot/tab structure
-  - axis definitions and assignment
-  - trace order and visibility
+  - lane definitions and assignment
+  - trace order (visibility defaults to `true` on import)
   - x/y ranges when provided
 - Missing referenced signals must produce explicit errors listing missing names and affected plots.
+- Lane IDs are user-facing identifiers; host/runtime maps lanes deterministically to internal canonical axes (`y1..yN`) by per-plot lane order for rendering.
 
 ## 8. Initial Quality Gates
 

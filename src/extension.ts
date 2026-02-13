@@ -24,6 +24,7 @@ import {
 } from "./extension/signalTree";
 import {
   createNoTargetViewerWarning,
+  hydrateWorkspaceReplayPayload,
   resolveSidePanelSelection,
   runResolvedSidePanelQuickAdd,
   runResolvedSidePanelSignalAction
@@ -314,11 +315,15 @@ export function createLayoutExternalEditController(
       {
         revision: number;
         workspace: WorkspaceState;
+        tracePayloads: Extract<
+          HostToWebviewMessage,
+          { type: "host/tupleUpsert" }
+        >["payload"]["tuples"];
         viewerState: { activePlotId: string; activeAxisByPlotId: Record<string, `y${number}`> };
       }
     >();
 
-    for (const [datasetPath] of uniqueByDatasetPath.entries()) {
+    for (const [datasetPath, hydrationBinding] of uniqueByDatasetPath.entries()) {
       try {
         const loaded = deps.loadDataset(datasetPath);
         const imported = importPlotSpecV1({
@@ -331,10 +336,18 @@ export function createLayoutExternalEditController(
             `Wave Viewer reference-only spec points to '${imported.datasetPath}', but bound dataset is '${datasetPath}'.`
           );
         }
-        const snapshot = deps.applyImportedWorkspace(datasetPath, imported.workspace);
+        const hydratedReplay = hydrateWorkspaceReplayPayload(
+          hydrationBinding.viewerId,
+          datasetPath,
+          loaded,
+          imported.workspace,
+          deps.logDebug
+        );
+        const snapshot = deps.applyImportedWorkspace(datasetPath, hydratedReplay.workspace);
         patchByDatasetPath.set(datasetPath, {
           revision: snapshot.revision,
           workspace: snapshot.workspace,
+          tracePayloads: hydratedReplay.tracePayloads,
           viewerState: snapshot.viewerState
         });
       } catch (error) {
@@ -349,6 +362,13 @@ export function createLayoutExternalEditController(
       const patch = patchByDatasetPath.get(binding.datasetPath);
       if (!patch) {
         continue;
+      }
+      if (patch.tracePayloads.length > 0) {
+        void binding.panel.webview.postMessage(
+          createProtocolEnvelope("host/tupleUpsert", {
+            tuples: patch.tracePayloads
+          })
+        );
       }
       void binding.panel.webview.postMessage(
         createProtocolEnvelope("host/statePatch", {

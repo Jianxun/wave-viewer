@@ -12,12 +12,13 @@ Active ADRs:
 - `ADR-0004`: Host-webview protocol is explicitly typed, versioned, and runtime-validated.
 - `ADR-0005`: MVP keeps command-opened webview surface; custom editor migration is deferred until side-panel workflow stabilization.
 - `ADR-0006`: Host sends explicit `(x, y)` trace tuples using inline arrays for MVP; viewer does not infer default X from dataset columns.
-- `ADR-0007`: Spec persistence supports two modes: `reference-only` and `portable-archive`.
 - `ADR-0008`: Cross-dataset trace mixing on axes/lanes is allowed in MVP; user owns semantic consistency.
 - `ADR-0009` (Proposed): Host-authoritative workspace and viewer interaction state (single writer).
 - `ADR-0010` (Proposed): Revisioned intent-based host/webview protocol.
 - `ADR-0011` (Proposed): Active-axis default targeting and post-new-axis activation rules.
 - `ADR-0012`: Explicit layout artifact (`*.wave-viewer.yaml`) is primary persistence identity; YAML IO is host-managed with sidecar fallback.
+- `ADR-0013`: Layout YAML schema is `version: 2` only in MVP, with human-editable plot/lane structure and no `mode` field.
+- `ADR-0014`: Frozen export uses separate artifact pairs (`*.frozen.csv` + `*.frozen.wave-viewer.yaml`) and supersedes dual persistence modes.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -49,6 +50,17 @@ Active ADRs:
     - `axes: AxisState[]` where axis ids are `y1`, `y2`, `y3`, ...
     - `traces: TraceState[]` where each trace instance references one `axisId`
   - Same signal MAY appear in multiple trace instances across different axes.
+- Layout YAML contract (MVP):
+  - Only `version: 2` is supported for import/export.
+  - `mode` field is not part of the schema.
+  - Layout uses:
+    - `dataset.path`
+    - `active_plot`
+    - `plots[]` with per-plot `x.signal`, optional `x.label`, optional `x.range`
+    - `plots[].y[]` lanes with required user-facing `id`, optional `label`/`scale`/`range`, and `signals` map (`label -> dataset signal`)
+  - Layout does not persist trace visibility; import defaults all traces to `visible: true`.
+  - Friendly lane IDs are mapped to internal canonical axis IDs (`y1..yN`) by per-plot lane order.
+  - Importing non-v2 schema must fail with actionable errors.
 - Host/webview protocol:
   - Envelope requires `{ version, type, payload }`.
   - Webview emits intent messages only; host emits authoritative revisioned state.
@@ -88,6 +100,8 @@ Active ADRs:
 - MUST use active axis as default target for side-panel `Add to Plot` and explorer quick-add operations.
 - MUST keep exported YAML deterministic for rendered state (tab/trace/axis order and assignments).
 - MUST fail clearly when importing a YAML spec that references missing signals.
+- MUST treat MVP layout schema as `version: 2` only and reject unsupported versions.
+- MUST keep frozen export separate from active interactive layout persistence.
 
 ## Verification protocol
 - Context/schema consistency:
@@ -106,12 +120,13 @@ Active ADRs:
 - 2026-02-11: Plotly selected as mandatory plotting engine for waveform rendering due to mature interaction tooling and rapid webview integration.
 - 2026-02-11: MVP scope constrained to local CSV ingestion and in-editor visualization only; remote data connectors deferred.
 - 2026-02-12: Tuple-based trace payload contract accepted; host sends explicit `(x, y)` inline arrays for MVP and viewer does not infer X from dataset headers (ADR-0006).
-- 2026-02-12: Spec persistence split into `reference-only` and `portable-archive` modes to support rerun and archival workflows (ADR-0007).
 - 2026-02-12: Cross-dataset axis mixing is allowed in MVP; semantic consistency responsibility remains with user (ADR-0008).
 - 2026-02-12: Explicit layout files (`*.wave-viewer.yaml`) adopted as primary persistence artifact with host-managed YAML IO and `<csv>.wave-viewer.yaml` compatibility fallback (ADR-0012).
 - 2026-02-12: Proposed host-authoritative state ownership (single writer) to eliminate host/webview dual-write races; pending ADR-0009 acceptance.
 - 2026-02-12: Proposed revisioned intent-only protocol (`webview/intent/*`, host revision gating) for deterministic sync and stale-message rejection; pending ADR-0010 acceptance.
 - 2026-02-12: Proposed active-axis semantics where `Add to Plot` targets active axis and `Add to New Axis` activates the newly created axis; pending ADR-0011 acceptance.
+- 2026-02-13: Adopted layout schema `version: 2` as MVP-only persistence contract with per-plot `x` and lane-grouped signals, removing `mode` from schema and dropping v1 compatibility (ADR-0013).
+- 2026-02-13: Superseded dual-mode spec persistence with separate frozen bundle artifacts (`*.frozen.csv` + `*.frozen.wave-viewer.yaml`) to preserve interactive layout flow (ADR-0014, supersedes ADR-0007).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.
