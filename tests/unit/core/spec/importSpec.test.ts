@@ -1,7 +1,11 @@
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { importPlotSpecV1, readPlotSpecDatasetPathV1 } from "../../../../src/core/spec/importSpec";
+import {
+  importPlotSpecV1,
+  readPlotSpecDatasetPathV1,
+  readPlotSpecDatasetsV1
+} from "../../../../src/core/spec/importSpec";
 
 function createSpecYaml(datasetPath: string): string {
   return [
@@ -82,6 +86,37 @@ describe("T-050 import spec v2 path resolution", () => {
     expect(readPlotSpecDatasetPathV1(yamlText, layoutPath)).toBe(
       path.resolve("/workspace/layouts/ota.spice.csv")
     );
+  });
+
+  it("reads all dataset references for dataset-qualified signal validation", () => {
+    const layoutPath = path.resolve("/workspace/layouts/lab.wave-viewer.yaml");
+    const yamlText = [
+      "version: 2",
+      "datasets:",
+      "  - id: run-a",
+      "    path: ../examples/run-a.csv",
+      "  - id: run-b",
+      "    path: ../examples/run-b.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-a",
+      "      signal: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-b:",
+      "            dataset: run-b",
+      "            signal: ib"
+    ].join("\n");
+
+    expect(readPlotSpecDatasetsV1(yamlText, layoutPath)).toEqual([
+      { id: "run-a", path: path.resolve("/workspace/examples/run-a.csv") },
+      { id: "run-b", path: path.resolve("/workspace/examples/run-b.csv") }
+    ]);
   });
 
   it("rejects unsupported v1 specs", () => {

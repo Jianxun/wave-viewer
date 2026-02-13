@@ -281,6 +281,34 @@ function createMultiDatasetSpecYaml(primaryDatasetPath: string, secondaryDataset
   ].join("\n");
 }
 
+function createDatasetQualifiedReplaySpecYaml(
+  primaryDatasetPath: string,
+  secondaryDatasetPath: string
+): string {
+  return [
+    "version: 2",
+    "datasets:",
+    "  - id: ds-a",
+    `    path: ${primaryDatasetPath}`,
+    "  - id: ds-b",
+    `    path: ${secondaryDatasetPath}`,
+    "active_dataset: ds-a",
+    "active_plot: plot-1",
+    "plots:",
+    "  - id: plot-1",
+    "    name: Plot 1",
+    "    x:",
+    "      dataset: ds-a",
+    "      signal: time",
+    "    y:",
+    "      - id: lane-main",
+    "        signals:",
+    "          ib-trace:",
+    "            dataset: ds-b",
+    "            signal: ib"
+  ].join("\n");
+}
+
 describe("T-002 extension shell smoke", () => {
   it("allows data/blob image sources in webview CSP for Plotly PNG export", () => {
     const template = fs.readFileSync(
@@ -989,6 +1017,78 @@ describe("T-046 explicit layout commands", () => {
         columns: [{ name: "time", values: [0, 1, 2] }, { name: "vin", values: [1, 2, 3] }]
       },
       defaultXSignal: "time"
+    });
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer layout opened from /workspace/layouts/lab.wave-viewer.yaml"
+    );
+  });
+
+  it("replays dataset-qualified tuples when opening a multi-dataset layout", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const panelFixture = createPanelFixture();
+    const command = createOpenLayoutCommand({
+      getActiveViewerId: () => "viewer-7",
+      showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
+      readTextFile: () =>
+        createDatasetQualifiedReplaySpecYaml(
+          "/workspace/examples/run-a.csv",
+          "/workspace/examples/run-b.csv"
+        ),
+      loadDataset: (documentPath) => {
+        if (documentPath === "/workspace/examples/run-b.csv") {
+          return {
+            dataset: {
+              path: documentPath,
+              rowCount: 3,
+              columns: [
+                { name: "frequency", values: [10, 100, 1000] },
+                { name: "ib", values: [0.3, 0.2, 0.1] }
+              ]
+            },
+            defaultXSignal: "frequency"
+          };
+        }
+        return {
+          dataset: {
+            path: documentPath,
+            rowCount: 3,
+            columns: [
+              { name: "time", values: [0, 1, 2] },
+              { name: "vin", values: [1, 2, 3] }
+            ]
+          },
+          defaultXSignal: "time"
+        };
+      },
+      setCachedWorkspace: vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+        workspace,
+        revision: 0,
+        viewerState: {
+          activePlotId: workspace.activePlotId,
+          activeAxisByPlotId: { "plot-1": "y1" as const }
+        }
+      })),
+      bindViewerToLayout: vi.fn(),
+      getPanelForViewer: () => panelFixture.panel,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    const tupleMessage = panelFixture.sentMessages.find(
+      (message) => message.type === "host/tupleUpsert"
+    );
+    expect(tupleMessage).toBeDefined();
+    expect(tupleMessage?.payload.tuples[0]).toMatchObject({
+      sourceId: "/workspace/examples/run-b.csv::ib",
+      datasetPath: "/workspace/examples/run-b.csv",
+      xName: "frequency",
+      x: [10, 100, 1000],
+      yName: "ib",
+      y: [0.3, 0.2, 0.1]
     });
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer layout opened from /workspace/layouts/lab.wave-viewer.yaml"
@@ -3776,6 +3876,15 @@ describe("T-042 multi-plot quick-add targeting", () => {
     const source = fs.readFileSync(path.resolve("src/extension.ts"), "utf8");
 
     expect(source).toContain("sourceId: toTraceSourceId(selection.documentPath, selection.signal)");
+  });
+
+  it("ensures no-active-viewer side-panel commands auto-open a viewer target before dispatch", () => {
+    const source = fs.readFileSync(path.resolve("src/extension.ts"), "utf8");
+
+    expect(source).toContain("if (!viewerSessions.resolveTargetViewerSession(selection.documentPath)) {");
+    expect(source).toContain("await ensureViewerTargetForDataset(selection.documentPath);");
+    expect(source).toContain('runSidePanelSignalAction("add-to-plot")');
+    expect(source).toContain('runSidePanelSignalAction("add-to-new-axis")');
   });
 });
 
