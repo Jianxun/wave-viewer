@@ -66,6 +66,19 @@ export function readPlotSpecDatasetPathV1(yamlText: string, specPath?: string): 
   return datasetPathById[spec.active_dataset];
 }
 
+export function readPlotSpecDatasetsV1(
+  yamlText: string,
+  specPath?: string
+): Array<{ id: string; path: string }> {
+  const parsed = parseYaml(yamlText);
+  const spec = validateSpecShape(parsed);
+  const datasetPathById = resolveDatasetPathById(spec.datasets, specPath);
+  return spec.datasets.map((dataset) => ({
+    id: dataset.id,
+    path: datasetPathById[dataset.id]
+  }));
+}
+
 function parseYaml(yamlText: string): unknown {
   try {
     return parse(yamlText);

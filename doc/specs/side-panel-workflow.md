@@ -24,8 +24,11 @@ Define the normative side-panel-first interaction model for signal discovery, qu
   - Creates one axis and appends one trace instance bound to that new axis in the resolved target viewer.
   - Newly created axis becomes the active axis for the plot.
   - If no eligible target viewer exists, host opens a new viewer and applies the action.
+
+## Optional follow-up action
 - `Reveal in Plot`
-  - Focuses plot tab and highlights existing trace instances for the selected signal when present.
+  - May focus plot tab and highlight existing trace instances for the selected signal when present.
+  - Not required for MVP command parity.
 
 ## Drag/drop contract
 - Drag source is a signal tree item.

@@ -2,7 +2,11 @@ import * as path from "node:path";
 
 import { serializeDatasetToCsv } from "../core/csv/parseCsv";
 import { exportPlotSpecV1 } from "../core/spec/exportSpec";
-import { importPlotSpecV1, readPlotSpecDatasetPathV1 } from "../core/spec/importSpec";
+import {
+  importPlotSpecV1,
+  readPlotSpecDatasetPathV1,
+  readPlotSpecDatasetsV1
+} from "../core/spec/importSpec";
 import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from "../core/dataset/types";
 import { reduceWorkspaceState } from "../webview/state/reducer";
 import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
@@ -859,12 +863,23 @@ export function createLoadCsvFilesCommand(deps: LoadCsvFilesCommandDeps): () => 
 
         if (hasExistingSidecar) {
           const yamlText = deps.readTextFile!(sidecarLayoutPath);
-          const datasetPath = readPlotSpecDatasetPathV1(yamlText, sidecarLayoutPath);
-          const sidecarDataset = deps.loadDataset(datasetPath);
-          deps.registerLoadedDataset(datasetPath, sidecarDataset);
+          const sidecarDatasets = readPlotSpecDatasetsV1(yamlText, sidecarLayoutPath);
+          const loadedByPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
+          const availableSignalsByDatasetId: Record<string, string[]> = {};
+          for (const sidecarDataset of sidecarDatasets) {
+            let loadedSidecarDataset = loadedByPath.get(sidecarDataset.path);
+            if (!loadedSidecarDataset) {
+              loadedSidecarDataset = deps.loadDataset(sidecarDataset.path);
+              loadedByPath.set(sidecarDataset.path, loadedSidecarDataset);
+              deps.registerLoadedDataset(sidecarDataset.path, loadedSidecarDataset);
+            }
+            availableSignalsByDatasetId[sidecarDataset.id] = loadedSidecarDataset.dataset.columns.map(
+              (column) => column.name
+            );
+          }
           const imported = importPlotSpecV1({
             yamlText,
-            availableSignals: sidecarDataset.dataset.columns.map((column) => column.name),
+            availableSignals: availableSignalsByDatasetId,
             specPath: sidecarLayoutPath
           });
           workspace = imported.workspace;
@@ -1044,13 +1059,27 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
     let parsed: ReturnType<typeof importPlotSpecV1>;
     let activeViewerId = deps.getActiveViewerId();
     let loadedDataset: { dataset: Dataset; defaultXSignal: string };
+    const loadedDatasetByPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
     try {
       const yamlText = deps.readTextFile(layoutPath);
       const datasetPath = readPlotSpecDatasetPathV1(yamlText, layoutPath);
-      loadedDataset = deps.loadDataset(datasetPath);
+      const referencedDatasets = readPlotSpecDatasetsV1(yamlText, layoutPath);
+      const availableSignalsByDatasetId: Record<string, string[]> = {};
+      for (const referencedDataset of referencedDatasets) {
+        let loadedReferencedDataset = loadedDatasetByPath.get(referencedDataset.path);
+        if (!loadedReferencedDataset) {
+          loadedReferencedDataset = deps.loadDataset(referencedDataset.path);
+          loadedDatasetByPath.set(referencedDataset.path, loadedReferencedDataset);
+        }
+        availableSignalsByDatasetId[referencedDataset.id] = loadedReferencedDataset.dataset.columns.map(
+          (column) => column.name
+        );
+      }
+      loadedDataset = loadedDatasetByPath.get(datasetPath) ?? deps.loadDataset(datasetPath);
+      loadedDatasetByPath.set(datasetPath, loadedDataset);
       parsed = importPlotSpecV1({
         yamlText,
-        availableSignals: loadedDataset.dataset.columns.map((column) => column.name),
+        availableSignals: availableSignalsByDatasetId,
         specPath: layoutPath
       });
 
@@ -1061,9 +1090,8 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
       );
       for (const referencedDatasetPath of referencedDatasetPaths) {
         const loadedReferencedDataset =
-          referencedDatasetPath === parsed.datasetPath
-            ? loadedDataset
-            : deps.loadDataset(referencedDatasetPath);
+          loadedDatasetByPath.get(referencedDatasetPath) ?? deps.loadDataset(referencedDatasetPath);
+        loadedDatasetByPath.set(referencedDatasetPath, loadedReferencedDataset);
         deps.registerLoadedDataset?.(referencedDatasetPath, loadedReferencedDataset);
       }
     } catch (error) {
@@ -1084,7 +1112,8 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
       parsed.datasetPath,
       loadedDataset,
       parsed.workspace,
-      deps.logDebug
+      deps.logDebug,
+      (datasetPath) => loadedDatasetByPath.get(datasetPath)
     );
     const snapshot = deps.setCachedWorkspace(parsed.datasetPath, hydratedReplay.workspace);
     deps.recordLayoutAxisLaneIdMap?.(layoutPath, parsed.laneIdByAxisIdByPlotId);

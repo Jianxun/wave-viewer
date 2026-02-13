@@ -117,7 +117,8 @@ export function hydrateWorkspaceReplayPayload(
   documentPath: string,
   loadedDataset: LoadedDatasetRecord,
   workspace: WorkspaceState,
-  logDebug?: (message: string, details?: unknown) => void
+  logDebug?: (message: string, details?: unknown) => void,
+  resolveLoadedDataset?: (datasetPath: string) => LoadedDatasetRecord | undefined
 ): {
   workspace: WorkspaceState;
   tracePayloads: Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"];
@@ -134,11 +135,16 @@ export function hydrateWorkspaceReplayPayload(
       }
 
       if (!tracePayloadBySourceId.has(sourceId)) {
+        const sourceSeparatorIndex = sourceId.lastIndexOf("::");
+        const sourceDatasetPath =
+          sourceSeparatorIndex > 0 ? sourceId.slice(0, sourceSeparatorIndex) : undefined;
+        const traceDatasetPath = sourceDatasetPath ?? documentPath;
+        const traceDataset = resolveLoadedDataset?.(traceDatasetPath) ?? loadedDataset;
         try {
           const payload = createSidePanelTraceInjectedPayload(
             viewerId,
-            documentPath,
-            loadedDataset,
+            traceDatasetPath,
+            traceDataset,
             trace.signal,
             {
               traceId: trace.id,

@@ -75,9 +75,9 @@ Active ADRs:
   - Protocol rules are defined in `doc/specs/host-webview-protocol.md`.
 - User entry points:
   - VS Code command to open Wave Viewer webview (standalone launch allowed even without active CSV editor).
-  - Side-panel signal actions (add/reveal/new-axis) as primary signal workflow.
+  - Side-panel signal actions (`Add to Plot`, `Add to New Axis`) as primary signal workflow.
   - Webview plotting controls and lane drop targets.
-  - Export and import YAML spec for deterministic replay.
+  - Layout commands for deterministic replay (`Open Layout (YAML)`, `Save Layout As...`) plus frozen bundle export.
 - Spec references:
   - `doc/specs/wave-viewer-mvp.md`
   - `doc/specs/domain-stacked-shared-x-implementation.md`

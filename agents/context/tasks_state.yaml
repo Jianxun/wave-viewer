@@ -16,9 +16,9 @@ T-057:
   pr: 67
   merged: true
 T-058:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 68
+  merged: true
 T-059:
   status: ready
   pr: null
