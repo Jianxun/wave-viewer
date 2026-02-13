@@ -1,6 +1,6 @@
 schema_version: 2
 T-054:
-  status: ready_for_review
+  status: review_clean
   pr: 64
   merged: false
 T-055:
