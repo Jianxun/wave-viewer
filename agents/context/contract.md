@@ -18,7 +18,10 @@ Active ADRs:
 - `ADR-0011` (Proposed): Active-axis default targeting and post-new-axis activation rules.
 - `ADR-0012`: Explicit layout artifact (`*.wave-viewer.yaml`) is primary persistence identity; YAML IO is host-managed with sidecar fallback.
 - `ADR-0013`: Layout YAML schema is `version: 2` only in MVP, with human-editable plot/lane structure and no `mode` field.
-- `ADR-0014`: Frozen export uses separate artifact pairs (`*.frozen.csv` + `*.frozen.wave-viewer.yaml`) and supersedes dual persistence modes.
+- `ADR-0014`: Frozen export separates export artifacts from interactive layout persistence (superseded for artifact cardinality by ADR-0017).
+- `ADR-0015`: Layout YAML `version: 2` is multi-dataset-first (`datasets[]`, dataset-qualified x/y signals) with no backward compatibility path.
+- `ADR-0016`: Single explorer drives multiple live viewers through host-side deterministic routing and viewer auto-open semantics.
+- `ADR-0017`: Frozen export for multi-dataset workspaces emits one layout YAML plus one frozen CSV per dataset.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -41,23 +44,26 @@ Active ADRs:
     - `rowCount: number`
     - `columns: Array<{ name: string; values: number[] }>`
   - `WorkspaceState`:
+    - `datasets: Array<{ id: string; path: string }>`
+    - `activeDatasetId: string`
     - `activePlotId: string`
     - `plots: PlotState[]`
   - `PlotState`:
     - `id: string`
     - `name: string`
-    - `xSignal: string`
+    - `x: { datasetId: string; signal: string }`
     - `axes: AxisState[]` where axis ids are `y1`, `y2`, `y3`, ...
-    - `traces: TraceState[]` where each trace instance references one `axisId`
+    - `traces: TraceState[]` where each trace instance references one `axisId` and source `datasetId`
   - Same signal MAY appear in multiple trace instances across different axes.
 - Layout YAML contract (MVP):
   - Only `version: 2` is supported for import/export.
   - `mode` field is not part of the schema.
   - Layout uses:
-    - `dataset.path`
+    - `datasets[]` (`id`, `path`)
+    - `active_dataset`
     - `active_plot`
-    - `plots[]` with per-plot `x.signal`, optional `x.label`, optional `x.range`
-    - `plots[].y[]` lanes with required user-facing `id`, optional `label`/`scale`/`range`, and `signals` map (`label -> dataset signal`)
+    - `plots[]` with per-plot `x.dataset`, `x.signal`, optional `x.label`, optional `x.range`
+    - `plots[].y[]` lanes with required user-facing `id`, optional `label`/`scale`/`range`, and `signals` map (`label -> {dataset, signal}`)
   - Layout does not persist trace visibility; import defaults all traces to `visible: true`.
   - Friendly lane IDs are mapped to internal canonical axis IDs (`y1..yN`) by per-plot lane order.
   - Importing non-v2 schema must fail with actionable errors.
@@ -92,16 +98,21 @@ Active ADRs:
 - MUST render multiple Y axes in non-overlapping vertical domains (stacked lanes) within one figure.
 - MUST NOT rely on multi-canvas or cross-subplot sync mechanisms for shared X behavior.
 - MUST keep side-panel as primary signal discovery/action surface during migration and beyond.
+- MUST support one explorer controlling multiple live viewer sessions.
 - MUST keep side-panel command path, drag/drop path, and fallback in-webview path semantically equivalent at reducer level.
 - MUST enforce protocol envelope and runtime payload validation at host/webview boundaries.
 - MUST keep host as the single writer for workspace and viewer interaction state.
 - MUST NOT allow webview to overwrite authoritative workspace snapshots.
+- MUST keep trace identity dataset-qualified so same signal names from different datasets remain distinct.
 - MUST treat "add signal to new axis" as one atomic transaction that creates axis, appends trace, and activates the new axis.
 - MUST use active axis as default target for side-panel `Add to Plot` and explorer quick-add operations.
+- MUST auto-open a viewer for commands that require one when no eligible viewer exists.
+- MUST allow `Open Layout` to run without a pre-focused viewer by creating and binding a viewer session.
+- MUST register layout-referenced datasets into explorer loaded-dataset state on open/import.
 - MUST keep exported YAML deterministic for rendered state (tab/trace/axis order and assignments).
-- MUST fail clearly when importing a YAML spec that references missing signals.
+- MUST fail clearly when importing a YAML spec that references missing datasets or signals.
 - MUST treat MVP layout schema as `version: 2` only and reject unsupported versions.
-- MUST keep frozen export separate from active interactive layout persistence.
+- MUST keep frozen export separate from active interactive layout persistence and support one frozen CSV output per referenced dataset.
 
 ## Verification protocol
 - Context/schema consistency:
@@ -127,6 +138,9 @@ Active ADRs:
 - 2026-02-12: Proposed active-axis semantics where `Add to Plot` targets active axis and `Add to New Axis` activates the newly created axis; pending ADR-0011 acceptance.
 - 2026-02-13: Adopted layout schema `version: 2` as MVP-only persistence contract with per-plot `x` and lane-grouped signals, removing `mode` from schema and dropping v1 compatibility (ADR-0013).
 - 2026-02-13: Superseded dual-mode spec persistence with separate frozen bundle artifacts (`*.frozen.csv` + `*.frozen.wave-viewer.yaml`) to preserve interactive layout flow (ADR-0014, supersedes ADR-0007).
+- 2026-02-13: Redefined layout schema `version: 2` as multi-dataset-first (`datasets[]`, dataset-qualified x/y signals) with no backward-compatibility import path (ADR-0015).
+- 2026-02-13: Adopted single-explorer multi-viewer host routing with viewer auto-open behavior for viewer-dependent commands and layout-open flows (ADR-0016).
+- 2026-02-13: Superseded single-CSV frozen bundle cardinality with multi-dataset frozen artifact sets (one frozen CSV per dataset + one frozen layout), keeping export/session separation (ADR-0017 supersedes ADR-0014 artifact cardinality).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.
