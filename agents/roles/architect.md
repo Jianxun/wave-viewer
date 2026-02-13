@@ -129,6 +129,9 @@ Keep it concise. The goal is: a fresh Executor can pick up a task without reread
 - Every task branch must land via a GitHub PR reviewed by the Reviewer.
 - Architect review is required only for contract/ADR changes, cross-cutting architecture, or explicit user request.
 - Architect-authored updates to `agents/` and `docs/` still follow the branch workflow: work on a feature branch off `main` (or `workbench` if explicitly instructed) and merge to `main` via PR to satisfy the protection rules.
+- Default merge strategy is **not squash** when preserving commit ancestry helps concurrent Executor branches rebase cleanly.
+- Use squash merge only when the user explicitly requests squash or when no concurrent branch coordination risk exists.
+- If multiple Executor agents may be running in parallel, prefer merge/rebase strategies that retain commit lineage on `main`.
 
 ## Required structure for `agents/context/contract.md`
 
