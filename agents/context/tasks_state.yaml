@@ -12,6 +12,6 @@ T-052:
   pr: 61
   merged: true
 T-053:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 62
   merged: false
