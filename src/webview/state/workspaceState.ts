@@ -83,6 +83,24 @@ export function removePlot(state: WorkspaceState, payload: { plotId: string }): 
   };
 }
 
+export function clearActivePlot(
+  state: WorkspaceState,
+  payload: { plotId?: string } = {}
+): WorkspaceState {
+  const plotId = payload.plotId ?? state.activePlotId;
+  return withUpdatedPlot(state, plotId, (plot) => ({
+    ...plot,
+    axes: [{ id: "y1" }],
+    traces: [],
+    nextAxisNumber: 2
+  }));
+}
+
+export function clearLayout(state: WorkspaceState): WorkspaceState {
+  const activePlot = getActivePlot(state);
+  return createWorkspaceState(activePlot.xSignal);
+}
+
 export function renamePlot(
   state: WorkspaceState,
   payload: { plotId: string; name: string }

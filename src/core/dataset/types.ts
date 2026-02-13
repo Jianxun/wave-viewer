@@ -56,6 +56,7 @@ export type WebviewToHostMessageType =
   | "webview/intent/removeAxisAndTraces"
   | "webview/intent/setTraceVisible"
   | "webview/intent/removeTrace"
+  | "webview/intent/clearPlot"
   | "webview/intent/dropSignal"
   | "webview/intent/addSignalToActiveAxis"
   | "webview/intent/addSignalToNewAxis";
@@ -136,6 +137,10 @@ export type ParsedWebviewToHostMessage =
   | ProtocolEnvelope<
       "webview/intent/removeTrace",
       { viewerId: string; plotId: string; traceId: string; requestId: string }
+    >
+  | ProtocolEnvelope<
+      "webview/intent/clearPlot",
+      { viewerId: string; plotId: string; requestId: string }
     >
   | ProtocolEnvelope<
       "webview/intent/dropSignal",
@@ -269,6 +274,7 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/removeAxisAndTraces" ||
     type === "webview/intent/setTraceVisible" ||
     type === "webview/intent/removeTrace" ||
+    type === "webview/intent/clearPlot" ||
     type === "webview/intent/dropSignal" ||
     type === "webview/intent/addSignalToActiveAxis" ||
     type === "webview/intent/addSignalToNewAxis"
@@ -451,6 +457,14 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
       isNonEmptyString(payload.viewerId) &&
       isNonEmptyString(payload.plotId) &&
       isNonEmptyString(payload.traceId) &&
+      isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/clearPlot") {
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
       isNonEmptyString(payload.requestId)
     );
   }
