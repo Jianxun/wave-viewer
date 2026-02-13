@@ -215,6 +215,10 @@ export type ViewerSessionRoute = {
   bindDataset: boolean;
 };
 
+export type ResolveTargetViewerOptions = {
+  explicitViewerId?: string;
+};
+
 export type ViewerSessionContext = {
   datasetPath: string;
   layoutUri: string;
@@ -309,7 +313,10 @@ export type ViewerSessionRegistry = {
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
   markViewerFocused(viewerId: string): void;
   removeViewer(viewerId: string): void;
-  resolveTargetViewerSession(datasetPath: string): ViewerSessionRoute | undefined;
+  resolveTargetViewerSession(
+    datasetPath: string,
+    options?: ResolveTargetViewerOptions
+  ): ViewerSessionRoute | undefined;
   hasOpenPanelForDataset(datasetPath: string): boolean;
   getPanelForDataset(datasetPath: string): WebviewPanelLike | undefined;
   getActiveViewerId(): string | undefined;

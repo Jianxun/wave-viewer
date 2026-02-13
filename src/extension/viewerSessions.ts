@@ -165,7 +165,18 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
       }
       activeViewerId = pickMostRecentlyFocusedViewerId(viewerById.keys());
     },
-    resolveTargetViewerSession(datasetPath: string): ViewerSessionRoute | undefined {
+    resolveTargetViewerSession(datasetPath: string, options): ViewerSessionRoute | undefined {
+      if (options?.explicitViewerId) {
+        const explicitSession = getSession(options.explicitViewerId);
+        if (explicitSession) {
+          return {
+            viewerId: options.explicitViewerId,
+            panel: explicitSession.panel,
+            bindDataset: explicitSession.datasetPath !== datasetPath
+          };
+        }
+      }
+
       const activeSession = activeViewerId ? getSession(activeViewerId) : undefined;
       if (activeSession && activeViewerId && activeSession.datasetPath === datasetPath) {
         return { viewerId: activeViewerId, panel: activeSession.panel, bindDataset: false };
