@@ -43,11 +43,12 @@ export type ExportPlotSpecInput = {
   workspace: WorkspaceState;
   specPath?: string;
   laneIdByAxisIdByPlotId?: Record<string, Record<`y${number}`, string>>;
+  xDatasetPathByPlotId?: Record<string, string>;
 };
 
 export type ImportPlotSpecInput = {
   yamlText: string;
-  availableSignals: string[];
+  availableSignals: string[] | Record<string, string[]>;
   specPath?: string;
 };
 
@@ -55,6 +56,7 @@ export type ImportPlotSpecResult = {
   datasetPath: string;
   workspace: WorkspaceState;
   laneIdByAxisIdByPlotId: Record<string, Record<`y${number}`, string>>;
+  xDatasetPathByPlotId: Record<string, string>;
 };
 
 export class PlotSpecImportError extends Error {

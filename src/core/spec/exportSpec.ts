@@ -8,6 +8,8 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
   const registry = createDatasetRegistry(input.datasetPath);
 
   for (const plot of input.workspace.plots) {
+    const xDatasetPath = getPlotXDatasetPath(plot.id, input.xDatasetPathByPlotId, input.datasetPath);
+    registry.register(xDatasetPath);
     for (const trace of plot.traces) {
       registry.register(getTraceDatasetPath(trace.sourceId, input.datasetPath));
     }
@@ -65,11 +67,12 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
         };
       }
 
+      const xDatasetPath = getPlotXDatasetPath(plot.id, input.xDatasetPathByPlotId, input.datasetPath);
       const specPlot: PlotSpecPlotV2 = {
         id: plot.id,
         name: plot.name,
         x: {
-          dataset: activeDatasetId,
+          dataset: registry.idFor(xDatasetPath),
           signal: plot.xSignal
         },
         y: [...lanesByAxisId.values()]
@@ -88,6 +91,15 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     lineWidth: 0
   });
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
+}
+
+function getPlotXDatasetPath(
+  plotId: string,
+  xDatasetPathByPlotId: Record<string, string> | undefined,
+  fallbackPath: string
+): string {
+  const candidate = xDatasetPathByPlotId?.[plotId]?.trim();
+  return candidate && candidate.length > 0 ? candidate : fallbackPath;
 }
 
 const WINDOWS_ABSOLUTE_PATH_PREFIX = /^(?:[a-zA-Z]:[\\/]|\\\\)/;

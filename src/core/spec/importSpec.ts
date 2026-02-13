@@ -14,7 +14,10 @@ import { PLOT_SPEC_V2_VERSION, PlotSpecImportError } from "./plotSpecV1";
 export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResult {
   const parsed = parseYaml(input.yamlText);
   const spec = validateSpecShape(parsed);
-  const availableSignals = new Set(input.availableSignals);
+  const availableSignalsByDatasetId = createAvailableSignalsLookup(
+    spec,
+    input.availableSignals
+  );
   const datasetPathById = resolveDatasetPathById(spec.datasets, input.specPath);
 
   if (spec.plots.length === 0) {
@@ -28,16 +31,19 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
 
   const missingSignalsByPlot: string[] = [];
   const laneIdByAxisIdByPlotId: Record<string, Record<`y${number}`, string>> = {};
+  const xDatasetPathByPlotId: Record<string, string> = {};
 
   const workspace = {
     activePlotId: spec.active_plot,
     plots: spec.plots.map((plot) => {
-      const missingSignals = collectMissingSignals(plot, availableSignals);
+      const missingSignals = collectMissingSignals(plot, availableSignalsByDatasetId);
       if (missingSignals.length > 0) {
         missingSignalsByPlot.push(`plot ${plot.id} (${missingSignals.join("; ")})`);
       }
       laneIdByAxisIdByPlotId[plot.id] = toAxisLaneIdMap(plot);
-      return toWorkspacePlot(plot, datasetPathById);
+      const workspacePlot = toWorkspacePlot(plot, datasetPathById);
+      xDatasetPathByPlotId[plot.id] = datasetPathById[plot.x.dataset];
+      return workspacePlot;
     })
   };
 
@@ -48,7 +54,8 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
   return {
     datasetPath: datasetPathById[spec.active_dataset],
     workspace,
-    laneIdByAxisIdByPlotId
+    laneIdByAxisIdByPlotId,
+    xDatasetPathByPlotId
   };
 }
 
@@ -345,22 +352,53 @@ function createUniqueTraceId(candidateId: string, usedIds: Set<string>): string 
   return nextId;
 }
 
-function collectMissingSignals(plot: PlotSpecPlotV2, availableSignals: Set<string>): string[] {
+function collectMissingSignals(
+  plot: PlotSpecPlotV2,
+  availableSignalsByDatasetId: Map<string, Set<string>>
+): string[] {
   const missing = new Set<string>();
 
-  if (!availableSignals.has(plot.x.signal)) {
-    missing.add(`x.signal: ${plot.x.signal}`);
+  if (isSignalMissing(plot.x.dataset, plot.x.signal, availableSignalsByDatasetId)) {
+    missing.add(`x.${plot.x.dataset}: ${plot.x.signal}`);
   }
 
   for (const lane of plot.y) {
     for (const signalRef of Object.values(lane.signals)) {
-      if (!availableSignals.has(signalRef.signal)) {
-        missing.add(`y.${lane.id}: ${signalRef.signal}`);
+      if (isSignalMissing(signalRef.dataset, signalRef.signal, availableSignalsByDatasetId)) {
+        missing.add(`y.${lane.id}.${signalRef.dataset}: ${signalRef.signal}`);
       }
     }
   }
 
   return [...missing.values()];
+}
+
+function isSignalMissing(
+  datasetId: string,
+  signal: string,
+  availableSignalsByDatasetId: Map<string, Set<string>>
+): boolean {
+  const available = availableSignalsByDatasetId.get(datasetId);
+  if (!available) {
+    return false;
+  }
+  return !available.has(signal);
+}
+
+function createAvailableSignalsLookup(
+  spec: PlotSpecV2,
+  input: ImportPlotSpecInput["availableSignals"]
+): Map<string, Set<string>> {
+  const byDatasetId = new Map<string, Set<string>>();
+  if (Array.isArray(input)) {
+    byDatasetId.set(spec.active_dataset, new Set(input));
+    return byDatasetId;
+  }
+
+  for (const [datasetId, signals] of Object.entries(input)) {
+    byDatasetId.set(datasetId, new Set(signals));
+  }
+  return byDatasetId;
 }
 
 function parseNumberPair(value: unknown, label: string): [number, number] {

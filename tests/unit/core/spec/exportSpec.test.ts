@@ -101,4 +101,41 @@ describe("T-050 export spec v2 path serialization", () => {
     expect(yamlText).toContain("dataset: dataset-2");
     expect(yamlText).toContain("signal: vin");
   });
+
+  it("preserves per-plot x.dataset independent from active_dataset", () => {
+    const yamlText = exportPlotSpecV1({
+      datasetPath: "/workspace/examples/run-a.csv",
+      workspace: {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time_b",
+            axes: [{ id: "y1" }],
+            traces: [
+              {
+                id: "trace-run-a",
+                signal: "vin_a",
+                sourceId: "/workspace/examples/run-a.csv::vin_a",
+                axisId: "y1",
+                visible: true
+              }
+            ],
+            nextAxisNumber: 2
+          }
+        ]
+      },
+      xDatasetPathByPlotId: {
+        "plot-1": "/workspace/examples/run-b.csv"
+      }
+    });
+
+    expect(yamlText).toContain("active_dataset: dataset-1");
+    expect(yamlText).toContain("path: /workspace/examples/run-a.csv");
+    expect(yamlText).toContain("path: /workspace/examples/run-b.csv");
+    expect(yamlText).toContain("x:");
+    expect(yamlText).toContain("dataset: dataset-2");
+    expect(yamlText).toContain("signal: time_b");
+  });
 });

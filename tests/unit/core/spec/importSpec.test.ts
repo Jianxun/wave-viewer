@@ -46,6 +46,9 @@ describe("T-050 import spec v2 path resolution", () => {
         visible: true
       }
     ]);
+    expect(parsed.xDatasetPathByPlotId).toEqual({
+      "plot-1": "/workspace/examples/simulations/ota.spice.csv"
+    });
   });
 
   it("resolves relative dataset.path against layout file location", () => {
@@ -149,5 +152,81 @@ describe("T-050 import spec v2 path resolution", () => {
         availableSignals: ["time", "vin"]
       })
     ).toThrow("Plot spec datasets must be a non-empty array.");
+  });
+
+  it("keeps per-plot x.dataset identity for export replay", () => {
+    const yamlText = [
+      "version: 2",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/run-a.csv",
+      "  - id: run-b",
+      "    path: /workspace/examples/run-b.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-b",
+      "      signal: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-a:",
+      "            dataset: run-a",
+      "            signal: vin"
+    ].join("\n");
+
+    const parsed = importPlotSpecV1({
+      yamlText,
+      availableSignals: {
+        "run-a": ["vin"],
+        "run-b": ["time"]
+      }
+    });
+
+    expect(parsed.datasetPath).toBe("/workspace/examples/run-a.csv");
+    expect(parsed.xDatasetPathByPlotId).toEqual({
+      "plot-1": "/workspace/examples/run-b.csv"
+    });
+  });
+
+  it("validates signals against dataset-specific availability maps", () => {
+    const yamlText = [
+      "version: 2",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/run-a.csv",
+      "  - id: run-b",
+      "    path: /workspace/examples/run-b.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-b",
+      "      signal: time_b",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-a:",
+      "            dataset: run-a",
+      "            signal: vin_a",
+      "          trace-b:",
+      "            dataset: run-b",
+      "            signal: vin_b"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: {
+          "run-a": ["vin_a"],
+          "run-b": ["time_b", "vin_b"]
+        }
+      })
+    ).not.toThrow();
   });
 });
