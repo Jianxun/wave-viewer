@@ -7,6 +7,7 @@ import { PROTOCOL_VERSION, createProtocolEnvelope } from "../../src/core/dataset
 import {
   applyDropSignalAction,
   applySidePanelSignalAction,
+  createExportFrozenBundleCommand,
   createOpenLayoutCommand,
   createSaveLayoutAsCommand,
   createSaveLayoutCommand,
@@ -24,6 +25,7 @@ import {
   writeLayoutFileAtomically,
   isCsvFile,
   LOAD_CSV_FILES_COMMAND,
+  EXPORT_FROZEN_BUNDLE_COMMAND,
   OPEN_VIEWER_COMMAND,
   OPEN_LAYOUT_COMMAND,
   REMOVE_LOADED_FILE_COMMAND,
@@ -986,6 +988,129 @@ describe("T-046 explicit layout commands", () => {
     expect(showInformation).toHaveBeenCalledWith(
       "Wave Viewer layout saved to /workspace/layouts/lab-alt.wave-viewer.yaml"
     );
+  });
+});
+
+describe("T-052 frozen bundle export", () => {
+  it("exports frozen bundle command id", () => {
+    expect(EXPORT_FROZEN_BUNDLE_COMMAND).toBe("waveViewer.exportFrozenBundle");
+  });
+
+  it("exports deterministic frozen csv + layout artifacts", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const writeTextFile = vi.fn();
+    const command = createExportFrozenBundleCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [
+            { name: "time", values: [0, 1, 2] },
+            { name: "vin", values: [1, 2, 3] },
+            { name: "vout", values: [9, 8, 7] },
+            { name: "unused", values: [4, 5, 6] }
+          ]
+        },
+        defaultXSignal: "time"
+      }),
+      getCachedWorkspace: () => ({
+        activePlotId: "plot-2",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "vout",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+            nextAxisNumber: 2
+          },
+          {
+            id: "plot-2",
+            name: "Plot 2",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-2", signal: "vout", axisId: "y1", visible: true }],
+            nextAxisNumber: 2
+          }
+        ]
+      }),
+      resolveLayoutAxisLaneIdMap: () => ({
+        "plot-1": { y1: "lane-vin" },
+        "plot-2": { y1: "lane-vout" }
+      }),
+      showSaveDialog: async () => "/workspace/exports/snapshot.frozen.wave-viewer.yaml",
+      writeTextFile,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(writeTextFile).toHaveBeenCalledTimes(2);
+    expect(writeTextFile).toHaveBeenNthCalledWith(
+      1,
+      "/workspace/exports/snapshot.frozen.csv",
+      "time,vin,vout\n0,1,9\n1,2,8\n2,3,7\n"
+    );
+    expect(writeTextFile).toHaveBeenNthCalledWith(
+      2,
+      "/workspace/exports/snapshot.frozen.wave-viewer.yaml",
+      expect.stringContaining("path: ./snapshot.frozen.csv")
+    );
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer frozen bundle exported to /workspace/exports/snapshot.frozen.wave-viewer.yaml and /workspace/exports/snapshot.frozen.csv"
+    );
+  });
+
+  it("fails export when workspace references missing signals", async () => {
+    const showError = vi.fn();
+    const writeTextFile = vi.fn();
+    const command = createExportFrozenBundleCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [0, 1, 2] }]
+        },
+        defaultXSignal: "time"
+      }),
+      getCachedWorkspace: () => ({
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-1", signal: "vin", axisId: "y1", visible: true }],
+            nextAxisNumber: 2
+          }
+        ]
+      }),
+      showSaveDialog: async () => "/workspace/exports/snapshot.frozen.wave-viewer.yaml",
+      writeTextFile,
+      showError,
+      showInformation: vi.fn()
+    });
+
+    await command();
+
+    expect(showError).toHaveBeenCalledWith(
+      "Frozen export failed: workspace references missing dataset signal(s): vin."
+    );
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
 });
 

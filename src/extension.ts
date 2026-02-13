@@ -31,6 +31,7 @@ import {
 } from "./extension/sidePanel";
 import { createHostStateStore } from "./extension/hostStateStore";
 import {
+  createExportFrozenBundleCommand,
   createExportSpecCommand,
   createImportSpecCommand,
   createLoadCsvFilesCommand,
@@ -70,6 +71,7 @@ export const OPEN_LAYOUT_COMMAND = "waveViewer.openLayout";
 export const SAVE_LAYOUT_COMMAND = "waveViewer.saveLayout";
 export const SAVE_LAYOUT_AS_COMMAND = "waveViewer.saveLayoutAs";
 export const EXPORT_SPEC_COMMAND = "waveViewer.exportPlotSpec";
+export const EXPORT_FROZEN_BUNDLE_COMMAND = "waveViewer.exportFrozenBundle";
 export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
 export {
   LOAD_CSV_FILES_COMMAND,
@@ -88,6 +90,7 @@ export {
   buildWebviewHtml,
   createHostStateStore,
   createExportSpecCommand,
+  createExportFrozenBundleCommand,
   createImportSpecCommand,
   createLoadCsvFilesCommand,
   createOpenLayoutCommand,
@@ -847,6 +850,31 @@ export function activate(context: VSCode.ExtensionContext): void {
     }
   });
 
+  const exportFrozenBundleCommand = createExportFrozenBundleCommand({
+    getActiveViewerId: () => viewerSessions.getActiveViewerId(),
+    resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
+    loadDataset,
+    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
+    resolveLayoutAxisLaneIdMap: (layoutUri) => layoutLaneIdsByLayoutUri.get(layoutUri),
+    showSaveDialog: async (defaultPath) => {
+      const defaultUri = vscode.Uri.file(defaultPath);
+      const result = await vscode.window.showSaveDialog({
+        defaultUri,
+        filters: { YAML: ["yaml", "yml"] }
+      });
+      return result?.fsPath;
+    },
+    writeTextFile: (filePath, text) => {
+      fs.writeFileSync(filePath, text, "utf8");
+    },
+    showError: (message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    showInformation: (message) => {
+      void vscode.window.showInformationMessage(message);
+    }
+  });
+
   const importSpecCommand = createImportSpecCommand({
     getActiveDocument: () => vscode.window.activeTextEditor?.document,
     loadDataset,
@@ -1004,6 +1032,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     vscode.commands.registerCommand(SAVE_LAYOUT_AS_COMMAND, saveLayoutAsCommand)
   );
   context.subscriptions.push(vscode.commands.registerCommand(EXPORT_SPEC_COMMAND, exportSpecCommand));
+  context.subscriptions.push(
+    vscode.commands.registerCommand(EXPORT_FROZEN_BUNDLE_COMMAND, exportFrozenBundleCommand)
+  );
   context.subscriptions.push(vscode.commands.registerCommand(IMPORT_SPEC_COMMAND, importSpecCommand));
   context.subscriptions.push(
     vscode.commands.registerCommand(SIGNAL_BROWSER_QUICK_ADD_COMMAND, runSidePanelQuickAdd)
