@@ -13,10 +13,17 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     active_plot: input.workspace.activePlotId,
     plots: input.workspace.plots.map((plot) => {
       const lanesByAxisId = new Map<string, PlotSpecLaneV2>();
+      const laneIdByAxisId = input.laneIdByAxisIdByPlotId?.[plot.id] ?? {};
+      const usedLaneIds = new Set<string>();
 
-      for (const axis of plot.axes) {
+      for (let axisIndex = 0; axisIndex < plot.axes.length; axisIndex += 1) {
+        const axis = plot.axes[axisIndex];
         const lane: PlotSpecLaneV2 = {
-          id: axis.id,
+          id: toLaneId(
+            laneIdByAxisId[axis.id],
+            axisIndex,
+            usedLaneIds
+          ),
           signals: {}
         };
 
@@ -100,4 +107,24 @@ function isWindowsPathLike(filePath: string): boolean {
 
 function normalizePathSeparators(filePath: string): string {
   return filePath.replaceAll("\\", "/");
+}
+
+function toLaneId(
+  candidate: string | undefined,
+  axisIndex: number,
+  usedLaneIds: Set<string>
+): string {
+  const trimmed = candidate?.trim();
+  const base = trimmed && trimmed.length > 0 ? trimmed : `lane-${axisIndex + 1}`;
+  if (!usedLaneIds.has(base)) {
+    usedLaneIds.add(base);
+    return base;
+  }
+  let suffix = 2;
+  while (usedLaneIds.has(`${base}-${suffix}`)) {
+    suffix += 1;
+  }
+  const unique = `${base}-${suffix}`;
+  usedLaneIds.add(unique);
+  return unique;
 }

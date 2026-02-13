@@ -26,6 +26,8 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
 
   const missingSignalsByPlot: string[] = [];
 
+  const laneIdByAxisIdByPlotId: Record<string, Record<`y${number}`, string>> = {};
+
   const workspace = {
     activePlotId: spec.active_plot,
     plots: spec.plots.map((plot) => {
@@ -33,6 +35,7 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
       if (missingSignals.length > 0) {
         missingSignalsByPlot.push(`plot ${plot.id} (${missingSignals.join("; ")})`);
       }
+      laneIdByAxisIdByPlotId[plot.id] = toAxisLaneIdMap(plot);
       return toWorkspacePlot(plot);
     })
   };
@@ -43,7 +46,8 @@ export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResu
 
   return {
     datasetPath: resolveDatasetPath(spec.dataset.path, input.specPath),
-    workspace
+    workspace,
+    laneIdByAxisIdByPlotId
   };
 }
 
@@ -248,6 +252,15 @@ function toWorkspacePlot(plot: PlotSpecPlotV2) {
     nextAxisNumber: axes.length + 1,
     ...(plot.x.range !== undefined ? { xRange: plot.x.range } : {})
   };
+}
+
+function toAxisLaneIdMap(plot: PlotSpecPlotV2): Record<`y${number}`, string> {
+  const laneIds: Record<`y${number}`, string> = {};
+  for (let laneIndex = 0; laneIndex < plot.y.length; laneIndex += 1) {
+    const axisId = `y${laneIndex + 1}` as const;
+    laneIds[axisId] = plot.y[laneIndex].id;
+  }
+  return laneIds;
 }
 
 function createUniqueTraceId(candidateId: string, usedIds: Set<string>): string {
