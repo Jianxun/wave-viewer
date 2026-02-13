@@ -8,7 +8,7 @@ T-051:
   pr: 60
   merged: true
 T-052:
-  status: request_changes
+  status: ready_for_review
   pr: 61
   merged: false
 T-053:

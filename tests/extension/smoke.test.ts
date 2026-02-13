@@ -1069,6 +1069,61 @@ describe("T-052 frozen bundle export", () => {
     );
   });
 
+  it("does not duplicate frozen suffix when save target uses .yml", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const writeTextFile = vi.fn();
+    const command = createExportFrozenBundleCommand({
+      getActiveViewerId: () => "viewer-1",
+      resolveViewerSessionContext: () => ({
+        datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+        layoutUri: "/workspace/layouts/lab.wave-viewer.yaml"
+      }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 1,
+          columns: [{ name: "time", values: [0] }]
+        },
+        defaultXSignal: "time"
+      }),
+      getCachedWorkspace: () => ({
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [],
+            nextAxisNumber: 2
+          }
+        ]
+      }),
+      showSaveDialog: async () => "/workspace/exports/snapshot.frozen.wave-viewer.yml",
+      writeTextFile,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(writeTextFile).toHaveBeenNthCalledWith(
+      1,
+      "/workspace/exports/snapshot.frozen.csv",
+      "time\n0\n"
+    );
+    expect(writeTextFile).toHaveBeenNthCalledWith(
+      2,
+      "/workspace/exports/snapshot.frozen.wave-viewer.yml",
+      expect.stringContaining("path: ./snapshot.frozen.csv")
+    );
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer frozen bundle exported to /workspace/exports/snapshot.frozen.wave-viewer.yml and /workspace/exports/snapshot.frozen.csv"
+    );
+  });
+
   it("fails export when workspace references missing signals", async () => {
     const showError = vi.fn();
     const writeTextFile = vi.fn();

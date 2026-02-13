@@ -1187,17 +1187,17 @@ function collectRequiredSignals(workspace: WorkspaceState): string[] {
 }
 
 function toFrozenLayoutPath(filePath: string): string {
-  if (filePath.endsWith(".frozen.wave-viewer.yaml")) {
+  if (/\.frozen\.wave-viewer\.ya?ml$/i.test(filePath)) {
     return filePath;
   }
   return `${filePath.replace(/(\.wave-viewer)?\.(ya?ml)$/i, "").replace(/\.csv$/i, "")}.frozen.wave-viewer.yaml`;
 }
 
 function toFrozenCsvPath(frozenLayoutPath: string): string {
-  if (!frozenLayoutPath.endsWith(".frozen.wave-viewer.yaml")) {
+  if (!/\.frozen\.wave-viewer\.ya?ml$/i.test(frozenLayoutPath)) {
     return `${frozenLayoutPath}.frozen.csv`;
   }
-  return `${frozenLayoutPath.slice(0, -".frozen.wave-viewer.yaml".length)}.frozen.csv`;
+  return `${frozenLayoutPath.replace(/\.frozen\.wave-viewer\.ya?ml$/i, "")}.frozen.csv`;
 }
 
 function getErrorMessage(error: unknown): string {
