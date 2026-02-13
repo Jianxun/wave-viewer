@@ -10,7 +10,8 @@ import {
   removePlot,
   renamePlot,
   reassignAxisTraces,
-  setActivePlot
+  setActivePlot,
+  updateAxis
 } from "../../../src/webview/state/workspaceState";
 import { reduceWorkspaceState, type WorkspaceAction } from "../../../src/webview/state/reducer";
 
@@ -75,6 +76,38 @@ describe("workspaceState", () => {
       axisId: "y2",
       visible: true
     });
+  });
+
+  it("infers axis title from first dropped voltage/current signal prefix", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addAxis(workspace, {});
+    workspace = addTrace(workspace, { signal: "vout", axisId: "y1" });
+    workspace = addTrace(workspace, { signal: "iout", axisId: "y2" });
+
+    expect(workspace.plots[0]?.axes).toEqual([
+      { id: "y1", title: "Voltage (V)" },
+      { id: "y2", title: "Current (A)" }
+    ]);
+  });
+
+  it("keeps the inferred axis title fixed after first trace assignment", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addTrace(workspace, { signal: "vout", axisId: "y1" });
+    workspace = addTrace(workspace, { signal: "iin", axisId: "y1" });
+
+    expect(workspace.plots[0]?.axes).toEqual([{ id: "y1", title: "Voltage (V)" }]);
+  });
+
+  it("does not override a manual axis title edit on subsequent drops", () => {
+    let workspace = createWorkspaceState("time");
+    workspace = addTrace(workspace, { signal: "vin", axisId: "y1" });
+    workspace = updateAxis(workspace, {
+      axisId: "y1",
+      patch: { title: "Sense Current" }
+    });
+    workspace = addTrace(workspace, { signal: "iin", axisId: "y1" });
+
+    expect(workspace.plots[0]?.axes).toEqual([{ id: "y1", title: "Sense Current" }]);
   });
 
   it("blocks axis removal when traces still reference the axis", () => {

@@ -1,89 +1,147 @@
 schema_version: 2
 current_sprint:
-  - id: T-050
-    title: Replace spec contract with YAML layout schema v2 only (drop v1 + mode)
+  - id: T-054
+    title: Add destructive reset actions for layout and active plot
     owner: Executor
     dod:
-      - Replace current plot spec schema/contracts with v2-only layout schema (`version: 2`) using `dataset.path`, `active_plot`, per-plot `x`, and lane-grouped `signals`.
-      - Remove `mode` and `portable-archive` handling from spec parser/exporter paths.
-      - Reject unsupported schema versions (including v1) with actionable errors.
+      - Add a `waveViewer.clearLayout` command (Command Palette) that confirms intent, then resets the bound workspace to one empty plot (`plot-1`) with one empty lane (`y1`) and no traces.
+      - Add an in-viewer `Clear Plot` control for the active plot that confirms intent, then clears only that plot (remove all traces + extra lanes, keep plot tab and current x signal).
+      - Ensure both actions run through host-authoritative state transactions so autosave/external reload/session behavior remains consistent.
+      - Keep current dataset and layout bindings intact for both flows; `clearLayout` must not create/rebind a new layout file.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts
+      - npm test -- tests/unit/webview/workspaceState.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-054.md
+    files:
+      - src/extension.ts
+      - src/extension/commands.ts
+      - src/extension/types.ts
+      - src/webview/main.ts
+      - src/webview/state/workspaceState.ts
+      - src/webview/state/reducer.ts
+      - src/webview/index.html
+      - src/webview/styles.css
+      - package.json
+      - tests/extension/smoke.test.ts
+      - tests/unit/webview/workspaceState.test.ts
+  - id: T-055
+    title: Redefine v2 layout schema to support multi-dataset workspaces
+    owner: Executor
+    dod:
+      - Replace single-dataset `version: 2` layout contract (`dataset.path`) with multi-dataset `datasets[]` + `active_dataset`.
+      - Require dataset-qualified references for all persisted signal bindings (`x.dataset` + `x.signal`, and `signals[label] -> {dataset, signal}`).
+      - Keep schema version at `2` and intentionally reject legacy single-dataset v2 payloads (no compatibility branch).
     verify:
       - npm test -- tests/unit/core/spec/importSpec.test.ts tests/unit/core/spec/exportSpec.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-050.md
-      adr: agents/adr/ADR-0013-layout-schema-v2-human-editable-mvp-only.md
+      scratchpad: agents/scratchpads/T-055.md
+      adr: agents/adr/ADR-0015-v2-layout-multi-dataset-single-workspace.md
+      spec: doc/specs/wave-viewer-mvp.md
     files:
       - src/core/spec/plotSpecV1.ts
       - src/core/spec/importSpec.ts
       - src/core/spec/exportSpec.ts
       - tests/unit/core/spec/importSpec.test.ts
       - tests/unit/core/spec/exportSpec.test.ts
-  - id: T-051
-    title: Wire host layout workflows to v2 schema translation and defaults
+  - id: T-056
+    title: Refactor host state/session model for single explorer and multi-viewer routing
     owner: Executor
     depends_on:
-      - T-050
+      - T-055
     dod:
-      - Update open/save/save-as/autosave/external-reload flows to consume/produce v2 schema only.
-      - Preserve host-internal canonical axis IDs (`y1..yN`) while mapping to/from user lane IDs in YAML.
-      - Keep runtime behavior stable: external layout edits must continue to hydrate tuples before state patch.
+      - Update host session routing so one explorer can target multiple live viewers deterministically.
+      - Introduce or refactor target-viewer resolution logic to support: explicit target, focused eligible viewer, dataset-bound fallback, then open-new.
+      - Ensure trace identity remains dataset-qualified end-to-end for mixed-dataset workspaces.
     verify:
+      - npm test -- tests/unit/extension/signalTree.test.ts
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-051.md
+      scratchpad: agents/scratchpads/T-056.md
+      adr: agents/adr/ADR-0016-single-explorer-multi-viewer-routing-and-auto-open.md
+      spec: doc/specs/side-panel-workflow.md
     files:
       - src/extension.ts
-      - src/extension/commands.ts
+      - src/extension/viewerSessions.ts
+      - src/extension/sidePanel.ts
       - src/extension/types.ts
       - tests/extension/smoke.test.ts
-  - id: T-052
-    title: Add frozen bundle export (separate frozen CSV + frozen layout YAML)
+      - tests/unit/extension/signalTree.test.ts
+  - id: T-057
+    title: Unify viewer-dependent command flows with auto-open and default-layout creation
     owner: Executor
     depends_on:
-      - T-050
-      - T-051
+      - T-055
+      - T-056
     dod:
-      - "Add command flow to export frozen bundle artifacts: `<name>.frozen.csv` and `<name>.frozen.wave-viewer.yaml`."
-      - Ensure frozen export never rebinds or overwrites the active interactive layout/session.
-      - Include required signal columns (all per-plot x signals + referenced y signals) deterministically in frozen CSV output.
+      - Make `Open Layout (YAML)` succeed when no viewer is active by creating a viewer and applying imported state.
+      - Make side-panel `Add to Plot` and `Add to New Axis` auto-open/bind a viewer when none is available instead of warning and dropping delivery.
+      - On dataset load, resolve `<csv>.wave-viewer.yaml`: import if present, otherwise create it from initial state; then open viewer bound to that layout.
+      - Ensure datasets referenced by opened layouts are auto-registered into explorer loaded-dataset state.
     verify:
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-052.md
-      adr: agents/adr/ADR-0014-frozen-bundle-artifacts-supersede-dual-modes.md
+      scratchpad: agents/scratchpads/T-057.md
+      adr: agents/adr/ADR-0016-single-explorer-multi-viewer-routing-and-auto-open.md
+      spec: doc/specs/wave-viewer-mvp.md
     files:
       - src/extension.ts
       - src/extension/commands.ts
-      - src/core/csv/parseCsv.ts
-      - src/core/spec/exportSpec.ts
-      - package.json
+      - src/extension/sidePanel.ts
+      - src/extension/types.ts
       - tests/extension/smoke.test.ts
-  - id: T-053
-    title: Refresh test/docs baseline for v2-only schema and frozen workflow
+  - id: T-058
+    title: Refresh docs and verification baseline for multi-dataset v2 and routing semantics
     owner: Executor
     depends_on:
-      - T-050
-      - T-051
-      - T-052
+      - T-055
+      - T-056
+      - T-057
     dod:
-      - Replace stale v1/dual-mode fixtures and assertions in unit/smoke tests with v2 equivalents.
-      - Add explicit coverage for unsupported v1 imports and no-`mode` v2 parsing rules.
-      - Update user-facing docs/spec references to the final v2 + frozen bundle workflow.
+      - Update user and architecture docs to reflect multi-dataset `version: 2` schema and viewer auto-open behavior.
+      - Add regression coverage for dataset-qualified signal replay and no-active-viewer command success paths.
+      - Remove stale single-dataset v2 examples from docs/tests to avoid contract ambiguity.
     verify:
       - npm test -- tests/unit/core/spec/importSpec.test.ts tests/unit/core/spec/exportSpec.test.ts
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-053.md
+      scratchpad: agents/scratchpads/T-058.md
+      spec: doc/specs/wave-viewer-mvp.md
     files:
+      - README.md
+      - doc/specs/wave-viewer-mvp.md
+      - doc/specs/side-panel-workflow.md
+      - agents/context/contract.md
       - tests/unit/core/spec/importSpec.test.ts
       - tests/unit/core/spec/exportSpec.test.ts
       - tests/extension/smoke.test.ts
-      - doc/specs/wave-viewer-mvp.md
-      - agents/context/contract.md
+  - id: T-059
+    title: Adapt frozen bundle export to multi-dataset v2 layouts
+    owner: Executor
+    depends_on:
+      - T-055
+    dod:
+      - Update frozen export to emit one frozen CSV per referenced dataset id plus one frozen layout YAML.
+      - Ensure exported frozen layout rewrites `datasets[].path` to the generated frozen dataset CSV paths deterministically.
+      - Preserve current safety rule: frozen export must not overwrite active interactive layout or active interactive dataset files.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts tests/unit/core/spec/exportSpec.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-059.md
+      adr: agents/adr/ADR-0017-multi-dataset-frozen-bundle-artifacts.md
+      spec: doc/specs/wave-viewer-mvp.md
+    files:
+      - src/extension/commands.ts
+      - src/core/spec/exportSpec.ts
+      - src/core/csv/parseCsv.ts
+      - tests/extension/smoke.test.ts
+      - tests/unit/core/spec/exportSpec.test.ts
 backlog: []
 exploration_candidates:
   - Evaluate adding a one-shot CLI migrator from legacy v1 layout YAML to v2 outside MVP core scope.

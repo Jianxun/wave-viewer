@@ -289,9 +289,21 @@ export function addTrace(
       plot.traces.map((trace) => trace.id),
       /^trace-(\d+)$/
     )}`;
+    const hasExistingTraceOnAxis = plot.traces.some((trace) => trace.axisId === axisId);
+    const inferredTitle = !hasExistingTraceOnAxis ? inferAxisTitleFromSignal(payload.signal) : undefined;
+    const nextAxes =
+      inferredTitle === undefined
+        ? plot.axes
+        : plot.axes.map((axis) => {
+            if (axis.id !== axisId || axis.title !== undefined) {
+              return axis;
+            }
+            return { ...axis, title: inferredTitle };
+          });
 
     return {
       ...plot,
+      axes: nextAxes,
       traces: [
         ...plot.traces,
         {
@@ -404,6 +416,17 @@ function assertAxisExists(plot: PlotState, axisId: AxisId): void {
   if (!plot.axes.some((axis) => axis.id === axisId)) {
     throw new Error(`Unknown axis id: ${axisId}`);
   }
+}
+
+function inferAxisTitleFromSignal(signal: string): string | undefined {
+  const normalized = signal.trim().toUpperCase();
+  if (normalized.startsWith("V")) {
+    return "Voltage (V)";
+  }
+  if (normalized.startsWith("I")) {
+    return "Current (A)";
+  }
+  return undefined;
 }
 
 function getNextIdNumber(values: string[], matcher: RegExp): number {

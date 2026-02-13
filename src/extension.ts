@@ -19,7 +19,6 @@ import {
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
   SIGNAL_BROWSER_VIEW_ID,
-  REVEAL_SIGNAL_IN_PLOT_COMMAND,
   resolveSignalFromCommandArgument
 } from "./extension/signalTree";
 import {
@@ -68,16 +67,12 @@ import type {
 
 export const OPEN_VIEWER_COMMAND = "waveViewer.openViewer";
 export const OPEN_LAYOUT_COMMAND = "waveViewer.openLayout";
-export const SAVE_LAYOUT_COMMAND = "waveViewer.saveLayout";
 export const SAVE_LAYOUT_AS_COMMAND = "waveViewer.saveLayoutAs";
-export const EXPORT_SPEC_COMMAND = "waveViewer.exportPlotSpec";
 export const EXPORT_FROZEN_BUNDLE_COMMAND = "waveViewer.exportFrozenBundle";
-export const IMPORT_SPEC_COMMAND = "waveViewer.importPlotSpec";
 export {
   LOAD_CSV_FILES_COMMAND,
   REMOVE_LOADED_FILE_COMMAND,
   RELOAD_ALL_FILES_COMMAND,
-  REVEAL_SIGNAL_IN_PLOT_COMMAND,
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   SIGNAL_BROWSER_QUICK_ADD_COMMAND
@@ -88,8 +83,8 @@ export {
   applySetTraceAxisAction,
   applySidePanelSignalAction,
   buildWebviewHtml,
-  createHostStateStore,
   createExportSpecCommand,
+  createHostStateStore,
   createExportFrozenBundleCommand,
   createImportSpecCommand,
   createLoadCsvFilesCommand,
@@ -827,29 +822,6 @@ export function activate(context: VSCode.ExtensionContext): void {
       buildWebviewHtml(webview as unknown as VSCode.Webview, extensionUriArg as VSCode.Uri)
   });
 
-  const exportSpecCommand = createExportSpecCommand({
-    getActiveDocument: () => vscode.window.activeTextEditor?.document,
-    loadDataset,
-    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
-    showError: (message) => {
-      void vscode.window.showErrorMessage(message);
-    },
-    showInformation: (message) => {
-      void vscode.window.showInformationMessage(message);
-    },
-    showSaveDialog: async (defaultPath) => {
-      const defaultUri = vscode.Uri.file(defaultPath);
-      const result = await vscode.window.showSaveDialog({
-        defaultUri,
-        filters: { YAML: ["yaml", "yml"] }
-      });
-      return result?.fsPath;
-    },
-    writeTextFile: (filePath, text) => {
-      fs.writeFileSync(filePath, text, "utf8");
-    }
-  });
-
   const exportFrozenBundleCommand = createExportFrozenBundleCommand({
     getActiveViewerId: () => viewerSessions.getActiveViewerId(),
     resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
@@ -875,30 +847,6 @@ export function activate(context: VSCode.ExtensionContext): void {
     }
   });
 
-  const importSpecCommand = createImportSpecCommand({
-    getActiveDocument: () => vscode.window.activeTextEditor?.document,
-    loadDataset,
-    setCachedWorkspace: (documentPath, workspace) => {
-      hostStateStore.setWorkspace(documentPath, workspace);
-    },
-    showError: (message) => {
-      void vscode.window.showErrorMessage(message);
-    },
-    showInformation: (message) => {
-      void vscode.window.showInformationMessage(message);
-    },
-    showOpenDialog: async () => {
-      const result = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectFolders: false,
-        canSelectMany: false,
-        filters: { YAML: ["yaml", "yml"] }
-      });
-      return result?.[0]?.fsPath;
-    },
-    readTextFile: (filePath) => fs.readFileSync(filePath, "utf8")
-  });
-
   const openLayoutCommand = createOpenLayoutCommand({
     getActiveViewerId: () => viewerSessions.getActiveViewerId(),
     showOpenDialog: async () => {
@@ -922,23 +870,6 @@ export function activate(context: VSCode.ExtensionContext): void {
     getPanelForViewer: (viewerId) => viewerSessions.getPanelForViewer(viewerId),
     logDebug: (message, details) => {
       console.debug(`[wave-viewer] ${message}`, details);
-    },
-    showError: (message) => {
-      void vscode.window.showErrorMessage(message);
-    },
-    showInformation: (message) => {
-      void vscode.window.showInformationMessage(message);
-    }
-  });
-
-  const saveLayoutCommand = createSaveLayoutCommand({
-    getActiveViewerId: () => viewerSessions.getActiveViewerId(),
-    resolveViewerSessionContext: (viewerId) => viewerSessions.getViewerSessionContext(viewerId),
-    loadDataset,
-    getCachedWorkspace: (documentPath) => hostStateStore.getWorkspace(documentPath),
-    resolveLayoutAxisLaneIdMap: (layoutUri) => layoutLaneIdsByLayoutUri.get(layoutUri),
-    writeTextFile: (filePath, text) => {
-      persistLayoutFile(filePath, text);
     },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
@@ -1027,15 +958,12 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(signalTreeView);
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_VIEWER_COMMAND, command));
   context.subscriptions.push(vscode.commands.registerCommand(OPEN_LAYOUT_COMMAND, openLayoutCommand));
-  context.subscriptions.push(vscode.commands.registerCommand(SAVE_LAYOUT_COMMAND, saveLayoutCommand));
   context.subscriptions.push(
     vscode.commands.registerCommand(SAVE_LAYOUT_AS_COMMAND, saveLayoutAsCommand)
   );
-  context.subscriptions.push(vscode.commands.registerCommand(EXPORT_SPEC_COMMAND, exportSpecCommand));
   context.subscriptions.push(
     vscode.commands.registerCommand(EXPORT_FROZEN_BUNDLE_COMMAND, exportFrozenBundleCommand)
   );
-  context.subscriptions.push(vscode.commands.registerCommand(IMPORT_SPEC_COMMAND, importSpecCommand));
   context.subscriptions.push(
     vscode.commands.registerCommand(SIGNAL_BROWSER_QUICK_ADD_COMMAND, runSidePanelQuickAdd)
   );
@@ -1049,12 +977,6 @@ export function activate(context: VSCode.ExtensionContext): void {
     vscode.commands.registerCommand(
       SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
       runSidePanelSignalAction("add-to-new-axis")
-    )
-  );
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      REVEAL_SIGNAL_IN_PLOT_COMMAND,
-      runSidePanelSignalAction("reveal-in-plot")
     )
   );
   context.subscriptions.push(vscode.commands.registerCommand(LOAD_CSV_FILES_COMMAND, loadCsvFilesCommand));
