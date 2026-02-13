@@ -239,13 +239,16 @@ function createLoadedDatasetFixture(
 function createReferenceOnlySpecYaml(datasetPath: string): string {
   return [
     "version: 2",
-    "dataset:",
-    `  path: ${datasetPath}`,
+    "datasets:",
+    "  - id: ds-1",
+    `    path: ${datasetPath}`,
+    "active_dataset: ds-1",
     "active_plot: plot-1",
     "plots:",
     "  - id: plot-1",
     "    name: Plot 1",
     "    x:",
+    "      dataset: ds-1",
     "      signal: time",
     "    y:",
     "      - id: lane-main",
@@ -1452,20 +1455,25 @@ describe("T-048 external layout edit reloads", () => {
     const readTextFile = vi.fn(() =>
       [
         "version: 2",
-        "dataset:",
-        "  path: /workspace/examples/simulations/ota.spice.csv",
+        "datasets:",
+        "  - id: ds-1",
+        "    path: /workspace/examples/simulations/ota.spice.csv",
+        "active_dataset: ds-1",
         "active_plot: plot-1",
         "plots:",
         "  - id: plot-1",
         "    name: Plot 1",
         "    x:",
+        "      dataset: ds-1",
         "      signal: time",
         "    y:",
         "      - id: lane-main",
         "        signals: {}",
         "      - id: lane-aux",
         "        signals:",
-        "          trace-1: vin"
+        "          trace-1:",
+        "            dataset: ds-1",
+        "            signal: vin"
       ].join("\n")
     );
     const loadDataset = vi.fn(() => createLoadedDatasetFixture());
@@ -3185,8 +3193,12 @@ describe("T-027 side-panel quick-add tuple injection", () => {
 });
 
 describe("T-026 viewer session registry", () => {
-  function selectTarget(registry: ViewerSessionRegistry, datasetPath: string): string | undefined {
-    return registry.resolveTargetViewerSession(datasetPath)?.viewerId;
+  function selectTarget(
+    registry: ViewerSessionRegistry,
+    datasetPath: string,
+    options?: { explicitViewerId?: string }
+  ): string | undefined {
+    return registry.resolveTargetViewerSession(datasetPath, options)?.viewerId;
   }
 
   it("routes to focused viewer for a dataset when multiple viewers are bound", () => {
@@ -3266,6 +3278,42 @@ describe("T-026 viewer session registry", () => {
       layoutUri: "/workspace/layouts/shared-lab.wave-viewer.yaml"
     });
     expect(registry.resolveTargetViewerSession("/workspace/examples/b.csv")?.viewerId).toBe(viewerId);
+  });
+
+  it("honors explicit target viewer before focused and dataset-bound fallback", () => {
+    const registry = createViewerSessionRegistry();
+    const panelA = createRegistryPanelFixture();
+    const panelB = createRegistryPanelFixture();
+    const viewerA = registry.registerPanel(panelA.panel, "/workspace/examples/a.csv");
+    const viewerB = registry.registerPanel(panelB.panel, "/workspace/examples/a.csv");
+
+    registry.markViewerFocused(viewerB);
+    expect(selectTarget(registry, "/workspace/examples/a.csv")).toBe(viewerB);
+    expect(
+      selectTarget(registry, "/workspace/examples/a.csv", {
+        explicitViewerId: viewerA
+      })
+    ).toBe(viewerA);
+  });
+
+  it("uses explicit standalone viewer as bind target and falls back when explicit target is unknown", () => {
+    const registry = createViewerSessionRegistry();
+    const boundPanel = createRegistryPanelFixture();
+    const standalonePanel = createRegistryPanelFixture();
+    const boundViewer = registry.registerPanel(boundPanel.panel, "/workspace/examples/a.csv");
+    const standaloneViewer = registry.registerPanel(standalonePanel.panel);
+
+    const explicitStandalone = registry.resolveTargetViewerSession("/workspace/examples/b.csv", {
+      explicitViewerId: standaloneViewer
+    });
+    expect(explicitStandalone?.viewerId).toBe(standaloneViewer);
+    expect(explicitStandalone?.bindDataset).toBe(true);
+
+    const fallback = registry.resolveTargetViewerSession("/workspace/examples/a.csv", {
+      explicitViewerId: "viewer-404"
+    });
+    expect(fallback?.viewerId).toBe(standaloneViewer);
+    expect(fallback?.bindDataset).toBe(true);
   });
 });
 
@@ -3549,6 +3597,12 @@ describe("T-042 multi-plot quick-add targeting", () => {
 
     expect(source).toContain("message.payload.plotId && message.payload.axisId");
     expect(source).toContain("plotId: message.payload.plotId");
+  });
+
+  it("keeps quick-add host fallback trace identity dataset-qualified", () => {
+    const source = fs.readFileSync(path.resolve("src/extension.ts"), "utf8");
+
+    expect(source).toContain("sourceId: toTraceSourceId(selection.documentPath, selection.signal)");
   });
 });
 

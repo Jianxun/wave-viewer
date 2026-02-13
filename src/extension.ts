@@ -26,7 +26,8 @@ import {
   hydrateWorkspaceReplayPayload,
   resolveSidePanelSelection,
   runResolvedSidePanelQuickAdd,
-  runResolvedSidePanelSignalAction
+  runResolvedSidePanelSignalAction,
+  toTraceSourceId
 } from "./extension/sidePanel";
 import { createHostStateStore } from "./extension/hostStateStore";
 import {
@@ -769,6 +770,7 @@ export function activate(context: VSCode.ExtensionContext): void {
             type: "add-to-plot",
             signal: selection.signal
           }, {
+            sourceId: toTraceSourceId(selection.documentPath, selection.signal),
             axisId: viewerState.activeAxisByPlotId[workspace.activePlotId]
           })
       });
