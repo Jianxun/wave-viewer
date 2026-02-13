@@ -27,10 +27,14 @@ describe("T-050 export spec v2 path serialization", () => {
 
     expect(yamlText).toContain("version: 2");
     expect(yamlText).toContain("active_plot: plot-1");
+    expect(yamlText).toContain("active_dataset: dataset-1");
+    expect(yamlText).toContain("datasets:");
+    expect(yamlText).toContain("id: dataset-1");
     expect(yamlText).toContain("path: ./ota.spice.csv");
     expect(yamlText).not.toContain("mode:");
+    expect(yamlText).toContain("dataset: dataset-1");
     expect(yamlText).toContain("y:");
-    expect(yamlText).toContain("trace-vin: vin");
+    expect(yamlText).toContain("signal: vin");
   });
 
   it("writes portable relative dataset.path when layout is outside dataset folder", () => {
@@ -61,5 +65,40 @@ describe("T-050 export spec v2 path serialization", () => {
 
     expect(yamlText).toContain("path: D:/data/ota.spice.csv");
     expect(yamlText).not.toContain("path: ./D:/data/ota.spice.csv");
+  });
+
+  it("emits additional datasets inferred from trace source ids", () => {
+    const yamlText = exportPlotSpecV1({
+      datasetPath: "/workspace/examples/run-a.csv",
+      workspace: {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [
+              {
+                id: "trace-run-b",
+                signal: "vin",
+                sourceId: "/workspace/examples/run-b.csv::vin",
+                axisId: "y1",
+                visible: true
+              }
+            ],
+            nextAxisNumber: 2
+          }
+        ]
+      }
+    });
+
+    expect(yamlText).toContain("id: dataset-1");
+    expect(yamlText).toContain("path: /workspace/examples/run-a.csv");
+    expect(yamlText).toContain("id: dataset-2");
+    expect(yamlText).toContain("path: /workspace/examples/run-b.csv");
+    expect(yamlText).toContain("trace-run-b:");
+    expect(yamlText).toContain("dataset: dataset-2");
+    expect(yamlText).toContain("signal: vin");
   });
 });
