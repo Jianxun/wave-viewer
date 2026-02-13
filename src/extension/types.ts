@@ -348,6 +348,14 @@ export type LoadCsvFilesCommandDeps = {
     documentPath: string,
     loaded: { dataset: Dataset; defaultXSignal: string }
   ): void;
+  fileExists?(filePath: string): boolean;
+  readTextFile?(filePath: string): string;
+  writeTextFile?(filePath: string, text: string): void;
+  setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): HostStateSnapshot;
+  openViewerForDataset?(documentPath: string): Promise<string | undefined>;
+  bindViewerToLayout?(viewerId: string, layoutUri: string, datasetPath: string): void;
+  recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
+  recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
   showError(message: string): void;
 };
 
@@ -433,6 +441,11 @@ export type OpenLayoutCommandDeps = {
   loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
   setCachedWorkspace(documentPath: string, workspace: WorkspaceState): HostStateSnapshot;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
+  ensureViewerForDataset?(datasetPath: string): Promise<string | undefined>;
+  registerLoadedDataset?(
+    documentPath: string,
+    loaded: { dataset: Dataset; defaultXSignal: string }
+  ): void;
   recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
   recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;

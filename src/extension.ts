@@ -528,6 +528,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const signalTreeProvider = createSignalTreeDataProvider(vscode);
   const resolveQuickAddDoubleClick = createDoubleClickQuickAddResolver();
   const layoutByViewerId = new Map<string, string>();
+  let forcedOpenViewerDatasetPath: string | undefined;
 
   const commitHostStateTransaction = (
     transaction: Parameters<typeof hostStateStore.commitTransaction>[0]
@@ -687,8 +688,10 @@ export function activate(context: VSCode.ExtensionContext): void {
     layoutAutosave.recordSelfWriteMetadata(metadata);
   };
 
-  function runSidePanelSignalAction(actionType: "add-to-plot" | "add-to-new-axis" | "reveal-in-plot"): (item?: unknown) => void {
-    return (item?: unknown) => {
+  function runSidePanelSignalAction(
+    actionType: "add-to-plot" | "add-to-new-axis" | "reveal-in-plot"
+  ): (item?: unknown) => Promise<void> {
+    return async (item?: unknown) => {
       const selection = resolveSidePanelSelection({
         selection: resolveSignalFromCommandArgument(item),
         getLoadedDataset: (documentPath) => loadedDatasetByPath.get(documentPath),
@@ -703,6 +706,10 @@ export function activate(context: VSCode.ExtensionContext): void {
       });
       if (!selection) {
         return;
+      }
+
+      if (!viewerSessions.resolveTargetViewerSession(selection.documentPath)) {
+        await ensureViewerTargetForDataset(selection.documentPath);
       }
 
       runResolvedSidePanelSignalAction({
@@ -808,7 +815,7 @@ export function activate(context: VSCode.ExtensionContext): void {
   const command = createOpenViewerCommand({
     extensionUri: context.extensionUri,
     getActiveDocument: () => vscode.window.activeTextEditor?.document,
-    getPreferredDatasetPath: getMostRecentlyLoadedDatasetPath,
+    getPreferredDatasetPath: () => forcedOpenViewerDatasetPath ?? getMostRecentlyLoadedDatasetPath(),
     loadDataset,
     onDatasetLoaded: (documentPath, loaded) => {
       registerLoadedDataset(documentPath, loaded);
@@ -837,6 +844,33 @@ export function activate(context: VSCode.ExtensionContext): void {
     buildHtml: (webview, extensionUriArg) =>
       buildWebviewHtml(webview as unknown as VSCode.Webview, extensionUriArg as VSCode.Uri)
   });
+
+  async function ensureViewerTargetForDataset(datasetPath: string): Promise<string | undefined> {
+    const existing = viewerSessions.resolveTargetViewerSession(datasetPath);
+    if (existing) {
+      if (existing.bindDataset) {
+        bindViewerToDataset(existing.viewerId, datasetPath);
+      }
+      return existing.viewerId;
+    }
+
+    const previousForcedDatasetPath = forcedOpenViewerDatasetPath;
+    forcedOpenViewerDatasetPath = datasetPath;
+    try {
+      await command();
+    } finally {
+      forcedOpenViewerDatasetPath = previousForcedDatasetPath;
+    }
+
+    const created = viewerSessions.resolveTargetViewerSession(datasetPath);
+    if (!created) {
+      return undefined;
+    }
+    if (created.bindDataset) {
+      bindViewerToDataset(created.viewerId, datasetPath);
+    }
+    return created.viewerId;
+  }
 
   const exportFrozenBundleCommand = createExportFrozenBundleCommand({
     getActiveViewerId: () => viewerSessions.getActiveViewerId(),
@@ -881,6 +915,8 @@ export function activate(context: VSCode.ExtensionContext): void {
     setCachedWorkspace: (documentPath, workspace) => {
       return hostStateStore.setWorkspace(documentPath, workspace);
     },
+    ensureViewerForDataset: (datasetPath) => ensureViewerTargetForDataset(datasetPath),
+    registerLoadedDataset,
     bindViewerToLayout,
     recordLayoutAxisLaneIdMap: (layoutUri, mapping) => {
       layoutLaneIdsByLayoutUri.set(layoutUri, mapping);
@@ -959,6 +995,22 @@ export function activate(context: VSCode.ExtensionContext): void {
     },
     loadDataset,
     registerLoadedDataset,
+    fileExists: (filePath) => fs.existsSync(filePath),
+    readTextFile: (filePath) => fs.readFileSync(filePath, "utf8"),
+    writeTextFile: (filePath, text) => {
+      persistLayoutFile(filePath, text);
+    },
+    setCachedWorkspace: (documentPath, workspace) => {
+      return hostStateStore.setWorkspace(documentPath, workspace);
+    },
+    openViewerForDataset: (documentPath) => ensureViewerTargetForDataset(documentPath),
+    bindViewerToLayout,
+    recordLayoutAxisLaneIdMap: (layoutUri, mapping) => {
+      layoutLaneIdsByLayoutUri.set(layoutUri, mapping);
+    },
+    recordLayoutXDatasetPathMap: (layoutUri, mapping) => {
+      layoutXDatasetPathByPlotIdByLayoutUri.set(layoutUri, mapping);
+    },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     }
