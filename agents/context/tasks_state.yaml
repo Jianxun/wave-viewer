@@ -12,7 +12,7 @@ T-056:
   pr: 66
   merged: true
 T-057:
-  status: ready_for_review
+  status: review_clean
   pr: 67
   merged: false
 T-058:
