@@ -4,8 +4,8 @@ T-060:
   pr: 71
   merged: true
 T-061:
-  status: in_progress
-  pr: null
+  status: ready_for_review
+  pr: 72
   merged: false
 T-062:
   status: ready
