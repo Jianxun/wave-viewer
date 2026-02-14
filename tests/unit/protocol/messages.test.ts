@@ -169,6 +169,30 @@ describe("protocol envelope validators", () => {
     expect(parsed).toBeUndefined();
   });
 
+  it("accepts host replaySnapshot with empty tuples for replay replacement with no hydrated vectors", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/replaySnapshot", {
+        revision: 2,
+        workspace: { activePlotId: "plot-1", plots: [] },
+        viewerState: { activePlotId: "plot-1", activeAxisByPlotId: {} },
+        tuples: [],
+        reason: "reloadAllFiles"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/replaySnapshot",
+      payload: {
+        revision: 2,
+        workspace: { activePlotId: "plot-1", plots: [] },
+        viewerState: { activePlotId: "plot-1", activeAxisByPlotId: {} },
+        tuples: [],
+        reason: "reloadAllFiles"
+      }
+    });
+  });
+
   it("accepts host tupleUpsert with finite tuple arrays", () => {
     const parsed = parseHostToWebviewMessage(
       createProtocolEnvelope("host/tupleUpsert", {
@@ -203,6 +227,37 @@ describe("protocol envelope validators", () => {
         ]
       }
     });
+  });
+
+  it("keeps tupleUpsert contract valid alongside replaySnapshot contract", () => {
+    const replay = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/replaySnapshot", {
+        revision: 3,
+        workspace: { activePlotId: "plot-1", plots: [] },
+        viewerState: { activePlotId: "plot-1", activeAxisByPlotId: {} },
+        tuples: [],
+        reason: "reloadAllFiles"
+      })
+    );
+    const upsert = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/tupleUpsert", {
+        tuples: [
+          {
+            traceId: "viewer-1:vin:3",
+            sourceId: "/workspace/examples/a.csv::vin",
+            datasetPath: "/workspace/examples/a.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [4, 5, 6]
+          }
+        ]
+      })
+    );
+
+    expect(replay?.type).toBe("host/replaySnapshot");
+    expect(upsert?.type).toBe("host/tupleUpsert");
+    expect(upsert?.payload.tuples[0]?.y).toEqual([4, 5, 6]);
   });
 
   it("accepts host sidePanelQuickAdd with explicit plot and axis target", () => {
