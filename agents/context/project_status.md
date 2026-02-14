@@ -1,43 +1,33 @@
 # Project Status
 
 ## Current state summary
-- Layout schema is now v2-only (`version: 2`) with host-side translation and lane-id mapping (`T-050`, `T-051` merged).
-- Frozen bundle export workflow is merged and stable (`T-052`): exports `<name>.frozen.csv` + `<name>.frozen.wave-viewer.yaml`.
-- Test/docs baseline refresh for v2-only flow is merged (`T-053`).
-- Architecture direction was updated on 2026-02-13:
-  - `ADR-0015` accepted: patch `version: 2` schema directly to multi-dataset (`datasets[]`, dataset-qualified x/y bindings).
-  - `ADR-0016` accepted: keep a single explorer with multi-viewer host routing and auto-open viewer semantics for viewer-dependent commands.
-  - `ADR-0017` accepted: frozen export for multi-dataset layouts is one frozen layout plus one frozen CSV per referenced dataset.
-- Recent UX refinements landed:
-  - axis title inference on first trace add (`V*` -> `Voltage (V)`, `I*` -> `Current (A)`, case-insensitive),
-  - inferred title applies once per axis and preserves manual edits.
-- Command surface has been simplified:
-  - removed `saveLayout`, `exportPlotSpec`, `importPlotSpec`, and `signalBrowser.revealInPlot`,
-  - retained `openViewer`, `openLayout`, `saveLayoutAs`, `exportFrozenBundle`, and core signal-browser actions.
+- Multi-dataset v2 layout/routing/frozen-export slice (`T-054` to `T-059`) is merged and archived.
+- Packaged extension usability issues were triaged in-session; a remaining defect is reload consistency: existing plotted traces can stay stale after `Reload All Files` until a new user intent is sent.
+- `ADR-0018` is accepted (2026-02-14): reload flows must use atomic host replay snapshots (`workspace + viewerState + tuples`) instead of incremental tuple-only reload sync.
+- Protocol/spec docs were updated to encode replay-snapshot requirements for dataset reload behavior.
 
 ## Last merged/verified status
 - Task states:
-  - `T-050` done (PR #59),
-  - `T-051` done (PR #60),
-  - `T-052` done (PR #61),
-  - `T-053` done (PR #62),
-  - `T-054` ready (no PR yet),
-  - `T-055` ready (no PR yet),
-  - `T-056` ready (no PR yet),
-  - `T-057` ready (no PR yet),
-  - `T-058` ready (no PR yet),
-  - `T-059` ready (no PR yet).
+  - `T-054` done (PR #64),
+  - `T-055` done (PR #65),
+  - `T-056` done (PR #66),
+  - `T-057` done (PR #67),
+  - `T-058` done (PR #68),
+  - `T-059` done (PR #69).
+- New sprint slice created and ready:
+  - `T-060` protocol/webview replay snapshot support,
+  - `T-061` host reload replay fanout rewrite,
+  - `T-062` regression coverage for reload-without-new-intent,
+  - `T-063` cleanup + docs alignment.
 - Local verification for current workspace changes:
-  - `npm run lint` passed,
-  - `npm test -- tests/extension/smoke.test.ts` passed,
-  - `npm test -- tests/unit/webview/workspaceState.test.ts` passed.
+  - `./venv/bin/python scripts/lint_tasks_state.py` pending rerun after architecture file updates.
 
 ## Next 1-3 tasks
-1. `T-055` Redefine core spec import/export for multi-dataset `version: 2` layout semantics (breaking by design).
-2. `T-056` Refactor host routing/session model to support single explorer + multiple live viewers with deterministic targeting.
-3. `T-057` and `T-059` unify command flows + frozen bundle outputs around multi-dataset v2 semantics.
+1. `T-060` implement `host/replaySnapshot` protocol and atomic webview apply path.
+2. `T-061` replace reload incremental tuple fanout with viewer-scoped replay snapshot generation.
+3. `T-062` add regression tests that prove reload refreshes existing traces without requiring new add/drop intents.
 
 ## Known risks / unknowns
-- Breaking schema patch to v2 will invalidate existing single-dataset v2 files; this is intentional but should be called out in release notes/tests.
-- Session routing complexity rises with multi-viewer auto-open behavior; tests must cover ambiguous targeting and no-active-viewer paths.
-- Autosave/external-watch ordering around default-layout creation and immediate viewer open can cause duplicate reloads if self-write suppression is incomplete.
+- Replay snapshot payload size can increase on large workspaces; correctness is prioritized for MVP and payload optimization may be needed later.
+- Reload path touches protocol, extension orchestration, and webview render state together; partial rollouts will reintroduce stale-cache behavior.
+- Path normalization across imported/frozen layouts remains a risk area; tests must include relative and rewritten dataset path scenarios.

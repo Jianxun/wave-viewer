@@ -22,6 +22,7 @@ Active ADRs:
 - `ADR-0015`: Layout YAML `version: 2` is multi-dataset-first (`datasets[]`, dataset-qualified x/y signals) with no backward compatibility path.
 - `ADR-0016`: Single explorer drives multiple live viewers through host-side deterministic routing and viewer auto-open semantics.
 - `ADR-0017`: Frozen export for multi-dataset workspaces emits one layout YAML plus one frozen CSV per dataset.
+- `ADR-0018`: Dataset reload uses atomic host replay snapshots so workspace/viewerState/tuples update coherently.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -104,6 +105,7 @@ Active ADRs:
 - MUST keep host as the single writer for workspace and viewer interaction state.
 - MUST NOT allow webview to overwrite authoritative workspace snapshots.
 - MUST keep trace identity dataset-qualified so same signal names from different datasets remain distinct.
+- MUST treat dataset reload replay as an atomic host-to-webview snapshot update that includes coherent workspace, viewer state, and trace tuples.
 - MUST treat "add signal to new axis" as one atomic transaction that creates axis, appends trace, and activates the new axis.
 - MUST use active axis as default target for side-panel `Add to Plot` and explorer quick-add operations.
 - MUST auto-open a viewer for commands that require one when no eligible viewer exists.
@@ -141,6 +143,7 @@ Active ADRs:
 - 2026-02-13: Redefined layout schema `version: 2` as multi-dataset-first (`datasets[]`, dataset-qualified x/y signals) with no backward-compatibility import path (ADR-0015).
 - 2026-02-13: Adopted single-explorer multi-viewer host routing with viewer auto-open behavior for viewer-dependent commands and layout-open flows (ADR-0016).
 - 2026-02-13: Superseded single-CSV frozen bundle cardinality with multi-dataset frozen artifact sets (one frozen CSV per dataset + one frozen layout), keeping export/session separation (ADR-0017 supersedes ADR-0014 artifact cardinality).
+- 2026-02-14: Accepted atomic reload replay snapshots so dataset reload updates apply as one coherent host snapshot (workspace + viewerState + tuples), avoiding stale trace vectors until later user intents (ADR-0018).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.

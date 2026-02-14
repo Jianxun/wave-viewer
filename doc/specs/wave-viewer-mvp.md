@@ -149,6 +149,7 @@ type WorkspaceState = {
 - Host state messages MUST include monotonic revision numbers; webview MUST ignore stale revisions.
 - Protocol changes MUST follow compatibility/versioning rules in `doc/specs/host-webview-protocol.md`.
 - Drag/drop signal operations MUST emit normalized `webview/intent/dropSignal` events to the host.
+- Dataset reload operations MUST deliver atomic replay snapshots (workspace + viewer state + tuples) so existing rendered traces refresh without requiring follow-up user interactions.
 
 ## 6. Plotly Mapping Rules
 
