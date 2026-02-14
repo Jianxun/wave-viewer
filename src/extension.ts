@@ -85,6 +85,7 @@ export {
 export {
   applyDropSignalAction,
   applySetTraceAxisAction,
+  buildDeterministicDatasetLookup,
   applySidePanelSignalAction,
   buildWebviewHtml,
   createExportSpecCommand,
@@ -102,9 +103,11 @@ export {
   createSaveLayoutCommand,
   createViewerSessionRegistry,
   isCsvFile,
+  resolveLoadedDatasetDeterministically,
   resolveSidePanelSelection,
   runResolvedSidePanelQuickAdd,
-  runResolvedSidePanelSignalAction
+  runResolvedSidePanelSignalAction,
+  toDeterministicDatasetPathKeys
 };
 
 export type {
@@ -1197,19 +1200,34 @@ function toDeterministicDatasetPathKeys(datasetPath: string): string[] {
 function buildDeterministicDatasetLookup(
   loadedDatasetByPath: ReadonlyMap<string, LoadedDatasetRecord>
 ): ReadonlyMap<string, LoadedDatasetRecord> {
-  const lookup = new Map<string, LoadedDatasetRecord>();
+  const exactLookup = new Map<string, LoadedDatasetRecord>();
+  const aliasLookup = new Map<string, LoadedDatasetRecord>();
   const entries = Array.from(loadedDatasetByPath.entries()).sort(([leftPath], [rightPath]) =>
     leftPath.localeCompare(rightPath)
   );
 
   for (const [datasetPath, loadedDataset] of entries) {
-    for (const key of toDeterministicDatasetPathKeys(datasetPath)) {
-      if (!lookup.has(key)) {
-        lookup.set(key, loadedDataset);
+    const [exactKey, ...aliasKeys] = toDeterministicDatasetPathKeys(datasetPath);
+    if (exactKey && !exactLookup.has(exactKey)) {
+      exactLookup.set(exactKey, loadedDataset);
+    }
+
+    for (const aliasKey of aliasKeys) {
+      if (!exactLookup.has(aliasKey) && !aliasLookup.has(aliasKey)) {
+        aliasLookup.set(aliasKey, loadedDataset);
       }
     }
   }
 
+  const lookup = new Map<string, LoadedDatasetRecord>();
+  for (const [key, loadedDataset] of exactLookup.entries()) {
+    lookup.set(key, loadedDataset);
+  }
+  for (const [key, loadedDataset] of aliasLookup.entries()) {
+    if (!lookup.has(key)) {
+      lookup.set(key, loadedDataset);
+    }
+  }
   return lookup;
 }
 

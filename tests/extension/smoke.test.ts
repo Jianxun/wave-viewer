@@ -17,6 +17,7 @@ import {
   createNoTargetViewerWarning,
   createLoadCsvFilesCommand,
   computeLayoutWatchTransition,
+  buildDeterministicDatasetLookup,
   createHostStateStore,
   createLayoutExternalEditController,
   createOpenViewerCommand,
@@ -38,7 +39,9 @@ import {
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   runResolvedSidePanelQuickAdd,
   runResolvedSidePanelSignalAction,
+  resolveLoadedDatasetDeterministically,
   resolveSidePanelSelection,
+  toDeterministicDatasetPathKeys,
   type CommandDeps,
   type HostToWebviewMessage,
   type LoadedDatasetRecord,
@@ -312,6 +315,54 @@ function createDatasetQualifiedReplaySpecYaml(
     "            signal: ib"
   ].join("\n");
 }
+
+describe("deterministic dataset path lookup", () => {
+  it("includes exact and alias keys for csv/frozen dataset paths", () => {
+    expect(toDeterministicDatasetPathKeys("/workspace/examples/a.csv")).toEqual([
+      "/workspace/examples/a.csv",
+      "/workspace/examples/a.frozen.csv"
+    ]);
+    const frozenKeys = toDeterministicDatasetPathKeys("/workspace/examples/a.frozen.csv");
+    expect(frozenKeys[0]).toBe("/workspace/examples/a.frozen.csv");
+    expect(frozenKeys).toContain("/workspace/examples/a.csv");
+  });
+
+  it("prefers exact path matches over alias matches when csv and frozen datasets are both loaded", () => {
+    const csvRecord: LoadedDatasetRecord = {
+      dataset: {
+        path: "/workspace/examples/a.csv",
+        rowCount: 2,
+        columns: [
+          { name: "time", values: [0, 1] },
+          { name: "vin", values: [1, 2] }
+        ]
+      },
+      defaultXSignal: "time"
+    };
+    const frozenRecord: LoadedDatasetRecord = {
+      dataset: {
+        path: "/workspace/examples/a.frozen.csv",
+        rowCount: 2,
+        columns: [
+          { name: "time", values: [0, 1] },
+          { name: "vin", values: [3, 4] }
+        ]
+      },
+      defaultXSignal: "time"
+    };
+    const lookup = buildDeterministicDatasetLookup(
+      new Map<string, LoadedDatasetRecord>([
+        ["/workspace/examples/a.csv", csvRecord],
+        ["/workspace/examples/a.frozen.csv", frozenRecord]
+      ])
+    );
+
+    expect(resolveLoadedDatasetDeterministically("/workspace/examples/a.csv", lookup)).toBe(csvRecord);
+    expect(resolveLoadedDatasetDeterministically("/workspace/examples/a.frozen.csv", lookup)).toBe(
+      frozenRecord
+    );
+  });
+});
 
 describe("T-002 extension shell smoke", () => {
   it("allows data/blob image sources in webview CSP for Plotly PNG export", () => {

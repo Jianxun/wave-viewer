@@ -4,7 +4,7 @@ T-060:
   pr: 71
   merged: true
 T-061:
-  status: request_changes
+  status: ready_for_review
   pr: 72
   merged: false
 T-062:
