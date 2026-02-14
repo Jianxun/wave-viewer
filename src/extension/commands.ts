@@ -757,6 +757,27 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
+      if (message.type === "webview/intent/refreshSignals") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored refreshSignals because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+
+        try {
+          await deps.refreshAllLoadedSignals?.();
+        } catch (error) {
+          deps.showError(`Failed to refresh loaded signals: ${getErrorMessage(error)}`);
+          deps.logDebug?.("Failed refreshSignals request from webview intent.", {
+            payload: message.payload,
+            error: getErrorMessage(error)
+          });
+        }
+        return;
+      }
+
       if (message.type !== "webview/ready") {
         deps.logDebug?.("Ignored unsupported webview message type.", message.type);
         return;

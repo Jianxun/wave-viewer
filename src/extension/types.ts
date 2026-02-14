@@ -188,6 +188,13 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/refreshSignals",
+      {
+        viewerId: string;
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/dropSignal",
       {
         viewerId: string;
@@ -349,6 +356,7 @@ export type CommandDeps = {
   getHostStateSnapshot?(documentPath: string): HostStateSnapshot | undefined;
   ensureHostStateSnapshot?(documentPath: string, defaultXSignal: string): HostStateSnapshot;
   commitHostStateTransaction(transaction: HostStateTransaction): HostStateTransactionResult;
+  refreshAllLoadedSignals?(): PromiseLike<void> | void;
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): string | undefined;
   showWarning(message: string): PromiseLike<string | undefined>;

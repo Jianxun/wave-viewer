@@ -133,6 +133,7 @@ function createDeps(overrides?: {
   onDatasetLoaded?: ReturnType<typeof vi.fn>;
   resolveViewerSessionContext?: ReturnType<typeof vi.fn>;
   showWarning?: ReturnType<typeof vi.fn>;
+  refreshAllLoadedSignals?: ReturnType<typeof vi.fn>;
 }): {
   deps: CommandDeps;
   panelFixture: PanelFixture;
@@ -197,6 +198,7 @@ function createDeps(overrides?: {
     ensureHostStateSnapshot: (documentPath, defaultXSignal) =>
       store.ensureSnapshot(documentPath, defaultXSignal),
     commitHostStateTransaction: (transaction) => store.commitTransaction(transaction),
+    refreshAllLoadedSignals: overrides?.refreshAllLoadedSignals,
     showWarning,
     showError,
     logDebug,
@@ -3366,6 +3368,25 @@ describe("T-018 normalized protocol handling", () => {
     expect(panelFixture.sentMessages).toEqual([]);
   });
 
+  it("handles validated refreshSignals intent by invoking host-level refresh", async () => {
+    const refreshAllLoadedSignals = vi.fn(async () => undefined);
+    const { deps, panelFixture } = createDeps({
+      refreshAllLoadedSignals
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    await panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/refreshSignals", {
+        viewerId: "viewer-1",
+        requestId: "req-refresh-1"
+      })
+    );
+
+    expect(refreshAllLoadedSignals).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([]);
+  });
+
   it("handles validated renamePlot intent via host transaction and trims the name", async () => {
     const { deps, panelFixture } = createDeps({
       initialWorkspace: createWorkspaceFixture()
@@ -4374,11 +4395,14 @@ describe("T-041 plot tab lifecycle host intents", () => {
     expect(source).toContain('createProtocolEnvelope("webview/intent/addPlot"');
     expect(source).toContain('createProtocolEnvelope("webview/intent/removePlot"');
     expect(source).toContain('createProtocolEnvelope("webview/intent/clearPlot"');
+    expect(source).toContain('createProtocolEnvelope("webview/intent/refreshSignals"');
     expect(source).toContain("onSelect: (plotId) => postSetActivePlot(plotId)");
     expect(source).toContain("onAdd: () => postAddPlot(activePlot.xSignal)");
     expect(source).toContain("onRemove: (plotId) => postRemovePlot(plotId)");
+    expect(source).toContain("getRequiredElement<HTMLButtonElement>(\"refresh-signals-button\")");
     expect(source).toContain("getRequiredElement<HTMLButtonElement>(\"clear-plot-button\")");
     expect(source).not.toContain("window.confirm(");
+    expect(htmlSource).toContain('id="refresh-signals-button"');
     expect(htmlSource).toContain('id="clear-plot-button"');
     expect(source).not.toContain('onAdd: () =>\n      dispatch({\n        type: "plot/add"');
     expect(source).not.toContain('onRemove: (plotId) => dispatch({ type: "plot/remove", payload: { plotId } })');

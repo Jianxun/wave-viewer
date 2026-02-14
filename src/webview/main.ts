@@ -79,6 +79,7 @@ let lastAppliedRevision = -1;
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
+const refreshSignalsButtonEl = getRequiredElement<HTMLButtonElement>("refresh-signals-button");
 const clearPlotButtonEl = getRequiredElement<HTMLButtonElement>("clear-plot-button");
 const bridgeStatusEl = getRequiredElement("bridge-status");
 const datasetStatusEl = getRequiredElement("dataset-status");
@@ -358,6 +359,15 @@ function postClearPlot(plotId: string): void {
   );
 }
 
+function postRefreshSignals(): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/refreshSignals", {
+      viewerId,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
 function renderCanvasDropOverlay(axes: ReadonlyArray<{ id: AxisId }>): void {
   plotDropOverlayEl.replaceChildren();
   const laneDomains = getAxisLaneDomains(axes);
@@ -579,6 +589,10 @@ clearPlotButtonEl.addEventListener("click", () => {
     return;
   }
   postClearPlot(getActivePlot(workspace).id);
+});
+
+refreshSignalsButtonEl.addEventListener("click", () => {
+  postRefreshSignals();
 });
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
