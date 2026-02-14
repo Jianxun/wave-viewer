@@ -6,3 +6,5 @@ dist/
 coverage/
 
 examples/yaml2plot/
+
+wave-viewer-0.0.1.vsix
