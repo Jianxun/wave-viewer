@@ -926,15 +926,17 @@ export function createReloadAllLoadedFilesCommand(
   deps: ReloadAllLoadedFilesCommandDeps
 ): () => Promise<void> {
   return async () => {
+    const reloadedDatasetPaths: string[] = [];
     for (const documentPath of deps.getLoadedDatasetPaths()) {
       try {
         const loaded = deps.loadDataset(documentPath);
         deps.registerLoadedDataset(documentPath, loaded);
-        await deps.onDatasetReloaded?.(documentPath, loaded);
+        reloadedDatasetPaths.push(documentPath);
       } catch (error) {
         deps.showError(`Failed to reload '${documentPath}': ${getErrorMessage(error)}`);
       }
     }
+    await deps.onReloadCompleted?.(reloadedDatasetPaths);
   };
 }
 

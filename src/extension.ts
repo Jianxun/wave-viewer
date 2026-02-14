@@ -85,6 +85,7 @@ export {
 export {
   applyDropSignalAction,
   applySetTraceAxisAction,
+  buildDeterministicDatasetLookup,
   applySidePanelSignalAction,
   buildWebviewHtml,
   createExportSpecCommand,
@@ -102,9 +103,11 @@ export {
   createSaveLayoutCommand,
   createViewerSessionRegistry,
   isCsvFile,
+  resolveLoadedDatasetDeterministically,
   resolveSidePanelSelection,
   runResolvedSidePanelQuickAdd,
-  runResolvedSidePanelSignalAction
+  runResolvedSidePanelSignalAction,
+  toDeterministicDatasetPathKeys
 };
 
 export type {
@@ -1021,27 +1024,38 @@ export function activate(context: VSCode.ExtensionContext): void {
     getLoadedDatasetPaths: () => Array.from(loadedDatasetByPath.keys()),
     loadDataset,
     registerLoadedDataset,
-    onDatasetReloaded: async (documentPath, loadedDataset) => {
+    onReloadCompleted: async (reloadedDatasetPaths) => {
+      if (reloadedDatasetPaths.length === 0) {
+        return;
+      }
+
+      const reloadedPathKeySet = new Set<string>();
+      for (const reloadedDatasetPath of reloadedDatasetPaths) {
+        for (const key of toDeterministicDatasetPathKeys(reloadedDatasetPath)) {
+          reloadedPathKeySet.add(key);
+        }
+      }
+
+      const datasetPathLookup = buildDeterministicDatasetLookup(loadedDatasetByPath);
       const bindings = viewerSessions.getAllViewerBindings();
       for (const binding of bindings) {
         const viewerSnapshot = hostStateStore.getSnapshot(binding.datasetPath);
         if (!viewerSnapshot) {
           continue;
         }
-        const datasetSourcePrefix = `${documentPath}::`;
-        const referencesReloadedDataset = viewerSnapshot.workspace.plots.some((plot) =>
-          plot.traces.some((trace) => {
-            if (trace.sourceId) {
-              return trace.sourceId.startsWith(datasetSourcePrefix);
-            }
-            return binding.datasetPath === documentPath;
-          })
+        const referencesReloadedDataset = workspaceReferencesReloadedDataset(
+          viewerSnapshot.workspace,
+          binding.datasetPath,
+          reloadedPathKeySet
         );
         if (!referencesReloadedDataset) {
           continue;
         }
 
-        const viewerBaseDataset = loadedDatasetByPath.get(binding.datasetPath);
+        const viewerBaseDataset = resolveLoadedDatasetDeterministically(
+          binding.datasetPath,
+          datasetPathLookup
+        );
         if (!viewerBaseDataset) {
           continue;
         }
@@ -1054,34 +1068,21 @@ export function activate(context: VSCode.ExtensionContext): void {
             console.debug(`[wave-viewer] ${message}`, details);
           },
           (datasetPath) => {
-            if (datasetPath === documentPath) {
-              return loadedDataset;
-            }
-            return loadedDatasetByPath.get(datasetPath);
+            return resolveLoadedDatasetDeterministically(datasetPath, datasetPathLookup);
           }
         );
-        if (hydrated.tracePayloads.length === 0) {
-          continue;
-        }
         const nextSnapshot =
           hydrated.workspace !== viewerSnapshot.workspace
             ? hostStateStore.setWorkspace(binding.datasetPath, hydrated.workspace)
             : viewerSnapshot;
 
-        if (hydrated.workspace !== viewerSnapshot.workspace) {
-          void binding.panel.webview.postMessage(
-            createProtocolEnvelope("host/statePatch", {
-              revision: nextSnapshot.revision,
-              workspace: nextSnapshot.workspace,
-              viewerState: nextSnapshot.viewerState,
-              reason: "reloadAllFiles:normalizeTraceSourceIds"
-            })
-          );
-        }
-
         void binding.panel.webview.postMessage(
-          createProtocolEnvelope("host/tupleUpsert", {
-            tuples: hydrated.tracePayloads
+          createProtocolEnvelope("host/replaySnapshot", {
+            revision: nextSnapshot.revision,
+            workspace: nextSnapshot.workspace,
+            viewerState: nextSnapshot.viewerState,
+            tuples: hydrated.tracePayloads,
+            reason: "reloadAllFiles:command"
           })
         );
       }
@@ -1144,6 +1145,103 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(REMOVE_LOADED_FILE_COMMAND, removeLoadedFileCommand)
   );
+}
+
+function workspaceReferencesReloadedDataset(
+  workspace: WorkspaceState,
+  fallbackDatasetPath: string,
+  reloadedPathKeySet: ReadonlySet<string>
+): boolean {
+  for (const plot of workspace.plots) {
+    for (const trace of plot.traces) {
+      const traceDatasetPath = getTraceDatasetPathFromSourceId(trace.sourceId, fallbackDatasetPath);
+      for (const key of toDeterministicDatasetPathKeys(traceDatasetPath)) {
+        if (reloadedPathKeySet.has(key)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function getTraceDatasetPathFromSourceId(sourceId: string | undefined, fallbackPath: string): string {
+  if (!sourceId) {
+    return fallbackPath;
+  }
+  const separatorIndex = sourceId.lastIndexOf("::");
+  if (separatorIndex <= 0) {
+    return fallbackPath;
+  }
+  const candidate = sourceId.slice(0, separatorIndex).trim();
+  return candidate.length > 0 ? candidate : fallbackPath;
+}
+
+function toDeterministicDatasetPathKeys(datasetPath: string): string[] {
+  const keys = new Set<string>();
+  const resolvedPath = path.resolve(datasetPath);
+  const normalizedPath = path.normalize(resolvedPath);
+  const comparable = process.platform === "win32" ? normalizedPath.toLowerCase() : normalizedPath;
+  keys.add(comparable);
+
+  const frozenPathMatch = comparable.match(/^(.*)\.frozen\.csv$/i);
+  if (frozenPathMatch?.[1]) {
+    keys.add(`${frozenPathMatch[1]}.csv`);
+  }
+
+  const csvPathMatch = comparable.match(/^(.*)\.csv$/i);
+  if (csvPathMatch?.[1]) {
+    keys.add(`${csvPathMatch[1]}.frozen.csv`);
+  }
+
+  return Array.from(keys);
+}
+
+function buildDeterministicDatasetLookup(
+  loadedDatasetByPath: ReadonlyMap<string, LoadedDatasetRecord>
+): ReadonlyMap<string, LoadedDatasetRecord> {
+  const exactLookup = new Map<string, LoadedDatasetRecord>();
+  const aliasLookup = new Map<string, LoadedDatasetRecord>();
+  const entries = Array.from(loadedDatasetByPath.entries()).sort(([leftPath], [rightPath]) =>
+    leftPath.localeCompare(rightPath)
+  );
+
+  for (const [datasetPath, loadedDataset] of entries) {
+    const [exactKey, ...aliasKeys] = toDeterministicDatasetPathKeys(datasetPath);
+    if (exactKey && !exactLookup.has(exactKey)) {
+      exactLookup.set(exactKey, loadedDataset);
+    }
+
+    for (const aliasKey of aliasKeys) {
+      if (!exactLookup.has(aliasKey) && !aliasLookup.has(aliasKey)) {
+        aliasLookup.set(aliasKey, loadedDataset);
+      }
+    }
+  }
+
+  const lookup = new Map<string, LoadedDatasetRecord>();
+  for (const [key, loadedDataset] of exactLookup.entries()) {
+    lookup.set(key, loadedDataset);
+  }
+  for (const [key, loadedDataset] of aliasLookup.entries()) {
+    if (!lookup.has(key)) {
+      lookup.set(key, loadedDataset);
+    }
+  }
+  return lookup;
+}
+
+function resolveLoadedDatasetDeterministically(
+  datasetPath: string,
+  datasetPathLookup: ReadonlyMap<string, LoadedDatasetRecord>
+): LoadedDatasetRecord | undefined {
+  for (const key of toDeterministicDatasetPathKeys(datasetPath)) {
+    const match = datasetPathLookup.get(key);
+    if (match) {
+      return match;
+    }
+  }
+  return undefined;
 }
 
 function getErrorMessage(error: unknown): string {
