@@ -126,6 +126,39 @@ export function createViewerSessionRegistry(): ViewerSessionRegistry {
       }
       return bindings;
     },
+    getAllViewerBindings(): LayoutBindingTarget[] {
+      const bindings: LayoutBindingTarget[] = [];
+      for (const [viewerId, session] of viewerById.entries()) {
+        if (!session.datasetPath) {
+          continue;
+        }
+        bindings.push({
+          viewerId,
+          datasetPath: session.datasetPath,
+          panel: session.panel
+        });
+      }
+      return bindings;
+    },
+    getViewerBindingsForDataset(datasetPath: string): LayoutBindingTarget[] {
+      const bindings: LayoutBindingTarget[] = [];
+      const viewerIds = viewerIdsByDatasetPath.get(datasetPath);
+      if (!viewerIds) {
+        return bindings;
+      }
+      for (const viewerId of viewerIds) {
+        const session = getSession(viewerId);
+        if (!session?.datasetPath) {
+          continue;
+        }
+        bindings.push({
+          viewerId,
+          datasetPath: session.datasetPath,
+          panel: session.panel
+        });
+      }
+      return bindings;
+    },
     getDatasetPathForViewer(viewerId: string): string | undefined {
       return getSession(viewerId)?.datasetPath;
     },

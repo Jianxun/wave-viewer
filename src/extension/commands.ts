@@ -95,7 +95,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
       }
     };
 
-    panel.webview.onDidReceiveMessage((rawMessage) => {
+    panel.webview.onDidReceiveMessage(async (rawMessage) => {
       const message = parseWebviewToHostMessage(rawMessage);
       if (!message) {
         deps.logDebug?.("Ignored invalid or unknown webview message.", rawMessage);
@@ -716,6 +716,13 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
 
         try {
+          const confirmation = await deps.showWarning(
+            "Clear the active plot? This removes all lanes and traces from the current plot."
+          );
+          if (confirmation !== "Clear Plot") {
+            return;
+          }
+
           const transaction = deps.commitHostStateTransaction({
             datasetPath: resolvedDatasetPath,
             defaultXSignal: resolvedDataset.defaultXSignal,
@@ -923,6 +930,7 @@ export function createReloadAllLoadedFilesCommand(
       try {
         const loaded = deps.loadDataset(documentPath);
         deps.registerLoadedDataset(documentPath, loaded);
+        await deps.onDatasetReloaded?.(documentPath, loaded);
       } catch (error) {
         deps.showError(`Failed to reload '${documentPath}': ${getErrorMessage(error)}`);
       }

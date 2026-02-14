@@ -1,0 +1,17 @@
+.env
+.git/**
+.github/**
+.vscode/**
+agents/**
+doc/**
+examples/**
+scripts/**
+tests/**
+src/**
+!src/webview/
+!src/webview/index.html
+!src/webview/styles.css
+venv/**
+node_modules/**
+*.log
+tsconfig.json

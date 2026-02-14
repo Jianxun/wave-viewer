@@ -53,7 +53,7 @@ import type { WorkspaceState } from "../../src/webview/state/workspaceState";
 type PanelFixture = {
   panel: WebviewPanelLike;
   sentMessages: HostToWebviewMessage[];
-  emitMessage(message: unknown): void;
+  emitMessage(message: unknown): Promise<void>;
 };
 
 function createPanelFixture(): PanelFixture {
@@ -76,8 +76,8 @@ function createPanelFixture(): PanelFixture {
   return {
     panel: { webview },
     sentMessages,
-    emitMessage: (message) => {
-      listener?.(message);
+    emitMessage: async (message) => {
+      await listener?.(message);
     }
   };
 }
@@ -128,10 +128,12 @@ function createDeps(overrides?: {
   initialWorkspace?: WorkspaceState;
   onDatasetLoaded?: ReturnType<typeof vi.fn>;
   resolveViewerSessionContext?: ReturnType<typeof vi.fn>;
+  showWarning?: ReturnType<typeof vi.fn>;
 }): {
   deps: CommandDeps;
   panelFixture: PanelFixture;
   showError: ReturnType<typeof vi.fn>;
+  showWarning: ReturnType<typeof vi.fn>;
   logDebug: ReturnType<typeof vi.fn>;
   getCachedWorkspace: ReturnType<typeof vi.fn>;
   setCachedWorkspace: ReturnType<typeof vi.fn>;
@@ -139,6 +141,7 @@ function createDeps(overrides?: {
   const datasetPath = "/workspace/examples/simulations/ota.spice.csv";
   const panelFixture = overrides?.panelFixture ?? createPanelFixture();
   const showError = vi.fn();
+  const showWarning = overrides?.showWarning ?? vi.fn(async () => "Clear Plot");
   const logDebug = vi.fn();
   const hasActiveDocument = overrides?.hasActiveDocument ?? true;
   const store = createHostStateStore();
@@ -190,6 +193,7 @@ function createDeps(overrides?: {
     ensureHostStateSnapshot: (documentPath, defaultXSignal) =>
       store.ensureSnapshot(documentPath, defaultXSignal),
     commitHostStateTransaction: (transaction) => store.commitTransaction(transaction),
+    showWarning,
     showError,
     logDebug,
     buildHtml: () => overrides?.buildHtml ?? "<html>shell</html>"
@@ -201,7 +205,7 @@ function createDeps(overrides?: {
     deps.onDatasetLoaded = overrides.onDatasetLoaded;
   }
 
-  return { deps, panelFixture, showError, logDebug, getCachedWorkspace, setCachedWorkspace };
+  return { deps, panelFixture, showError, showWarning, logDebug, getCachedWorkspace, setCachedWorkspace };
 }
 
 function createWorkspaceFixture(): WorkspaceState {
@@ -2285,6 +2289,7 @@ describe("T-021 explorer load/reload actions", () => {
 
   it("reloads all loaded files and preserves already-loaded datasets on parse failures", async () => {
     const registerLoadedDataset = vi.fn();
+    const onDatasetReloaded = vi.fn();
     const showError = vi.fn();
     const command = createReloadAllLoadedFilesCommand({
       getLoadedDatasetPaths: () => ["/workspace/examples/a.csv", "/workspace/examples/bad.csv"],
@@ -2302,6 +2307,7 @@ describe("T-021 explorer load/reload actions", () => {
         };
       },
       registerLoadedDataset,
+      onDatasetReloaded,
       showError
     });
 
@@ -2309,6 +2315,15 @@ describe("T-021 explorer load/reload actions", () => {
 
     expect(registerLoadedDataset).toHaveBeenCalledTimes(1);
     expect(registerLoadedDataset).toHaveBeenCalledWith("/workspace/examples/a.csv", {
+      dataset: {
+        path: "/workspace/examples/a.csv",
+        rowCount: 5,
+        columns: [{ name: "time", values: [0, 1, 2, 3, 4] }]
+      },
+      defaultXSignal: "time"
+    });
+    expect(onDatasetReloaded).toHaveBeenCalledTimes(1);
+    expect(onDatasetReloaded).toHaveBeenCalledWith("/workspace/examples/a.csv", {
       dataset: {
         path: "/workspace/examples/a.csv",
         rowCount: 5,
@@ -3011,18 +3026,24 @@ describe("T-018 normalized protocol handling", () => {
         }
       ]
     };
+    const showWarning = vi.fn(async () => "Clear Plot");
     const { deps, panelFixture } = createDeps({
+      showWarning,
       initialWorkspace
     });
 
     await createOpenViewerCommand(deps)();
 
-    panelFixture.emitMessage(
+    await panelFixture.emitMessage(
       createProtocolEnvelope("webview/intent/clearPlot", {
         viewerId: "viewer-1",
         plotId: "plot-2",
         requestId: "req-clear-plot-1"
       })
+    );
+
+    expect(showWarning).toHaveBeenCalledWith(
+      "Clear the active plot? This removes all lanes and traces from the current plot."
     );
 
     expect(panelFixture.sentMessages).toEqual([
@@ -3063,6 +3084,39 @@ describe("T-018 normalized protocol handling", () => {
         }
       }
     ]);
+  });
+
+  it("does not mutate workspace when clearPlot confirmation is canceled", async () => {
+    const showWarning = vi.fn(async () => undefined);
+    const { deps, panelFixture } = createDeps({
+      showWarning,
+      initialWorkspace: {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }, { id: "y2" }],
+            traces: [{ id: "trace-1", signal: "vin", axisId: "y2", visible: true }],
+            nextAxisNumber: 3
+          }
+        ]
+      }
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    await panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/clearPlot", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        requestId: "req-clear-plot-cancel"
+      })
+    );
+
+    expect(showWarning).toHaveBeenCalledTimes(1);
+    expect(panelFixture.sentMessages).toEqual([]);
   });
 
   it("handles validated renamePlot intent via host transaction and trims the name", async () => {
@@ -4011,6 +4065,7 @@ describe("T-033 revisioned protocol semantics", () => {
     expect(source).toContain('if (message.type === "host/stateSnapshot")');
     expect(source).toContain('if (message.type === "host/statePatch")');
     expect(source).toContain('if (message.type === "host/tupleUpsert")');
+    expect(source).toContain("void renderWorkspace();");
   });
 });
 
@@ -4072,7 +4127,7 @@ describe("T-041 plot tab lifecycle host intents", () => {
     expect(source).toContain("onAdd: () => postAddPlot(activePlot.xSignal)");
     expect(source).toContain("onRemove: (plotId) => postRemovePlot(plotId)");
     expect(source).toContain("getRequiredElement<HTMLButtonElement>(\"clear-plot-button\")");
-    expect(source).toContain("Clear active plot?");
+    expect(source).not.toContain("window.confirm(");
     expect(htmlSource).toContain('id="clear-plot-button"');
     expect(source).not.toContain('onAdd: () =>\n      dispatch({\n        type: "plot/add"');
     expect(source).not.toContain('onRemove: (plotId) => dispatch({ type: "plot/remove", payload: { plotId } })');

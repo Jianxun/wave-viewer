@@ -543,12 +543,6 @@ clearPlotButtonEl.addEventListener("click", () => {
   if (!workspace) {
     return;
   }
-
-  const confirmed = window.confirm("Clear active plot?");
-  if (!confirmed) {
-    return;
-  }
-
   postClearPlot(getActivePlot(workspace).id);
 });
 
@@ -627,6 +621,10 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (message.type === "host/tupleUpsert") {
     for (const tuple of message.payload.tuples) {
       traceTuplesBySourceId.set(tuple.sourceId, tuple);
+    }
+    if (workspace) {
+      bridgeStatusEl.textContent = "Patched: dataset reload";
+      void renderWorkspace();
     }
     return;
   }
