@@ -50,6 +50,7 @@ import {
   type WebviewPanelLike
 } from "../../src/extension";
 import { toDeterministicSignalOrder } from "../../src/extension/signalTree";
+import { hydrateWorkspaceReplayPayload } from "../../src/extension/sidePanel";
 import { reduceWorkspaceState } from "../../src/webview/state/reducer";
 import type { WorkspaceState } from "../../src/webview/state/workspaceState";
 
@@ -2487,6 +2488,230 @@ describe("T-021 explorer load/reload actions", () => {
       "/workspace/examples/new.csv.wave-viewer.yaml",
       "/workspace/examples/new.csv"
     );
+  });
+});
+
+describe("T-062 reload replay snapshot coverage", () => {
+  it("refreshes existing plotted trace tuples on reload without follow-up add/drop intents", async () => {
+    const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
+    const panelFixture = createPanelFixture();
+    const hostStateStore = createHostStateStore();
+    const binding = {
+      viewerId: "viewer-1",
+      datasetPath: "/workspace/examples/a.csv",
+      panel: panelFixture.panel
+    };
+    hostStateStore.setWorkspace("/workspace/examples/a.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          axes: [{ id: "y1" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vin",
+              sourceId: "/workspace/examples/a.csv::vin",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+
+    const reloadCommand = createReloadAllLoadedFilesCommand({
+      getLoadedDatasetPaths: () => ["/workspace/examples/a.csv"],
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/a.csv",
+          rowCount: 3,
+          columns: [
+            { name: "time", values: [0, 1, 2] },
+            { name: "vin", values: [10, 20, 30] }
+          ]
+        },
+        defaultXSignal: "time"
+      }),
+      registerLoadedDataset: (documentPath, loadedDataset) => {
+        loadedDatasetByPath.set(documentPath, loadedDataset);
+      },
+      onReloadCompleted: async (reloadedDatasetPaths) => {
+        const reloadedPathKeySet = new Set<string>();
+        for (const reloadedDatasetPath of reloadedDatasetPaths) {
+          for (const key of toDeterministicDatasetPathKeys(reloadedDatasetPath)) {
+            reloadedPathKeySet.add(key);
+          }
+        }
+
+        const datasetPathLookup = buildDeterministicDatasetLookup(loadedDatasetByPath);
+        const viewerSnapshot = hostStateStore.getSnapshot(binding.datasetPath);
+        expect(viewerSnapshot).toBeDefined();
+        if (!viewerSnapshot) {
+          return;
+        }
+
+        const referencedKeys = new Set<string>();
+        for (const plot of viewerSnapshot.workspace.plots) {
+          for (const trace of plot.traces) {
+            const sourceId = trace.sourceId ?? `${binding.datasetPath}::${trace.signal}`;
+            const separatorIndex = sourceId.lastIndexOf("::");
+            const traceDatasetPath =
+              separatorIndex > 0 ? sourceId.slice(0, separatorIndex) : binding.datasetPath;
+            for (const key of toDeterministicDatasetPathKeys(traceDatasetPath)) {
+              referencedKeys.add(key);
+            }
+          }
+        }
+        const referencesReloadedDataset = Array.from(referencedKeys).some((key) =>
+          reloadedPathKeySet.has(key)
+        );
+        expect(referencesReloadedDataset).toBe(true);
+
+        const loadedDataset = resolveLoadedDatasetDeterministically(
+          binding.datasetPath,
+          datasetPathLookup
+        );
+        expect(loadedDataset).toBeDefined();
+        if (!loadedDataset) {
+          return;
+        }
+
+        const hydrated = hydrateWorkspaceReplayPayload(
+          binding.viewerId,
+          binding.datasetPath,
+          loadedDataset,
+          viewerSnapshot.workspace,
+          undefined,
+          (datasetPath) => resolveLoadedDatasetDeterministically(datasetPath, datasetPathLookup)
+        );
+
+        await binding.panel.webview.postMessage(
+          createProtocolEnvelope("host/replaySnapshot", {
+            revision: viewerSnapshot.revision,
+            workspace: hydrated.workspace,
+            viewerState: viewerSnapshot.viewerState,
+            tuples: hydrated.tracePayloads,
+            reason: "reloadAllFiles:command"
+          })
+        );
+      },
+      showError: vi.fn()
+    });
+
+    await reloadCommand();
+
+    expect(panelFixture.sentMessages).toHaveLength(1);
+    expect(panelFixture.sentMessages[0]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/replaySnapshot",
+      payload: {
+        revision: 0,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [
+                {
+                  id: "trace-1",
+                  signal: "vin",
+                  sourceId: "/workspace/examples/a.csv::vin",
+                  axisId: "y1",
+                  visible: true
+                }
+              ],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: {
+            "plot-1": "y1"
+          }
+        },
+        tuples: [
+          {
+            traceId: "trace-1",
+            sourceId: "/workspace/examples/a.csv::vin",
+            datasetPath: "/workspace/examples/a.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [10, 20, 30]
+          }
+        ],
+        reason: "reloadAllFiles:command"
+      }
+    });
+  });
+
+  it("hydrates persisted traces missing sourceId and resolves normalized dataset aliases during replay", async () => {
+    const csvDatasetPath = "/workspace/examples/a.csv";
+    const frozenDatasetPath = "/workspace/examples/a.frozen.csv";
+    const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>([
+      [
+        frozenDatasetPath,
+        {
+          dataset: {
+            path: frozenDatasetPath,
+            rowCount: 3,
+            columns: [
+              { name: "time", values: [0, 1, 2] },
+              { name: "vin", values: [7, 8, 9] }
+            ]
+          },
+          defaultXSignal: "time"
+        }
+      ]
+    ]);
+    const datasetPathLookup = buildDeterministicDatasetLookup(loadedDatasetByPath);
+    const loadedDataset = resolveLoadedDatasetDeterministically(csvDatasetPath, datasetPathLookup);
+    expect(loadedDataset).toBeDefined();
+    if (!loadedDataset) {
+      return;
+    }
+
+    const hydrated = hydrateWorkspaceReplayPayload(
+      "viewer-2",
+      csvDatasetPath,
+      loadedDataset,
+      {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "time",
+            axes: [{ id: "y1" }],
+            traces: [{ id: "trace-legacy", signal: "vin", axisId: "y1", visible: true }],
+            nextAxisNumber: 2
+          }
+        ]
+      },
+      undefined,
+      (datasetPath) => resolveLoadedDatasetDeterministically(datasetPath, datasetPathLookup)
+    );
+
+    expect(hydrated.workspace.plots[0]?.traces[0]?.sourceId).toBe("/workspace/examples/a.csv::vin");
+    expect(hydrated.tracePayloads).toEqual([
+      {
+        traceId: "trace-legacy",
+        sourceId: "/workspace/examples/a.csv::vin",
+        datasetPath: "/workspace/examples/a.csv",
+        xName: "time",
+        yName: "vin",
+        x: [0, 1, 2],
+        y: [7, 8, 9]
+      }
+    ]);
   });
 });
 

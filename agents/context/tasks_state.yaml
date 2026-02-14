@@ -8,9 +8,9 @@ T-061:
   pr: 72
   merged: true
 T-062:
-  status: ready
-  pr: null
-  merged: false
+  status: done
+  pr: 73
+  merged: true
 T-063:
   status: ready
   pr: null

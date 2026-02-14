@@ -399,4 +399,115 @@ describe("plotly adapter", () => {
       range: [0, 1000]
     });
   });
+
+  it("uses replacement tuple cache values after replay-style refresh and avoids stale vectors", () => {
+    const plot = createPlot({
+      traces: [
+        {
+          id: "trace-1",
+          signal: "vin",
+          sourceId: "/workspace/examples/a.csv::vin",
+          axisId: "y1",
+          visible: true
+        }
+      ]
+    });
+    const staleTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>([
+      [
+        "/workspace/examples/a.csv::vin",
+        {
+          traceId: "trace-1",
+          sourceId: "/workspace/examples/a.csv::vin",
+          datasetPath: "/workspace/examples/a.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1, 2],
+          y: [1, 2, 3]
+        }
+      ],
+      [
+        "/workspace/examples/a.csv::stale",
+        {
+          traceId: "trace-stale",
+          sourceId: "/workspace/examples/a.csv::stale",
+          datasetPath: "/workspace/examples/a.csv",
+          xName: "time",
+          yName: "stale",
+          x: [0, 1, 2],
+          y: [99, 99, 99]
+        }
+      ]
+    ]);
+    const replayReplacementTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>([
+      [
+        "/workspace/examples/a.csv::vin",
+        {
+          traceId: "trace-1",
+          sourceId: "/workspace/examples/a.csv::vin",
+          datasetPath: "/workspace/examples/a.csv",
+          xName: "time",
+          yName: "vin",
+          x: [0, 1, 2],
+          y: [10, 20, 30]
+        }
+      ]
+    ]);
+
+    const beforeReplay = buildPlotlyFigure({
+      plot,
+      traceTuplesBySourceId: staleTuplesBySourceId
+    });
+    const afterReplay = buildPlotlyFigure({
+      plot,
+      traceTuplesBySourceId: replayReplacementTuplesBySourceId
+    });
+
+    expect(beforeReplay.data[0]).toMatchObject({
+      name: "vin",
+      y: [1, 2, 3]
+    });
+    expect(afterReplay.data[0]).toMatchObject({
+      name: "vin",
+      y: [10, 20, 30]
+    });
+    expect(afterReplay.data.some((trace) => trace.name === "stale")).toBe(false);
+  });
+
+  it("renders updated vectors when incremental tuple upsert replaces one source id entry", () => {
+    const incrementalTuples = new Map(traceTuplesBySourceId);
+    incrementalTuples.set("/workspace/examples/a.csv::vout", {
+      traceId: "trace-2",
+      sourceId: "/workspace/examples/a.csv::vout",
+      datasetPath: "/workspace/examples/a.csv",
+      xName: "time",
+      yName: "vout",
+      x: [0, 1, 2],
+      y: [8, 6, 4]
+    });
+
+    const figure = buildPlotlyFigure({
+      plot: createPlot({
+        traces: [
+          {
+            id: "trace-1",
+            signal: "vin",
+            sourceId: "/workspace/examples/a.csv::vin",
+            axisId: "y1",
+            visible: true
+          },
+          {
+            id: "trace-2",
+            signal: "vout",
+            sourceId: "/workspace/examples/a.csv::vout",
+            axisId: "y2",
+            visible: true
+          }
+        ]
+      }),
+      traceTuplesBySourceId: incrementalTuples
+    });
+
+    expect(figure.data[0]).toMatchObject({ name: "vin", y: [1, 2, 3] });
+    expect(figure.data[1]).toMatchObject({ name: "vout", y: [8, 6, 4] });
+  });
 });
