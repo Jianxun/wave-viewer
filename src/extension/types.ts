@@ -384,10 +384,7 @@ export type ReloadAllLoadedFilesCommandDeps = {
     documentPath: string,
     loaded: { dataset: Dataset; defaultXSignal: string }
   ): void;
-  onDatasetReloaded?(
-    documentPath: string,
-    loaded: { dataset: Dataset; defaultXSignal: string }
-  ): PromiseLike<void> | void;
+  onReloadCompleted?(reloadedDatasetPaths: readonly string[]): PromiseLike<void> | void;
   showError(message: string): void;
 };
 

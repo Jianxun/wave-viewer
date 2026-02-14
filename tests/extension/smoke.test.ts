@@ -2289,7 +2289,7 @@ describe("T-021 explorer load/reload actions", () => {
 
   it("reloads all loaded files and preserves already-loaded datasets on parse failures", async () => {
     const registerLoadedDataset = vi.fn();
-    const onDatasetReloaded = vi.fn();
+    const onReloadCompleted = vi.fn();
     const showError = vi.fn();
     const command = createReloadAllLoadedFilesCommand({
       getLoadedDatasetPaths: () => ["/workspace/examples/a.csv", "/workspace/examples/bad.csv"],
@@ -2307,7 +2307,7 @@ describe("T-021 explorer load/reload actions", () => {
         };
       },
       registerLoadedDataset,
-      onDatasetReloaded,
+      onReloadCompleted,
       showError
     });
 
@@ -2322,15 +2322,9 @@ describe("T-021 explorer load/reload actions", () => {
       },
       defaultXSignal: "time"
     });
-    expect(onDatasetReloaded).toHaveBeenCalledTimes(1);
-    expect(onDatasetReloaded).toHaveBeenCalledWith("/workspace/examples/a.csv", {
-      dataset: {
-        path: "/workspace/examples/a.csv",
-        rowCount: 5,
-        columns: [{ name: "time", values: [0, 1, 2, 3, 4] }]
-      },
-      defaultXSignal: "time"
-    });
+    expect(onReloadCompleted).toHaveBeenCalledTimes(1);
+    const [reloadedDatasetPaths] = onReloadCompleted.mock.calls[0] as [readonly string[]];
+    expect(reloadedDatasetPaths).toEqual(["/workspace/examples/a.csv"]);
     expect(showError).toHaveBeenCalledWith(
       "Failed to reload '/workspace/examples/bad.csv': File missing."
     );
