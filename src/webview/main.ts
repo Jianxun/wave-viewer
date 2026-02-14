@@ -670,7 +670,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       traceTuplesBySourceId.set(tuple.sourceId, tuple);
     }
     if (workspace) {
-      bridgeStatusEl.textContent = "Patched: dataset reload";
+      bridgeStatusEl.textContent = "Patched: tuple upsert";
       void renderWorkspace();
     }
     return;

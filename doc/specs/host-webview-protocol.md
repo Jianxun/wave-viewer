@@ -38,6 +38,7 @@ Rules:
 - `host/tupleUpsert`
   - payload: `{ tuples: SidePanelTraceTuplePayload[] }`
   - transports numeric `(x, y)` arrays and tuple metadata only for interaction-time incremental tuple additions.
+  - MUST NOT be used as the primary transport for dataset reload/import replay flows.
 - `host/viewerBindingUpdated`
   - payload: `{ viewerId: string; datasetPath?: string }`
 
@@ -64,6 +65,7 @@ Rules:
 - Host MUST increment `revision` once per committed transaction.
 - Compound operations (for example, "add signal to new axis") MUST be committed atomically under one new revision.
 - Dataset reload flows MUST use `host/replaySnapshot` so workspace/viewerState/tuples are applied atomically in webview.
+- Incremental add/drop style interactions MAY continue to use `host/tupleUpsert` when workspace revision is unchanged.
 
 ## Compatibility policy
 - Additive payload fields are allowed in minor evolution and must be optional for receivers.
