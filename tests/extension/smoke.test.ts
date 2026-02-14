@@ -2540,36 +2540,13 @@ describe("T-062 reload replay snapshot coverage", () => {
         loadedDatasetByPath.set(documentPath, loadedDataset);
       },
       onReloadCompleted: async (reloadedDatasetPaths) => {
-        const reloadedPathKeySet = new Set<string>();
-        for (const reloadedDatasetPath of reloadedDatasetPaths) {
-          for (const key of toDeterministicDatasetPathKeys(reloadedDatasetPath)) {
-            reloadedPathKeySet.add(key);
-          }
-        }
-
+        expect(reloadedDatasetPaths).toEqual(["/workspace/examples/a.csv"]);
         const datasetPathLookup = buildDeterministicDatasetLookup(loadedDatasetByPath);
         const viewerSnapshot = hostStateStore.getSnapshot(binding.datasetPath);
         expect(viewerSnapshot).toBeDefined();
         if (!viewerSnapshot) {
           return;
         }
-
-        const referencedKeys = new Set<string>();
-        for (const plot of viewerSnapshot.workspace.plots) {
-          for (const trace of plot.traces) {
-            const sourceId = trace.sourceId ?? `${binding.datasetPath}::${trace.signal}`;
-            const separatorIndex = sourceId.lastIndexOf("::");
-            const traceDatasetPath =
-              separatorIndex > 0 ? sourceId.slice(0, separatorIndex) : binding.datasetPath;
-            for (const key of toDeterministicDatasetPathKeys(traceDatasetPath)) {
-              referencedKeys.add(key);
-            }
-          }
-        }
-        const referencesReloadedDataset = Array.from(referencedKeys).some((key) =>
-          reloadedPathKeySet.has(key)
-        );
-        expect(referencesReloadedDataset).toBe(true);
 
         const loadedDataset = resolveLoadedDatasetDeterministically(
           binding.datasetPath,
@@ -4337,6 +4314,8 @@ describe("T-033 revisioned protocol semantics", () => {
     expect(source).toContain('if (message.type === "host/statePatch")');
     expect(source).toContain('if (message.type === "host/replaySnapshot")');
     expect(source).toContain('if (message.type === "host/tupleUpsert")');
+    expect(source).toContain('bridgeStatusEl.textContent = "Patched: tuple upsert";');
+    expect(source).not.toContain('bridgeStatusEl.textContent = "Patched: dataset reload";');
     expect(source).toContain("void renderWorkspace();");
   });
 });

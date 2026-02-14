@@ -1029,26 +1029,11 @@ export function activate(context: VSCode.ExtensionContext): void {
         return;
       }
 
-      const reloadedPathKeySet = new Set<string>();
-      for (const reloadedDatasetPath of reloadedDatasetPaths) {
-        for (const key of toDeterministicDatasetPathKeys(reloadedDatasetPath)) {
-          reloadedPathKeySet.add(key);
-        }
-      }
-
       const datasetPathLookup = buildDeterministicDatasetLookup(loadedDatasetByPath);
       const bindings = viewerSessions.getAllViewerBindings();
       for (const binding of bindings) {
         const viewerSnapshot = hostStateStore.getSnapshot(binding.datasetPath);
         if (!viewerSnapshot) {
-          continue;
-        }
-        const referencesReloadedDataset = workspaceReferencesReloadedDataset(
-          viewerSnapshot.workspace,
-          binding.datasetPath,
-          reloadedPathKeySet
-        );
-        if (!referencesReloadedDataset) {
           continue;
         }
 
@@ -1145,36 +1130,6 @@ export function activate(context: VSCode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand(REMOVE_LOADED_FILE_COMMAND, removeLoadedFileCommand)
   );
-}
-
-function workspaceReferencesReloadedDataset(
-  workspace: WorkspaceState,
-  fallbackDatasetPath: string,
-  reloadedPathKeySet: ReadonlySet<string>
-): boolean {
-  for (const plot of workspace.plots) {
-    for (const trace of plot.traces) {
-      const traceDatasetPath = getTraceDatasetPathFromSourceId(trace.sourceId, fallbackDatasetPath);
-      for (const key of toDeterministicDatasetPathKeys(traceDatasetPath)) {
-        if (reloadedPathKeySet.has(key)) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
-function getTraceDatasetPathFromSourceId(sourceId: string | undefined, fallbackPath: string): string {
-  if (!sourceId) {
-    return fallbackPath;
-  }
-  const separatorIndex = sourceId.lastIndexOf("::");
-  if (separatorIndex <= 0) {
-    return fallbackPath;
-  }
-  const candidate = sourceId.slice(0, separatorIndex).trim();
-  return candidate.length > 0 ? candidate : fallbackPath;
 }
 
 function toDeterministicDatasetPathKeys(datasetPath: string): string[] {
