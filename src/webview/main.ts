@@ -49,6 +49,19 @@ type HostMessage =
         reason: string;
       }
     >
+  | ProtocolEnvelope<
+      "host/replaySnapshot",
+      {
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: {
+          activePlotId: string;
+          activeAxisByPlotId: Record<string, AxisId>;
+        };
+        tuples: SidePanelTraceTuplePayload[];
+        reason: string;
+      }
+    >
   | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
   | ProtocolEnvelope<
       "host/sidePanelQuickAdd",
@@ -490,6 +503,28 @@ function getErrorMessage(error: unknown): string {
   return "Unknown state update failure.";
 }
 
+function applyAuthoritativeWorkspace(payload: {
+  revision: number;
+  workspace: WorkspaceState;
+  viewerState: {
+    activePlotId: string;
+    activeAxisByPlotId: Record<string, AxisId>;
+  };
+}, staleLogMessage: string): boolean {
+  if (payload.revision <= lastAppliedRevision) {
+    console.debug(staleLogMessage, {
+      revision: payload.revision,
+      lastAppliedRevision
+    });
+    return false;
+  }
+
+  lastAppliedRevision = payload.revision;
+  workspace = payload.workspace;
+  preferredDropAxisId = payload.viewerState.activeAxisByPlotId[payload.viewerState.activePlotId];
+  return true;
+}
+
 plotCanvasEl.addEventListener("dragenter", (event) => {
   if (!event.dataTransfer || !hasSupportedDropSignalType(event.dataTransfer)) {
     return;
@@ -572,33 +607,45 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
 
   if (message.type === "host/stateSnapshot") {
-    if (message.payload.revision <= lastAppliedRevision) {
-      console.debug("[wave-viewer] Ignored stale host snapshot revision.", {
-        revision: message.payload.revision,
-        lastAppliedRevision
-      });
+    if (
+      !applyAuthoritativeWorkspace(
+        message.payload,
+        "[wave-viewer] Ignored stale host snapshot revision."
+      )
+    ) {
       return;
     }
-    lastAppliedRevision = message.payload.revision;
-    workspace = message.payload.workspace;
-    preferredDropAxisId =
-      message.payload.viewerState.activeAxisByPlotId[message.payload.viewerState.activePlotId];
     void renderWorkspace();
     return;
   }
 
   if (message.type === "host/statePatch") {
-    if (message.payload.revision <= lastAppliedRevision) {
-      console.debug("[wave-viewer] Ignored stale host patch revision.", {
-        revision: message.payload.revision,
-        lastAppliedRevision
-      });
+    if (
+      !applyAuthoritativeWorkspace(
+        message.payload,
+        "[wave-viewer] Ignored stale host patch revision."
+      )
+    ) {
       return;
     }
-    lastAppliedRevision = message.payload.revision;
-    workspace = message.payload.workspace;
-    preferredDropAxisId =
-      message.payload.viewerState.activeAxisByPlotId[message.payload.viewerState.activePlotId];
+    bridgeStatusEl.textContent = `Patched: ${message.payload.reason}`;
+    void renderWorkspace();
+    return;
+  }
+
+  if (message.type === "host/replaySnapshot") {
+    if (
+      !applyAuthoritativeWorkspace(
+        message.payload,
+        "[wave-viewer] Ignored stale host replay snapshot revision."
+      )
+    ) {
+      return;
+    }
+    traceTuplesBySourceId.clear();
+    for (const tuple of message.payload.tuples) {
+      traceTuplesBySourceId.set(tuple.sourceId, tuple);
+    }
     bridgeStatusEl.textContent = `Patched: ${message.payload.reason}`;
     void renderWorkspace();
     return;

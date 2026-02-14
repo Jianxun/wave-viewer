@@ -71,6 +71,80 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts host replaySnapshot with revision, reason, tuples, and workspace payload", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/replaySnapshot", {
+        revision: 5,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: { "plot-1": "y1" }
+        },
+        tuples: [
+          {
+            traceId: "viewer-2:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ],
+        reason: "reloadAllFiles"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/replaySnapshot",
+      payload: {
+        revision: 5,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: { "plot-1": "y1" }
+        },
+        tuples: [
+          {
+            traceId: "viewer-2:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin",
+            x: [0, 1, 2],
+            y: [1, 2, 3]
+          }
+        ],
+        reason: "reloadAllFiles"
+      }
+    });
+  });
+
   it("rejects host statePatch without non-negative integer revision", () => {
     const parsed = parseHostToWebviewMessage(
       createProtocolEnvelope("host/statePatch", {
@@ -78,6 +152,18 @@ describe("protocol envelope validators", () => {
         workspace: { activePlotId: "plot-1", plots: [] },
         viewerState: { activePlotId: "plot-1", activeAxisByPlotId: {} },
         reason: "sync"
+      })
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("rejects host replaySnapshot without tuple array payload", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/replaySnapshot", {
+        revision: 1,
+        workspace: { activePlotId: "plot-1", plots: [] },
+        viewerState: { activePlotId: "plot-1", activeAxisByPlotId: {} },
+        reason: "reloadAllFiles"
       })
     );
     expect(parsed).toBeUndefined();

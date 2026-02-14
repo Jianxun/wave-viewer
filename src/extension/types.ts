@@ -54,6 +54,19 @@ export type HostToWebviewMessage =
         reason: string;
       }
     >
+  | ProtocolEnvelope<
+      "host/replaySnapshot",
+      {
+        revision: number;
+        workspace: WorkspaceState;
+        viewerState: {
+          activePlotId: string;
+          activeAxisByPlotId: Record<string, `y${number}`>;
+        };
+        tuples: SidePanelTraceTuplePayload[];
+        reason: string;
+      }
+    >
   | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
   | ProtocolEnvelope<
       "host/sidePanelQuickAdd",
