@@ -4,9 +4,9 @@ T-060:
   pr: 71
   merged: true
 T-061:
-  status: review_clean
+  status: done
   pr: 72
-  merged: false
+  merged: true
 T-062:
   status: ready
   pr: null
