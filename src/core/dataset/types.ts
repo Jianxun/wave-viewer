@@ -39,6 +39,7 @@ export type HostToWebviewMessageType =
   | "host/datasetLoaded"
   | "host/stateSnapshot"
   | "host/statePatch"
+  | "host/replaySnapshot"
   | "host/tupleUpsert"
   | "host/sidePanelQuickAdd"
   | "host/sidePanelTraceInjected";
@@ -81,6 +82,16 @@ export type ParsedHostToWebviewMessage =
   | ProtocolEnvelope<
       "host/statePatch",
       { revision: number; workspace: WorkspaceStateLike; viewerState: ViewerStateLike; reason: string }
+    >
+  | ProtocolEnvelope<
+      "host/replaySnapshot",
+      {
+        revision: number;
+        workspace: WorkspaceStateLike;
+        viewerState: ViewerStateLike;
+        tuples: SidePanelTraceTuplePayload[];
+        reason: string;
+      }
     >
   | ProtocolEnvelope<"host/tupleUpsert", { tuples: SidePanelTraceTuplePayload[] }>
   | ProtocolEnvelope<
@@ -254,6 +265,7 @@ function isHostMessageType(type: string): type is HostToWebviewMessageType {
     type === "host/datasetLoaded" ||
     type === "host/stateSnapshot" ||
     type === "host/statePatch" ||
+    type === "host/replaySnapshot" ||
     type === "host/tupleUpsert" ||
     type === "host/sidePanelQuickAdd" ||
     type === "host/sidePanelTraceInjected"
@@ -315,13 +327,17 @@ function isValidHostPayload(type: HostToWebviewMessageType, payload: unknown): b
     );
   }
 
-  if (type === "host/stateSnapshot" || type === "host/statePatch") {
-    const hasPatchReason = type === "host/statePatch";
+  if (type === "host/stateSnapshot" || type === "host/statePatch" || type === "host/replaySnapshot") {
+    const hasPatchReason = type === "host/statePatch" || type === "host/replaySnapshot";
+    const hasReplayTuples = type === "host/replaySnapshot";
     return (
       isNonNegativeInteger(payload.revision) &&
       isWorkspaceStateLike(payload.workspace) &&
       isViewerStateLike(payload.viewerState) &&
-      (!hasPatchReason || typeof payload.reason === "string")
+      (!hasPatchReason || typeof payload.reason === "string") &&
+      (!hasReplayTuples ||
+        (Array.isArray(payload.tuples) &&
+          payload.tuples.every((tuple) => isSidePanelTraceTuplePayload(tuple))))
     );
   }
 
