@@ -12,6 +12,6 @@ T-062:
   pr: 73
   merged: true
 T-063:
-  status: review_in_progress
+  status: review_clean
   pr: 74
   merged: false
