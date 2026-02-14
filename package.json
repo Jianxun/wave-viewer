@@ -5,6 +5,11 @@
   "version": "0.0.1",
   "private": true,
   "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jianxun/wave-viewer.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -58,11 +63,13 @@
       },
       {
         "command": "waveViewer.signalBrowser.loadCsvFiles",
-        "title": "Wave Viewer: Load CSV File..."
+        "title": "Wave Viewer: Load CSV File...",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "waveViewer.signalBrowser.reloadAllFiles",
-        "title": "Wave Viewer: Reload All Files"
+        "title": "Wave Viewer: Reload All Files",
+        "icon": "$(refresh)"
       },
       {
         "command": "waveViewer.signalBrowser.removeLoadedFile",
@@ -78,6 +85,28 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "waveViewer.signalBrowser.addToPlot",
+          "when": "false"
+        },
+        {
+          "command": "waveViewer.signalBrowser.addToNewAxis",
+          "when": "false"
+        },
+        {
+          "command": "waveViewer.signalBrowser.loadCsvFiles",
+          "when": "false"
+        },
+        {
+          "command": "waveViewer.signalBrowser.reloadAllFiles",
+          "when": "false"
+        },
+        {
+          "command": "waveViewer.signalBrowser.removeLoadedFile",
+          "when": "false"
+        }
+      ],
       "view/item/context": [
         {
           "command": "waveViewer.signalBrowser.addToPlot",

@@ -1,25 +1,17 @@
 schema_version: 2
-T-054:
-  status: done
-  pr: 64
-  merged: true
-T-055:
-  status: done
-  pr: 65
-  merged: true
-T-056:
-  status: done
-  pr: 66
-  merged: true
-T-057:
-  status: done
-  pr: 67
-  merged: true
-T-058:
-  status: done
-  pr: 68
-  merged: true
-T-059:
-  status: done
-  pr: 69
-  merged: true
+T-060:
+  status: ready
+  pr: null
+  merged: false
+T-061:
+  status: ready
+  pr: null
+  merged: false
+T-062:
+  status: ready
+  pr: null
+  merged: false
+T-063:
+  status: ready
+  pr: null
+  merged: false

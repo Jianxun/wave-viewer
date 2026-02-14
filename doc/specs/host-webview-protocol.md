@@ -32,9 +32,12 @@ Rules:
 - `host/statePatch`
   - payload: `{ revision: number; workspace: WorkspaceState; viewerState: ViewerState; reason: string }`
   - authoritative incremental update; may still carry full normalized objects in MVP.
+- `host/replaySnapshot`
+  - payload: `{ revision: number; workspace: WorkspaceState; viewerState: ViewerState; tuples: SidePanelTraceTuplePayload[]; reason: string }`
+  - authoritative atomic replay update for reload/import-class flows where workspace state and tuple cache must converge as one unit.
 - `host/tupleUpsert`
   - payload: `{ tuples: SidePanelTraceTuplePayload[] }`
-  - transports numeric `(x, y)` arrays and tuple metadata only.
+  - transports numeric `(x, y)` arrays and tuple metadata only for interaction-time incremental tuple additions.
 - `host/viewerBindingUpdated`
   - payload: `{ viewerId: string; datasetPath?: string }`
 
@@ -60,6 +63,7 @@ Rules:
 - Webview MUST ignore host state messages where `revision <= lastAppliedRevision`.
 - Host MUST increment `revision` once per committed transaction.
 - Compound operations (for example, "add signal to new axis") MUST be committed atomically under one new revision.
+- Dataset reload flows MUST use `host/replaySnapshot` so workspace/viewerState/tuples are applied atomically in webview.
 
 ## Compatibility policy
 - Additive payload fields are allowed in minor evolution and must be optional for receivers.

@@ -835,6 +835,7 @@ export function activate(context: VSCode.ExtensionContext): void {
         retainContextWhenHidden: true
       }) as unknown as WebviewPanelLike,
     onPanelCreated: (documentPath, panel) => registerPanelSession(documentPath, panel),
+    showWarning: (message) => vscode.window.showWarningMessage(message, { modal: true }, "Clear Plot"),
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     },
@@ -1020,6 +1021,71 @@ export function activate(context: VSCode.ExtensionContext): void {
     getLoadedDatasetPaths: () => Array.from(loadedDatasetByPath.keys()),
     loadDataset,
     registerLoadedDataset,
+    onDatasetReloaded: async (documentPath, loadedDataset) => {
+      const bindings = viewerSessions.getAllViewerBindings();
+      for (const binding of bindings) {
+        const viewerSnapshot = hostStateStore.getSnapshot(binding.datasetPath);
+        if (!viewerSnapshot) {
+          continue;
+        }
+        const datasetSourcePrefix = `${documentPath}::`;
+        const referencesReloadedDataset = viewerSnapshot.workspace.plots.some((plot) =>
+          plot.traces.some((trace) => {
+            if (trace.sourceId) {
+              return trace.sourceId.startsWith(datasetSourcePrefix);
+            }
+            return binding.datasetPath === documentPath;
+          })
+        );
+        if (!referencesReloadedDataset) {
+          continue;
+        }
+
+        const viewerBaseDataset = loadedDatasetByPath.get(binding.datasetPath);
+        if (!viewerBaseDataset) {
+          continue;
+        }
+        const hydrated = hydrateWorkspaceReplayPayload(
+          binding.viewerId,
+          binding.datasetPath,
+          viewerBaseDataset,
+          viewerSnapshot.workspace,
+          (message, details) => {
+            console.debug(`[wave-viewer] ${message}`, details);
+          },
+          (datasetPath) => {
+            if (datasetPath === documentPath) {
+              return loadedDataset;
+            }
+            return loadedDatasetByPath.get(datasetPath);
+          }
+        );
+        if (hydrated.tracePayloads.length === 0) {
+          continue;
+        }
+        const nextSnapshot =
+          hydrated.workspace !== viewerSnapshot.workspace
+            ? hostStateStore.setWorkspace(binding.datasetPath, hydrated.workspace)
+            : viewerSnapshot;
+
+        if (hydrated.workspace !== viewerSnapshot.workspace) {
+          void binding.panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: nextSnapshot.revision,
+              workspace: nextSnapshot.workspace,
+              viewerState: nextSnapshot.viewerState,
+              reason: "reloadAllFiles:normalizeTraceSourceIds"
+            })
+          );
+        }
+
+        void binding.panel.webview.postMessage(
+          createProtocolEnvelope("host/tupleUpsert", {
+            tuples: hydrated.tracePayloads
+          })
+        );
+      }
+    },
     showError: (message) => {
       void vscode.window.showErrorMessage(message);
     }

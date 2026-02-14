@@ -308,6 +308,8 @@ export type ViewerSessionRegistry = {
   bindViewerToDataset(viewerId: string, datasetPath: string): void;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
   getViewerBindingsForLayout(layoutUri: string): LayoutBindingTarget[];
+  getAllViewerBindings(): LayoutBindingTarget[];
+  getViewerBindingsForDataset(datasetPath: string): LayoutBindingTarget[];
   getDatasetPathForViewer(viewerId: string): string | undefined;
   getViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
@@ -336,6 +338,7 @@ export type CommandDeps = {
   commitHostStateTransaction(transaction: HostStateTransaction): HostStateTransactionResult;
   createPanel(): WebviewPanelLike;
   onPanelCreated?(documentPath: string | undefined, panel: WebviewPanelLike): string | undefined;
+  showWarning(message: string): PromiseLike<string | undefined>;
   showError(message: string): void;
   logDebug?(message: string, details?: unknown): void;
   buildHtml(webview: WebviewLike, extensionUri: unknown): string;
@@ -368,6 +371,10 @@ export type ReloadAllLoadedFilesCommandDeps = {
     documentPath: string,
     loaded: { dataset: Dataset; defaultXSignal: string }
   ): void;
+  onDatasetReloaded?(
+    documentPath: string,
+    loaded: { dataset: Dataset; defaultXSignal: string }
+  ): PromiseLike<void> | void;
   showError(message: string): void;
 };
 
