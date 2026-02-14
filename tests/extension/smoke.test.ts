@@ -4051,9 +4051,10 @@ describe("T-033 revisioned protocol semantics", () => {
     const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
 
     expect(source).toContain("let lastAppliedRevision = -1;");
-    expect(source).toContain("if (message.payload.revision <= lastAppliedRevision) {");
+    expect(source).toContain("if (payload.revision <= lastAppliedRevision) {");
     expect(source).toContain("Ignored stale host snapshot revision.");
     expect(source).toContain("Ignored stale host patch revision.");
+    expect(source).toContain("Ignored stale host replay snapshot revision.");
   });
 
   it("uses v2 intent and host state message names", () => {
@@ -4064,6 +4065,7 @@ describe("T-033 revisioned protocol semantics", () => {
     expect(hostSource).not.toContain('"webview/dropSignal"');
     expect(source).toContain('if (message.type === "host/stateSnapshot")');
     expect(source).toContain('if (message.type === "host/statePatch")');
+    expect(source).toContain('if (message.type === "host/replaySnapshot")');
     expect(source).toContain('if (message.type === "host/tupleUpsert")');
     expect(source).toContain("void renderWorkspace();");
   });
