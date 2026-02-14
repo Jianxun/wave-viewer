@@ -815,6 +815,8 @@ export function activate(context: VSCode.ExtensionContext): void {
     });
   };
 
+  let reloadAllLoadedFilesCommand: (() => Promise<void>) | undefined;
+
   const command = createOpenViewerCommand({
     extensionUri: context.extensionUri,
     getActiveDocument: () => vscode.window.activeTextEditor?.document,
@@ -832,6 +834,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     ensureHostStateSnapshot: (documentPath, defaultXSignal) =>
       hostStateStore.ensureSnapshot(documentPath, defaultXSignal),
     commitHostStateTransaction,
+    refreshAllLoadedSignals: async () => {
+      await reloadAllLoadedFilesCommand?.();
+    },
     createPanel: () =>
       vscode.window.createWebviewPanel("waveViewer.main", "Wave Viewer", vscode.ViewColumn.Beside, {
         enableScripts: true,
@@ -1020,7 +1025,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     }
   });
 
-  const reloadAllLoadedFilesCommand = createReloadAllLoadedFilesCommand({
+  reloadAllLoadedFilesCommand = createReloadAllLoadedFilesCommand({
     getLoadedDatasetPaths: () => Array.from(loadedDatasetByPath.keys()),
     loadDataset,
     registerLoadedDataset,
@@ -1056,10 +1061,12 @@ export function activate(context: VSCode.ExtensionContext): void {
             return resolveLoadedDatasetDeterministically(datasetPath, datasetPathLookup);
           }
         );
-        const nextSnapshot =
+        const nextSnapshot = hostStateStore.setWorkspace(
+          binding.datasetPath,
           hydrated.workspace !== viewerSnapshot.workspace
-            ? hostStateStore.setWorkspace(binding.datasetPath, hydrated.workspace)
-            : viewerSnapshot;
+            ? hydrated.workspace
+            : viewerSnapshot.workspace
+        );
 
         void binding.panel.webview.postMessage(
           createProtocolEnvelope("host/replaySnapshot", {
