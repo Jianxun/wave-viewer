@@ -256,8 +256,12 @@ describe("protocol envelope validators", () => {
     );
 
     expect(replay?.type).toBe("host/replaySnapshot");
+    expect(upsert).toBeDefined();
     expect(upsert?.type).toBe("host/tupleUpsert");
-    expect(upsert?.payload.tuples[0]?.y).toEqual([4, 5, 6]);
+    if (!upsert || upsert.type !== "host/tupleUpsert") {
+      throw new Error("Expected tupleUpsert payload.");
+    }
+    expect(upsert.payload.tuples[0]?.y).toEqual([4, 5, 6]);
   });
 
   it("accepts host sidePanelQuickAdd with explicit plot and axis target", () => {
