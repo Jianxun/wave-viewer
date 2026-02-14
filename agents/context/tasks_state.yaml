@@ -8,7 +8,7 @@ T-061:
   pr: 72
   merged: true
 T-062:
-  status: ready_for_review
+  status: review_clean
   pr: 73
   merged: false
 T-063:
