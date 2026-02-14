@@ -37,6 +37,14 @@ Layouts use schema `version: 2` with:
 
 Run `Wave Viewer: Export Frozen Bundle` to export immutable replay artifacts from the current session.
 
+### 5) Reload Behavior (Manual QA)
+
+- Run `Wave Viewer: Reload All Files` after editing a loaded CSV file.
+- Expected:
+  - Existing plotted traces refresh immediately without adding/dropping any new signal.
+  - Reload uses one atomic replay update (`host/replaySnapshot`) per impacted viewer.
+  - Incremental tuple updates (`host/tupleUpsert`) are reserved for interaction-time add/drop flows, not reload.
+
 ## Known Limits (MVP)
 
 - Lane height and spacing are deterministic/fixed for now.

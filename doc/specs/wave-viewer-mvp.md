@@ -150,6 +150,11 @@ type WorkspaceState = {
 - Protocol changes MUST follow compatibility/versioning rules in `doc/specs/host-webview-protocol.md`.
 - Drag/drop signal operations MUST emit normalized `webview/intent/dropSignal` events to the host.
 - Dataset reload operations MUST deliver atomic replay snapshots (workspace + viewer state + tuples) so existing rendered traces refresh without requiring follow-up user interactions.
+- Interaction-time tuple injections (for example side-panel add/drop flows) MUST use incremental tuple upserts and MUST NOT replace reload replay snapshots.
+
+Manual QA expectation for reload:
+- After `Reload All Files`, previously rendered traces refresh without any follow-up add/drop action.
+- Reload publishes `host/replaySnapshot`; incremental `host/tupleUpsert` remains interaction-only.
 
 ## 6. Plotly Mapping Rules
 
