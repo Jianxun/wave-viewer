@@ -10,6 +10,7 @@ import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
 import {
   getAxisLaneDomains,
+  mapLaneIndexToPlotly,
   parseRelayoutRanges,
   resolveAxisIdFromNormalizedY
 } from "./plotly/adapter";
@@ -595,6 +596,59 @@ refreshSignalsButtonEl.addEventListener("click", () => {
   postRefreshSignals();
 });
 
+window.addEventListener("keydown", (event) => {
+  if (!workspace || event.defaultPrevented) {
+    return;
+  }
+
+  if (event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  const activePlot = getActivePlot(workspace);
+  if (event.key === "f" || event.key === "F") {
+    event.preventDefault();
+    const yAxisLayoutKeys = activePlot.axes.map((_, index) => mapLaneIndexToPlotly(index).layoutKey);
+    void plotRenderer.resetAxes(yAxisLayoutKeys);
+    return;
+  }
+
+  const activeAxisId = preferredDropAxisId ?? activePlot.axes[0]?.id;
+  if (!activeAxisId) {
+    return;
+  }
+  const activeAxisIndex = activePlot.axes.findIndex((axis) => axis.id === activeAxisId);
+  const yAxisLayoutKey = mapLaneIndexToPlotly(activeAxisIndex >= 0 ? activeAxisIndex : 0).layoutKey;
+
+  if (
+    event.key !== "ArrowLeft" &&
+    event.key !== "ArrowRight" &&
+    event.key !== "ArrowUp" &&
+    event.key !== "ArrowDown"
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  if (event.key === "ArrowLeft") {
+    void plotRenderer.pan({ direction: "left", yAxisLayoutKey });
+    return;
+  }
+  if (event.key === "ArrowRight") {
+    void plotRenderer.pan({ direction: "right", yAxisLayoutKey });
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    void plotRenderer.pan({ direction: "up", yAxisLayoutKey });
+    return;
+  }
+  void plotRenderer.pan({ direction: "down", yAxisLayoutKey });
+});
+
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   const parsed = parseHostToWebviewMessage(event.data);
   if (!parsed) {
@@ -696,3 +750,10 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
 });
 
 vscode.postMessage(createProtocolEnvelope("webview/ready", { ready: true }));
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return target.matches("input, textarea, select, [contenteditable='true']") || target.isContentEditable;
+}
