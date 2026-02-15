@@ -56,7 +56,7 @@ export type PlotlyLayout = {
     anchor?: `y${number}` | "y";
     autorange?: boolean;
     range?: [number, number];
-    rangeslider?: { visible: boolean; autorange?: boolean; range?: [number, number]; thickness?: number };
+    rangeslider?: { visible: boolean; thickness?: number };
     automargin: boolean;
     fixedrange?: boolean;
   };
@@ -170,7 +170,7 @@ export function buildPlotlyFigure(payload: {
       anchor: bottomLaneTraceAxisRef,
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
-      rangeslider: { visible: true, autorange: false, range: xBounds, thickness: 0.075 },
+      rangeslider: { visible: true, thickness: 0.075 },
       automargin: true,
       fixedrange: false
     }

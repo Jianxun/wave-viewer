@@ -111,7 +111,7 @@ describe("plotly adapter", () => {
     expect(figure.layout.xaxis).toMatchObject({
       title: { text: "time" },
       anchor: "y2",
-      rangeslider: { visible: true, autorange: false, range: [0, 2] },
+      rangeslider: { visible: true, thickness: 0.075 },
       autorange: true,
       fixedrange: false
     });
@@ -395,8 +395,7 @@ describe("plotly adapter", () => {
     });
     expect(figure.layout.xaxis.rangeslider).toMatchObject({
       visible: true,
-      autorange: false,
-      range: [0, 1000]
+      thickness: 0.075
     });
   });
 
