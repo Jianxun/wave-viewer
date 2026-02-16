@@ -84,10 +84,46 @@ body {
   background: linear-gradient(180deg, #172136 0%, #101723 100%);
 }
 
+.plot-canvas:focus,
+.plot-canvas:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .plot-root {
   position: relative;
   width: 100%;
   height: 100%;
+}
+
+/* Normalize Plotly range-slider cursor affordance across SVG sublayers. */
+.plot-root .rangeslider-slidebox,
+.plot-root .rangeslider-bg {
+  cursor: grab !important;
+}
+
+.plot-root .rangeslider-slidebox:active,
+.plot-root .rangeslider-bg:active {
+  cursor: grabbing !important;
+}
+
+/*
+  Plotly renders miniature traces inside the range slider; when those paths
+  receive pointer hit-testing, drag behavior can differ based on whether the
+  pointer is over a trace segment. Route drag to the slider box/handles only.
+*/
+.plot-root .rangeslider-rangeplot,
+.plot-root .rangeslider-rangeplot * {
+  pointer-events: none !important;
+}
+
+.plot-root .rangeslider-grabber-min,
+.plot-root .rangeslider-grabber-max,
+.plot-root .rangeslider-grabarea-min,
+.plot-root .rangeslider-grabarea-max,
+.plot-root .rangeslider-handle-min,
+.plot-root .rangeslider-handle-max {
+  cursor: ew-resize !important;
 }
 
 .plot-drop-overlay {
