@@ -68,7 +68,7 @@ export function createPlotRenderer(payload: {
       responsive: true,
       displayModeBar: true,
       displaylogo: false,
-      scrollZoom: true,
+      scrollZoom: false,
       modeBarButtonsToRemove: ["select2d", "lasso2d"],
       toImageButtonOptions: {
         format: "png",
