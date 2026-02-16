@@ -84,6 +84,12 @@ body {
   background: linear-gradient(180deg, #172136 0%, #101723 100%);
 }
 
+.plot-canvas:focus,
+.plot-canvas:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .plot-root {
   position: relative;
   width: 100%;

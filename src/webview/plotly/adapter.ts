@@ -56,7 +56,11 @@ export type PlotlyLayout = {
     anchor?: `y${number}` | "y";
     autorange?: boolean;
     range?: [number, number];
-    rangeslider?: { visible: boolean; thickness?: number };
+    rangeslider?: {
+      visible: boolean;
+      thickness?: number;
+      range?: [number, number];
+    };
     automargin: boolean;
     fixedrange?: boolean;
   };
@@ -106,7 +110,7 @@ export function buildPlotlyFigure(payload: {
     .map((trace) => (trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined))
     .filter((entry): entry is SidePanelTraceTuplePayload => entry !== undefined);
   const firstTuple = traceTuples[0];
-  const xBounds = getBoundsAcrossTuples(traceTuples);
+  const xBounds = normalizeRange(getBoundsAcrossTuples(traceTuples));
   const axisMappings = buildRenderAxisMappings(payload.plot.axes);
   const axisMappingById = new Map(axisMappings.map((mapping) => [mapping.axisId, mapping] as const));
   const defaultTraceAxisRef = axisMappings[0]?.traceRef ?? "y";
@@ -170,7 +174,11 @@ export function buildPlotlyFigure(payload: {
       anchor: bottomLaneTraceAxisRef,
       autorange: payload.plot.xRange === undefined,
       range: payload.plot.xRange,
-      rangeslider: { visible: true, thickness: 0.075 },
+      rangeslider: {
+        visible: true,
+        thickness: 0.075,
+        range: xBounds
+      },
       automargin: true,
       fixedrange: false
     }
@@ -191,6 +199,31 @@ export function buildPlotlyFigure(payload: {
 
 export function getAxisLaneDomains(axes: ReadonlyArray<Pick<AxisState, "id">>): AxisLaneDomain[] {
   return buildRenderAxisMappings(axes).map(({ axisId, domain }) => ({ axisId, domain }));
+}
+
+export function getPlotXBounds(payload: {
+  plot: PlotState;
+  traceTuplesBySourceId: ReadonlyMap<string, SidePanelTraceTuplePayload>;
+}): [number, number] | undefined {
+  const traceTuples = payload.plot.traces
+    .map((trace) => (trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined))
+    .filter((entry): entry is SidePanelTraceTuplePayload => entry !== undefined);
+  return normalizeRange(getBoundsAcrossTuples(traceTuples));
+}
+
+function normalizeRange(range?: [number, number]): [number, number] | undefined {
+  if (!range) {
+    return undefined;
+  }
+  const [start, end] = range;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return undefined;
+  }
+  if (end > start) {
+    return range;
+  }
+  const halfSpan = Math.max(Math.abs(start) * 1e-6, 1e-9);
+  return [start - halfSpan, start + halfSpan];
 }
 
 export function resolveAxisIdFromNormalizedY(

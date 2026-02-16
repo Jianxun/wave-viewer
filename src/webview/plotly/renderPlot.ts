@@ -20,6 +20,7 @@ type PlotlyLike = {
 
 type PlotlyEventDiv = HTMLElement & {
   on?(event: "plotly_relayout", handler: (eventData: Record<string, unknown>) => void): void;
+  on?(event: "plotly_doubleclick", handler: () => boolean | void): void;
   _fullLayout?: Record<string, unknown>;
 };
 
@@ -29,18 +30,21 @@ type PanDirection = "left" | "right" | "up" | "down";
 export function createPlotRenderer(payload: {
   container: HTMLElement;
   onRelayout: (eventData: Record<string, unknown>) => void;
+  onDoubleClick?: () => boolean | void;
   plotly?: PlotlyLike;
 }): {
   render: (
     plot: PlotState,
     traceTuplesBySourceId: ReadonlyMap<string, SidePanelTraceTuplePayload>
   ) => Promise<void>;
-  resetAxes: (yAxisLayoutKeys: string[]) => Promise<void>;
+  resetAxes: (payload: { yAxisLayoutKeys: string[]; xRange?: [number, number] }) => Promise<void>;
+  setXViewport: (payload: { activeRange: [number, number]; boundRange?: [number, number] }) => Promise<void>;
   pan: (payload: { direction: PanDirection; yAxisLayoutKey: string; fraction?: number }) => Promise<boolean>;
 } {
   const plotly = payload.plotly ?? (Plotly as unknown as PlotlyLike);
   const eventDiv = payload.container as PlotlyEventDiv;
   let relayoutBound = false;
+  let doubleClickBound = false;
 
   function toPngFileName(plotName: string): string {
     const sanitized = plotName
@@ -76,11 +80,43 @@ export function createPlotRenderer(payload: {
       eventDiv.on("plotly_relayout", payload.onRelayout);
       relayoutBound = true;
     }
+    if (!doubleClickBound && typeof eventDiv.on === "function" && payload.onDoubleClick) {
+      eventDiv.on("plotly_doubleclick", payload.onDoubleClick);
+      doubleClickBound = true;
+    }
   }
 
-  async function resetAxes(yAxisLayoutKeys: string[]): Promise<void> {
-    const update: Record<string, unknown> = { "xaxis.autorange": true };
-    for (const layoutKey of yAxisLayoutKeys) {
+  async function setXViewport(payloadArg: {
+    activeRange: [number, number];
+    boundRange?: [number, number];
+  }): Promise<void> {
+    const activeRange = ensureIncreasingRange(payloadArg.activeRange);
+    const boundRange = ensureIncreasingRange(payloadArg.boundRange ?? activeRange);
+    await plotly.relayout(payload.container, {
+      "xaxis.autorange": false,
+      "xaxis.range[0]": activeRange[0],
+      "xaxis.range[1]": activeRange[1],
+      "xaxis.rangeslider.range[0]": boundRange[0],
+      "xaxis.rangeslider.range[1]": boundRange[1]
+    });
+  }
+
+  async function resetAxes(payloadArg: {
+    yAxisLayoutKeys: string[];
+    xRange?: [number, number];
+  }): Promise<void> {
+    const update: Record<string, unknown> = {};
+    if (payloadArg.xRange) {
+      const xRange = ensureIncreasingRange(payloadArg.xRange);
+      update["xaxis.autorange"] = false;
+      update["xaxis.range[0]"] = xRange[0];
+      update["xaxis.range[1]"] = xRange[1];
+      update["xaxis.rangeslider.range[0]"] = xRange[0];
+      update["xaxis.rangeslider.range[1]"] = xRange[1];
+    } else {
+      update["xaxis.autorange"] = true;
+    }
+    for (const layoutKey of payloadArg.yAxisLayoutKeys) {
       update[`${layoutKey}.autorange`] = true;
     }
     await plotly.relayout(payload.container, update);
@@ -116,7 +152,7 @@ export function createPlotRenderer(payload: {
     return true;
   }
 
-  return { render, resetAxes, pan };
+  return { render, resetAxes, setXViewport, pan };
 }
 
 function getAxisRange(eventDiv: PlotlyEventDiv, axisLayoutKey: string): AxisRange | undefined {
@@ -143,4 +179,12 @@ function toFiniteNumber(value: unknown): number | undefined {
     return undefined;
   }
   return value;
+}
+
+function ensureIncreasingRange(range: [number, number]): [number, number] {
+  if (range[1] > range[0]) {
+    return range;
+  }
+  const halfSpan = Math.max(Math.abs(range[0]) * 1e-6, 1e-9);
+  return [range[0] - halfSpan, range[0] + halfSpan];
 }

@@ -115,6 +115,9 @@ describe("plotly adapter", () => {
       autorange: true,
       fixedrange: false
     });
+    expect(figure.layout.xaxis.rangeslider).toMatchObject({
+      range: [0, 2]
+    });
     expect(figure.layout).toMatchObject({
       template: "plotly_dark",
       paper_bgcolor: "#101723",

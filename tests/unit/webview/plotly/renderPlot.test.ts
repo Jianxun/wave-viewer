@@ -22,7 +22,7 @@ function createPlot(): PlotState {
 }
 
 describe("plot renderer keyboard helpers", () => {
-  it("binds relayout handler once and supports resetAxes", async () => {
+  it("binds relayout handler once and supports resetAxes autorange fallback", async () => {
     const on = vi.fn();
     const react = vi.fn().mockResolvedValue(undefined);
     const relayout = vi.fn().mockResolvedValue(undefined);
@@ -36,7 +36,7 @@ describe("plot renderer keyboard helpers", () => {
 
     await renderer.render(createPlot(), new Map());
     await renderer.render(createPlot(), new Map());
-    await renderer.resetAxes(["yaxis", "yaxis2"]);
+    await renderer.resetAxes({ yAxisLayoutKeys: ["yaxis", "yaxis2"] });
 
     expect(on).toHaveBeenCalledTimes(1);
     expect(on).toHaveBeenCalledWith("plotly_relayout", expect.any(Function));
@@ -44,6 +44,56 @@ describe("plot renderer keyboard helpers", () => {
       "xaxis.autorange": true,
       "yaxis.autorange": true,
       "yaxis2.autorange": true
+    });
+  });
+
+  it("resets axes to an explicit data-bounded x viewport", async () => {
+    const react = vi.fn().mockResolvedValue(undefined);
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    const container = { on: vi.fn(), _fullLayout: {} } as unknown as HTMLElement;
+    const renderer = createPlotRenderer({
+      container,
+      onRelayout: () => undefined,
+      plotly: { react, relayout }
+    });
+
+    await renderer.resetAxes({
+      yAxisLayoutKeys: ["yaxis", "yaxis2"],
+      xRange: [2, 8]
+    });
+
+    expect(relayout).toHaveBeenCalledWith(container, {
+      "xaxis.autorange": false,
+      "xaxis.range[0]": 2,
+      "xaxis.range[1]": 8,
+      "xaxis.rangeslider.range[0]": 2,
+      "xaxis.rangeslider.range[1]": 8,
+      "yaxis.autorange": true,
+      "yaxis2.autorange": true
+    });
+  });
+
+  it("updates active and bound viewport ranges together", async () => {
+    const react = vi.fn().mockResolvedValue(undefined);
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    const container = { on: vi.fn(), _fullLayout: {} } as unknown as HTMLElement;
+    const renderer = createPlotRenderer({
+      container,
+      onRelayout: () => undefined,
+      plotly: { react, relayout }
+    });
+
+    await renderer.setXViewport({
+      activeRange: [4, 6],
+      boundRange: [0, 10]
+    });
+
+    expect(relayout).toHaveBeenCalledWith(container, {
+      "xaxis.autorange": false,
+      "xaxis.range[0]": 4,
+      "xaxis.range[1]": 6,
+      "xaxis.rangeslider.range[0]": 0,
+      "xaxis.rangeslider.range[1]": 10
     });
   });
 

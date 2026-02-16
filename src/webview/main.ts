@@ -10,6 +10,7 @@ import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
 import {
   getAxisLaneDomains,
+  getPlotXBounds,
   mapLaneIndexToPlotly,
   parseRelayoutRanges,
   resolveAxisIdFromNormalizedY
@@ -71,12 +72,14 @@ type HostMessage =
   | ProtocolEnvelope<"host/sidePanelTraceInjected", { viewerId: string; trace: SidePanelTraceTuplePayload }>;
 
 const vscode = acquireVsCodeApi();
+installFatalErrorOverlay();
 
 let workspace: WorkspaceState | undefined;
 const traceTuplesBySourceId = new Map<string, SidePanelTraceTuplePayload>();
 let viewerId = "viewer-unknown";
 let nextRequestId = 1;
 let lastAppliedRevision = -1;
+let suppressViewportNormalization = false;
 
 const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
@@ -93,6 +96,10 @@ let preferredDropAxisId: AxisId | undefined;
 
 const plotRenderer = createPlotRenderer({
   container: plotRootEl,
+  onDoubleClick: () => {
+    void resetActivePlotViewportAndAxes();
+    return false;
+  },
   onRelayout: (eventData) => {
     if (!workspace) {
       return;
@@ -104,12 +111,26 @@ const plotRenderer = createPlotRenderer({
       return;
     }
 
-    const didResetXRange = eventData["xaxis.autorange"] === true;
+    const xBounds = getPlotXBounds({
+      plot: activePlot,
+      traceTuplesBySourceId
+    });
+    const normalizedXRange = normalizeIncomingXRange({
+      eventData,
+      incomingXRange: updates.xRange,
+      xBounds
+    });
+    const shouldNormalizeViewport =
+      !suppressViewportNormalization &&
+      xBounds !== undefined &&
+      normalizedXRange !== undefined &&
+      (eventData["xaxis.autorange"] === true ||
+        (updates.xRange !== undefined && !rangesEqual(updates.xRange, normalizedXRange)));
 
     if (updates.xRange !== undefined || "xaxis.autorange" in eventData) {
       applyRelayoutUpdate({
         type: "plot/setXRange",
-        payload: { xRange: updates.xRange }
+        payload: { xRange: normalizedXRange }
       });
     }
 
@@ -123,8 +144,16 @@ const plotRenderer = createPlotRenderer({
       });
     }
 
-    if (didResetXRange) {
-      void renderWorkspace();
+    if (shouldNormalizeViewport) {
+      suppressViewportNormalization = true;
+      void plotRenderer
+        .setXViewport({
+          activeRange: normalizedXRange,
+          boundRange: xBounds
+        })
+        .finally(() => {
+          suppressViewportNormalization = false;
+        });
     }
   }
 });
@@ -585,6 +614,11 @@ plotCanvasEl.addEventListener("drop", (event) => {
   });
 });
 
+plotCanvasEl.tabIndex = 0;
+plotCanvasEl.addEventListener("pointerdown", () => {
+  plotCanvasEl.focus();
+});
+
 clearPlotButtonEl.addEventListener("click", () => {
   if (!workspace) {
     return;
@@ -596,8 +630,14 @@ refreshSignalsButtonEl.addEventListener("click", () => {
   postRefreshSignals();
 });
 
-window.addEventListener("keydown", (event) => {
-  if (!workspace || event.defaultPrevented) {
+const viewportShortcutHandler = (event: KeyboardEvent) => {
+  const eventWithMarker = event as KeyboardEvent & { __waveViewerHandled?: boolean };
+  if (eventWithMarker.__waveViewerHandled) {
+    return;
+  }
+  eventWithMarker.__waveViewerHandled = true;
+
+  if (!workspace) {
     return;
   }
 
@@ -612,8 +652,7 @@ window.addEventListener("keydown", (event) => {
   const activePlot = getActivePlot(workspace);
   if (event.key === "f" || event.key === "F") {
     event.preventDefault();
-    const yAxisLayoutKeys = activePlot.axes.map((_, index) => mapLaneIndexToPlotly(index).layoutKey);
-    void plotRenderer.resetAxes(yAxisLayoutKeys);
+    void resetActivePlotViewportAndAxes();
     return;
   }
 
@@ -635,19 +674,22 @@ window.addEventListener("keydown", (event) => {
 
   event.preventDefault();
   if (event.key === "ArrowLeft") {
-    void plotRenderer.pan({ direction: "left", yAxisLayoutKey });
+    void panViewportOrInitialize({ direction: "left", yAxisLayoutKey });
     return;
   }
   if (event.key === "ArrowRight") {
-    void plotRenderer.pan({ direction: "right", yAxisLayoutKey });
+    void panViewportOrInitialize({ direction: "right", yAxisLayoutKey });
     return;
   }
   if (event.key === "ArrowUp") {
-    void plotRenderer.pan({ direction: "up", yAxisLayoutKey });
+    void panViewportOrInitialize({ direction: "up", yAxisLayoutKey });
     return;
   }
-  void plotRenderer.pan({ direction: "down", yAxisLayoutKey });
-});
+  void panViewportOrInitialize({ direction: "down", yAxisLayoutKey });
+};
+
+document.addEventListener("keydown", viewportShortcutHandler, { capture: true });
+window.addEventListener("keydown", viewportShortcutHandler, { capture: true });
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   const parsed = parseHostToWebviewMessage(event.data);
@@ -756,4 +798,125 @@ function isEditableTarget(target: EventTarget | null): boolean {
     return false;
   }
   return target.matches("input, textarea, select, [contenteditable='true']") || target.isContentEditable;
+}
+
+async function resetActivePlotViewportAndAxes(): Promise<void> {
+  if (!workspace) {
+    return;
+  }
+  const activePlot = getActivePlot(workspace);
+  const yAxisLayoutKeys = activePlot.axes.map((_, index) => mapLaneIndexToPlotly(index).layoutKey);
+  const xBounds = getPlotXBounds({
+    plot: activePlot,
+    traceTuplesBySourceId
+  });
+  suppressViewportNormalization = true;
+  try {
+    await plotRenderer.resetAxes({ yAxisLayoutKeys, xRange: xBounds });
+  } finally {
+    suppressViewportNormalization = false;
+  }
+}
+
+async function panViewportOrInitialize(payload: {
+  direction: "left" | "right" | "up" | "down";
+  yAxisLayoutKey: string;
+}): Promise<void> {
+  const didPan = await plotRenderer.pan(payload);
+  if (didPan || !workspace) {
+    return;
+  }
+
+  if (payload.direction === "left" || payload.direction === "right") {
+    const activePlot = getActivePlot(workspace);
+    const xBounds = getPlotXBounds({
+      plot: activePlot,
+      traceTuplesBySourceId
+    });
+    if (!xBounds) {
+      return;
+    }
+
+    suppressViewportNormalization = true;
+    try {
+      await plotRenderer.setXViewport({
+        activeRange: xBounds,
+        boundRange: xBounds
+      });
+    } finally {
+      suppressViewportNormalization = false;
+    }
+    await plotRenderer.pan(payload);
+  }
+}
+
+function normalizeIncomingXRange(payload: {
+  eventData: Record<string, unknown>;
+  incomingXRange?: [number, number];
+  xBounds?: [number, number];
+}): [number, number] | undefined {
+  if (!payload.xBounds) {
+    return payload.incomingXRange;
+  }
+  if (payload.eventData["xaxis.autorange"] === true) {
+    return payload.xBounds;
+  }
+  if (!payload.incomingXRange) {
+    return payload.incomingXRange;
+  }
+  return clampRangeToBounds(payload.incomingXRange, payload.xBounds);
+}
+
+function clampRangeToBounds(range: [number, number], bounds: [number, number]): [number, number] {
+  const [boundStart, boundEnd] = bounds;
+  const width = range[1] - range[0];
+  const boundWidth = boundEnd - boundStart;
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(boundWidth) || boundWidth <= 0) {
+    return bounds;
+  }
+  if (width >= boundWidth) {
+    return bounds;
+  }
+
+  const clampedStart = Math.min(Math.max(range[0], boundStart), boundEnd - width);
+  return [clampedStart, clampedStart + width];
+}
+
+function rangesEqual(a: [number, number], b: [number, number]): boolean {
+  return Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+}
+
+function installFatalErrorOverlay(): void {
+  window.addEventListener("error", (event) => {
+    renderFatalError(`Webview startup error: ${event.message}`);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason =
+      event.reason instanceof Error
+        ? event.reason.message
+        : typeof event.reason === "string"
+          ? event.reason
+          : "Unknown promise rejection";
+    renderFatalError(`Webview startup error: ${reason}`);
+  });
+}
+
+function renderFatalError(message: string): void {
+  console.error("[wave-viewer] fatal webview error", message);
+  const body = document.body;
+  if (!body) {
+    return;
+  }
+  body.innerHTML = `<pre style="white-space: pre-wrap; margin: 16px; color: #e8edf8; background: #101723; border: 1px solid #4864a5; border-radius: 8px; padding: 12px;">${escapeHtml(
+    message
+  )}</pre>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
