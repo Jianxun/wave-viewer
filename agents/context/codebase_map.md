@@ -12,6 +12,7 @@
     - `wave-viewer-mvp.md`
     - `testing-strategy.md`
     - `domain-stacked-shared-x-implementation.md` (ADR-0002 execution guide)
+    - `hdf5-normalized-waveform-format.md` (draft normalized run-centric non-CSV ingestion contract)
 - `doc/`
   - Architecture references:
     - `vaporview-architecture-findings.md` (side-panel/custom-editor architecture analysis)
@@ -28,6 +29,7 @@
 - Archived tasks: `agents/context/tasks_archived.yaml`
 - Global resume point: `agents/context/project_status.md`
 - MVP implementation spec: `doc/specs/wave-viewer-mvp.md`
+- Normalized HDF5 ingestion spec: `doc/specs/hdf5-normalized-waveform-format.md`
 - ADR-0002 implementation spec: `doc/specs/domain-stacked-shared-x-implementation.md`
 
 ## Notes

@@ -86,7 +86,30 @@ current_sprint:
       - doc/specs/host-webview-protocol.md
       - doc/specs/wave-viewer-mvp.md
       - tests/extension/smoke.test.ts
-backlog: []
+backlog:
+  - id: T-064
+    title: Implement normalized HDF5 waveform loader with run selection defaults
+    owner: Executor
+    dod:
+      - Add extension-host ingestion path for normalized HDF5 files conforming to `doc/specs/hdf5-normalized-waveform-format.md`.
+      - Map one selected run (`run_id`) into existing in-memory `Dataset` contract without changing reducer semantics.
+      - Default run selection to first `/catalog/runs` entry and expose deterministic dataset path identity (`<file>#<run_id>`).
+      - Validate required HDF5 metadata/paths and return actionable user-facing errors for invalid files.
+    verify:
+      - npm test -- tests/unit/dataset/selectDefaultX.test.ts
+      - npm test -- tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-064.md
+      adr: agents/adr/ADR-0019-normalized-hdf5-waveform-ingestion-contract.md
+      spec: doc/specs/hdf5-normalized-waveform-format.md
+    files:
+      - src/extension.ts
+      - src/extension/commands.ts
+      - src/core/dataset/types.ts
+      - src/core/dataset/selectDefaultX.ts
+      - tests/extension/smoke.test.ts
+      - tests/unit/dataset/selectDefaultX.test.ts
 exploration_candidates:
   - Evaluate adding a one-shot CLI migrator from legacy v1 layout YAML to v2 outside MVP core scope.
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.

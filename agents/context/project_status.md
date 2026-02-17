@@ -5,6 +5,7 @@
 - Packaged extension usability issues were triaged in-session; a remaining defect is reload consistency: existing plotted traces can stay stale after `Reload All Files` until a new user intent is sent.
 - `ADR-0018` is accepted (2026-02-14): reload flows must use atomic host replay snapshots (`workspace + viewerState + tuples`) instead of incremental tuple-only reload sync.
 - Protocol/spec docs were updated to encode replay-snapshot requirements for dataset reload behavior.
+- `ADR-0019` is proposed (2026-02-17): define run-centric normalized HDF5 waveform ingestion to decouple simulator raw quirks from viewer code.
 
 ## Last merged/verified status
 - Task states:
@@ -20,12 +21,12 @@
   - `T-062` regression coverage for reload-without-new-intent,
   - `T-063` cleanup + docs alignment.
 - Local verification for current workspace changes:
-  - `./venv/bin/python scripts/lint_tasks_state.py` pending rerun after architecture file updates.
+  - `./venv/bin/python scripts/lint_tasks_state.py` passed after architecture file updates.
 
 ## Next 1-3 tasks
-1. `T-060` implement `host/replaySnapshot` protocol and atomic webview apply path.
-2. `T-061` replace reload incremental tuple fanout with viewer-scoped replay snapshot generation.
-3. `T-062` add regression tests that prove reload refreshes existing traces without requiring new add/drop intents.
+1. `T-064` implement normalized HDF5 loader and map selected run into existing `Dataset` contract.
+2. Add HDF5 parser-focused unit tests for required metadata/groups and deterministic `<file>#<run_id>` identity.
+3. Define initial UX for selecting non-default runs in multi-run files (follow-up task after `T-064`).
 
 ## Known risks / unknowns
 - Replay snapshot payload size can increase on large workspaces; correctness is prioritized for MVP and payload optimization may be needed later.
