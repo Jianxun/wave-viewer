@@ -1,21 +1,5 @@
 schema_version: 2
-T-060:
-  status: done
-  pr: 71
-  merged: true
-T-061:
-  status: done
-  pr: 72
-  merged: true
-T-062:
-  status: done
-  pr: 73
-  merged: true
-T-063:
-  status: done
-  pr: 74
-  merged: true
 T-064:
-  status: backlog
+  status: ready
   pr: null
   merged: false
