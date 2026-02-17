@@ -25,6 +25,7 @@ import {
   createRemoveLoadedFileCommand,
   createReloadAllLoadedFilesCommand,
   writeLayoutFileAtomically,
+  isSupportedDatasetFile,
   isCsvFile,
   LOAD_CSV_FILES_COMMAND,
   EXPORT_FROZEN_BUNDLE_COMMAND,
@@ -381,10 +382,12 @@ describe("T-002 extension shell smoke", () => {
     expect(OPEN_VIEWER_COMMAND).toBe("waveViewer.openViewer");
   });
 
-  it("detects csv files", () => {
+  it("detects supported dataset file types", () => {
     expect(isCsvFile("a.csv")).toBe(true);
     expect(isCsvFile("A.CSV")).toBe(true);
+    expect(isSupportedDatasetFile("tb.spice.h5")).toBe(true);
     expect(isCsvFile("a.txt")).toBe(false);
+    expect(isSupportedDatasetFile("a.txt")).toBe(false);
   });
 
   it("shows a clear error when no active editor exists", async () => {
