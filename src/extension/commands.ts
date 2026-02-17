@@ -39,11 +39,21 @@ export function isCsvFile(fileName: string): boolean {
   return fileName.toLowerCase().endsWith(".csv");
 }
 
+export function isHdf5File(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith(".h5");
+}
+
+export function isSupportedDatasetFile(fileName: string): boolean {
+  return isCsvFile(fileName) || isHdf5File(fileName);
+}
+
 export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> {
   return async () => {
     const activeDocument = deps.getActiveDocument();
     const activeDatasetPath =
-      activeDocument && isCsvFile(activeDocument.fileName) ? activeDocument.uri.fsPath : undefined;
+      activeDocument && isSupportedDatasetFile(activeDocument.fileName)
+        ? activeDocument.uri.fsPath
+        : undefined;
     const datasetPath = activeDatasetPath ?? deps.getPreferredDatasetPath?.();
     let normalizedDataset: { dataset: Dataset; defaultXSignal: string } | undefined;
 
