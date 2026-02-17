@@ -9,6 +9,10 @@ import { importPlotSpecV1 } from "./core/spec/importSpec";
 import { parseCsv } from "./core/csv/parseCsv";
 import { selectDefaultX } from "./core/dataset/selectDefaultX";
 import {
+  isHdf5DatasetFile,
+  loadNormalizedHdf5Dataset
+} from "./core/hdf5/loadNormalizedHdf5";
+import {
   createDoubleClickQuickAddResolver,
   createSignalTreeDragAndDropController,
   createSignalTreeDataProvider,
@@ -42,6 +46,7 @@ import {
   createRemoveLoadedFileCommand,
   createSaveLayoutAsCommand,
   createSaveLayoutCommand,
+  isSupportedDatasetFile,
   isCsvFile
 } from "./extension/commands";
 import { buildWebviewHtml } from "./extension/webviewHtml";
@@ -101,6 +106,7 @@ export {
   createRemoveLoadedFileCommand,
   createSaveLayoutAsCommand,
   createSaveLayoutCommand,
+  isSupportedDatasetFile,
   createViewerSessionRegistry,
   isCsvFile,
   resolveLoadedDatasetDeterministically,
@@ -587,8 +593,9 @@ export function activate(context: VSCode.ExtensionContext): void {
   }
 
   const loadDataset = (documentPath: string): { dataset: Dataset; defaultXSignal: string } => {
-    const csvText = fs.readFileSync(documentPath, "utf8");
-    const dataset = parseCsv({ path: documentPath, csvText });
+    const dataset = isHdf5DatasetFile(documentPath)
+      ? loadNormalizedHdf5Dataset(documentPath).dataset
+      : parseCsv({ path: documentPath, csvText: fs.readFileSync(documentPath, "utf8") });
     const defaultXSignal = selectDefaultX(dataset);
     return { dataset, defaultXSignal };
   };
@@ -998,7 +1005,7 @@ export function activate(context: VSCode.ExtensionContext): void {
         canSelectFiles: true,
         canSelectFolders: false,
         canSelectMany: true,
-        filters: { CSV: ["csv"] }
+        filters: { Waveform: ["csv", "h5"] }
       });
       return result?.map((uri) => uri.fsPath);
     },
