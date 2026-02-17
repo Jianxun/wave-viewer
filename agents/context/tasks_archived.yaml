@@ -54,3 +54,7 @@ archive:
   - { T-057: { completed_on: 2026-02-13, owner: Executor, scratchpad: agents/scratchpads/T-057.md, pr: 67 } }
   - { T-058: { completed_on: 2026-02-13, owner: Executor, scratchpad: agents/scratchpads/T-058.md, pr: 68 } }
   - { T-059: { completed_on: 2026-02-13, owner: Executor, scratchpad: agents/scratchpads/T-059.md, pr: 69 } }
+  - { T-060: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-060.md, pr: 71 } }
+  - { T-061: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-061.md, pr: 72 } }
+  - { T-062: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-062.md, pr: 73 } }
+  - { T-063: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-063.md, pr: 74 } }

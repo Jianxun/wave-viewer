@@ -23,6 +23,7 @@ Active ADRs:
 - `ADR-0016`: Single explorer drives multiple live viewers through host-side deterministic routing and viewer auto-open semantics.
 - `ADR-0017`: Frozen export for multi-dataset workspaces emits one layout YAML plus one frozen CSV per dataset.
 - `ADR-0018`: Dataset reload uses atomic host replay snapshots so workspace/viewerState/tuples update coherently.
+- `ADR-0019` (Proposed): Non-CSV waveform ingestion should use a normalized run-centric HDF5 contract with canonical vectors and hierarchical VDS aliases.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -35,10 +36,14 @@ Active ADRs:
 
 ## Interfaces & data contracts
 - Input file format:
-  - `*.csv` UTF-8 text.
+  - `*.csv` UTF-8 text (current production path).
   - Header row required.
   - Zero or more numeric columns; at least one numeric column is required to plot.
   - Default X signal is the first dataset column (source CSV header order), with no special-case signal-name heuristic.
+  - `*.h5` / `*.spice.h5` normalized waveform container (planned; see ADR-0019 + spec below).
+    - Run-centric organization (`/runs/<run_id>/...`) supports adaptive timesteps and sparse/multi-dimensional sweeps without requiring global gridding.
+    - Canonical per-run numeric payload is `vectors` + `vector_names`; hierarchical signal paths may be exposed as HDF5 VDS aliases.
+    - Full contract: `doc/specs/hdf5-normalized-waveform-format.md`.
 - Normalized in-memory structure:
   - `Dataset`:
     - `path: string`
@@ -84,6 +89,7 @@ Active ADRs:
   - `doc/specs/domain-stacked-shared-x-implementation.md`
   - `doc/specs/side-panel-workflow.md`
   - `doc/specs/host-webview-protocol.md`
+  - `doc/specs/hdf5-normalized-waveform-format.md`
   - `doc/vaporview-architecture-findings.md` (reference implementation guidance; non-normative)
 
 ## Invariants (MUST / MUST NOT)
@@ -115,6 +121,8 @@ Active ADRs:
 - MUST fail clearly when importing a YAML spec that references missing datasets or signals.
 - MUST treat MVP layout schema as `version: 2` only and reject unsupported versions.
 - MUST keep frozen export separate from active interactive layout persistence and support one frozen CSV output per referenced dataset.
+- MUST treat normalized HDF5 waveform files as run-centric datasets (not forced global N-D cubes) once HDF5 ingestion is enabled.
+- MUST NOT implicitly resample/interpolate canonical run data during HDF5 import.
 
 ## Verification protocol
 - Context/schema consistency:
@@ -144,6 +152,7 @@ Active ADRs:
 - 2026-02-13: Adopted single-explorer multi-viewer host routing with viewer auto-open behavior for viewer-dependent commands and layout-open flows (ADR-0016).
 - 2026-02-13: Superseded single-CSV frozen bundle cardinality with multi-dataset frozen artifact sets (one frozen CSV per dataset + one frozen layout), keeping export/session separation (ADR-0017 supersedes ADR-0014 artifact cardinality).
 - 2026-02-14: Accepted atomic reload replay snapshots so dataset reload updates apply as one coherent host snapshot (workspace + viewerState + tuples), avoiding stale trace vectors until later user intents (ADR-0018).
+- 2026-02-17: Proposed normalized run-centric HDF5 ingestion contract to decouple simulator raw quirks from viewer ingestion and preserve adaptive/multi-dimensional sweep fidelity (ADR-0019).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.
