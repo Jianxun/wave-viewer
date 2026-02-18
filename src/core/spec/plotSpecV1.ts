@@ -1,41 +1,49 @@
 import type { WorkspaceState } from "../../webview/state/workspaceState";
+import type { ComplexSignalAccessor } from "../dataset/types";
 
-export const PLOT_SPEC_V2_VERSION = 2;
+export const PLOT_SPEC_V3_VERSION = 3;
 
-export type PlotSpecSignalRefV2 = {
-  dataset: string;
-  signal: string;
+export type PlotSpecSignalNameV3 = {
+  base: string;
+  accessor?: ComplexSignalAccessor;
 };
 
-export type PlotSpecLaneV2 = {
+export type PlotSpecSignalRefV3 = {
+  dataset: string;
+  signal: PlotSpecSignalNameV3;
+};
+
+export type PlotSpecLaneV3 = {
   id: string;
   label?: string;
   range?: [number, number];
   scale?: "linear" | "log";
-  signals: Record<string, PlotSpecSignalRefV2>;
+  signals: Record<string, PlotSpecSignalRefV3>;
 };
 
-export type PlotSpecXConfigV2 = PlotSpecSignalRefV2 & {
+export type PlotSpecXConfigV3 = {
+  dataset: string;
+  signal: PlotSpecSignalNameV3 & { accessor?: never };
   label?: string;
   range?: [number, number];
 };
 
-export type PlotSpecPlotV2 = {
+export type PlotSpecPlotV3 = {
   id: string;
   name: string;
-  x: PlotSpecXConfigV2;
-  y: PlotSpecLaneV2[];
+  x: PlotSpecXConfigV3;
+  y: PlotSpecLaneV3[];
 };
 
-export type PlotSpecV2 = {
-  version: typeof PLOT_SPEC_V2_VERSION;
+export type PlotSpecV3 = {
+  version: typeof PLOT_SPEC_V3_VERSION;
   datasets: Array<{
     id: string;
     path: string;
   }>;
   active_dataset: string;
   active_plot: string;
-  plots: PlotSpecPlotV2[];
+  plots: PlotSpecPlotV3[];
 };
 
 export type ExportPlotSpecInput = {
