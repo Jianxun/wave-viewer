@@ -654,14 +654,16 @@ xScaleSelectEl.addEventListener("change", () => {
     return;
   }
   const activePlot = getActivePlot(workspace);
+  const currentScale = getXAxisScale(activePlot.xScale);
   const nextScale = xScaleSelectEl.value === "log" ? "log" : "linear";
-  if (nextScale === getXAxisScale(activePlot.xScale)) {
+  if (nextScale === currentScale) {
     return;
   }
   postUpdatePlotXAxis({
     plotId: activePlot.id,
     patch: { scale: nextScale }
   });
+  xScaleSelectEl.value = currentScale;
 });
 
 const viewportShortcutHandler = (event: KeyboardEvent) => {
