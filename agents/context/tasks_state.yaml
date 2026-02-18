@@ -12,13 +12,13 @@ T-067:
   pr: 84
   merged: true
 T-068:
-  status: in_progress
-  pr: null
-  merged: false
+  status: done
+  pr: 85
+  merged: true
 T-069:
-  status: in_progress
-  pr: null
-  merged: false
+  status: done
+  pr: 85
+  merged: true
 T-070:
   status: backlog
   pr: null
