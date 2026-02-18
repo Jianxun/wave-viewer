@@ -14,6 +14,7 @@ Build a VS Code extension (`wave-viewer`) that loads CSV waveform data and enabl
 - Transitional fallback keeps in-webview signal controls available until side-panel workflow is implemented and stabilized.
 - Multi-plot workspace via tabs (each tab is one plot).
 - Per-plot configurable X-axis signal.
+- Per-plot configurable X-axis scale (`linear` | `log`).
 - Signal plotted multiple times across different Y-axes (trace instances), including mixing traces from different loaded datasets in one viewer workspace.
 - N-axis-capable data model (`y1`, `y2`, `y3`, ...) rendered as vertically stacked non-overlapping Y-axis domains in a single Plotly figure.
 - One shared X-axis and one rangeslider per plot tab.
@@ -126,6 +127,7 @@ type PlotState = {
     datasetId: DatasetId;
     signal: string;
   };
+  xScale?: "linear" | "log";
   axes: AxisState[];
   traces: TraceState[];
   xRange?: [number, number];
@@ -149,8 +151,10 @@ type WorkspaceState = {
 - Host state messages MUST include monotonic revision numbers; webview MUST ignore stale revisions.
 - Protocol changes MUST follow compatibility/versioning rules in `doc/specs/host-webview-protocol.md`.
 - Drag/drop signal operations MUST emit normalized `webview/intent/dropSignal` events to the host.
+- X-axis scale/range edits MUST emit normalized `webview/intent/updatePlotXAxis` events to the host.
 - Dataset reload operations MUST deliver atomic replay snapshots (workspace + viewer state + tuples) so existing rendered traces refresh without requiring follow-up user interactions.
 - Interaction-time tuple injections (for example side-panel add/drop flows) MUST use incremental tuple upserts and MUST NOT replace reload replay snapshots.
+- Toggle-to-log requests MUST be rejected when active plot context contains no positive finite X values.
 
 Manual QA expectation for reload:
 - After `Reload All Files`, previously rendered traces refresh without any follow-up add/drop action.
@@ -162,6 +166,9 @@ Manual QA expectation for reload:
   - one shared `xaxis`
   - one shared `xaxis.rangeslider`
   - `yaxis`, `yaxis2`, ... configured with non-overlapping `domain` values.
+- `plot.xScale` controls `layout.xaxis.type`:
+  - omitted or `linear` => `linear`
+  - `log` => `log`
 - `axisId=y1` maps to Plotly `yaxis`.
 - `axisId=yN` maps to Plotly `yaxisN` for `N>=2`.
 - Trace mapping:
@@ -169,6 +176,7 @@ Manual QA expectation for reload:
   - `y = datasetsById[trace.datasetId].columns[trace.signal].values`
   - `yaxis = "y" | "y2" | ...`
 - Axis definitions derive from `axes[]` order and settings.
+- Persisted `xRange` remains in raw data units for both linear and log scales; adapter converts to/from Plotly-facing units for log rendering/relayout.
 - This design intentionally avoids multi-canvas subplot synchronization mechanisms.
 - Detailed execution target: `doc/specs/domain-stacked-shared-x-implementation.md`.
 
@@ -190,8 +198,9 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
     - required `x.dataset` (dataset id)
     - required `x.signal.base`
     - `x.signal.accessor` must be omitted
+    - optional `x.scale` (`linear` | `log`; omitted means `linear`)
     - optional `x.label`
-    - optional `x.range`
+    - optional `x.range` (persisted in raw data units for both scales)
   - `plots[].y[]` lane groups with:
     - required lane `id` (human-editable)
     - optional lane `label`, `scale`, `range`
@@ -269,6 +278,7 @@ plots:
 - Host/webview protocol tests for:
   - message schema validation
   - `webview/intent/dropSignal` handling for axis-target and new-axis-target paths
+  - `webview/intent/updatePlotXAxis` handling for linear/log scale and range patch paths
   - deterministic convergence from all signal-add entry points
 - Spec round-trip tests:
   - state -> YAML -> state equality for deterministic fields
@@ -278,9 +288,23 @@ plots:
   - verify no-active-viewer command paths auto-open a viewer target
   - perform lane-targeted drag/drop
   - open layout YAML and verify dataset-qualified tuple replay
+  - verify linear->log toggle succeeds for positive X data and fails with actionable message for non-positive-only X data
+  - verify relayout in log mode roundtrips through host patches and layout replay
 - Execution policy during MVP:
   - CI gates are not required yet.
   - Follow `doc/specs/testing-strategy.md` and record skipped checks in task scratchpads.
+
+### 8.1 Acceptance Scenario Matrix (X-axis Scale)
+- `A1`: linear->log with positive finite X data
+  - expected: host accepts intent, updates `xScale`, render uses log X.
+- `A2`: linear->log with no positive finite X data
+  - expected: host rejects intent, workspace remains unchanged, user sees actionable non-fatal feedback.
+- `A3`: linear->log when persisted `xRange` has non-positive bounds
+  - expected: host clears `xRange` and applies autorange under log mode.
+- `A4`: log mode relayout and double-click reset
+  - expected: host patch/replay remains deterministic, persisted `xRange` stays raw-unit.
+- `A5`: export/import roundtrip with `x.scale: log`
+  - expected: schema v3 roundtrip preserves `x.scale`; omitted `x.scale` imports as linear default.
 
 ## 9. Known Limits (MVP)
 

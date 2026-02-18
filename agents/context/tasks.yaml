@@ -74,7 +74,113 @@ current_sprint:
       - tests/unit/spec/importErrors.test.ts
       - doc/specs/wave-viewer-mvp.md
       - doc/specs/host-webview-protocol.md
-backlog: []
+  - id: T-068
+    title: Lock ADR decision for per-plot X-axis linear/log scale
+    owner: Architect
+    dod:
+      - Create `ADR-0022` documenting per-plot X-axis scale semantics, range-unit policy, validation rules, and rangeslider behavior in log mode.
+      - Update `agents/context/contract.md` active ADR list and invariants to reference the accepted X-axis scale decision.
+      - Define explicit non-goals (no data-transform fallback, no silent filtering) and migration/compatibility notes.
+    verify:
+      - ./venv/bin/python scripts/lint_tasks_state.py
+    links:
+      scratchpad: agents/scratchpads/T-068.md
+      adr: agents/adr/ADR-0022-plot-x-axis-linear-log-scale.md
+      spec: doc/specs/wave-viewer-mvp.md
+    files:
+      - agents/adr/ADR-0022-plot-x-axis-linear-log-scale.md
+      - agents/context/contract.md
+      - agents/context/project_status.md
+  - id: T-069
+    title: Freeze protocol and MVP spec for X-axis scale before implementation
+    owner: Architect
+    depends_on:
+      - T-068
+    dod:
+      - Update protocol spec with a new host-authoritative webview intent for plot X-axis updates (scale and x-range patch semantics).
+      - Update MVP spec to include per-plot `x.scale`, raw-unit `x.range` persistence in both scales, and log-toggle validation/error rules.
+      - Add acceptance scenario matrix in spec for linear->log success, linear->log rejection, replay determinism, and import/export roundtrip.
+    verify:
+      - ./venv/bin/python scripts/lint_tasks_state.py
+    links:
+      scratchpad: agents/scratchpads/T-069.md
+      adr: agents/adr/ADR-0022-plot-x-axis-linear-log-scale.md
+      spec: doc/specs/host-webview-protocol.md
+    files:
+      - doc/specs/host-webview-protocol.md
+      - doc/specs/wave-viewer-mvp.md
+      - agents/context/project_status.md
+backlog:
+  - id: T-070
+    title: Implement host protocol and reducer support for plot X-axis scale updates
+    owner: Executor
+    depends_on:
+      - T-069
+    dod:
+      - Add protocol message parsing/validation for plot X-axis update intent and route it through host transactions.
+      - Extend workspace reducer/state to persist `plot.xScale` with default linear behavior and guard invalid log toggles (no positive X samples).
+      - Ensure implementation conforms to frozen ADR/spec decisions from T-068/T-069 without editing ADR/spec/contract files.
+    verify:
+      - npm test -- tests/unit/protocol/messages.test.ts tests/extension/smoke.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-070.md
+      adr: agents/adr/ADR-0022-plot-x-axis-linear-log-scale.md
+      spec: doc/specs/host-webview-protocol.md
+    files:
+      - src/core/dataset/types.ts
+      - src/extension/commands.ts
+      - src/extension/types.ts
+      - src/webview/state/workspaceState.ts
+      - src/webview/state/reducer.ts
+      - tests/unit/protocol/messages.test.ts
+      - tests/extension/smoke.test.ts
+  - id: T-071
+    title: Implement webview X-scale UI and log-aware Plotly range conversions
+    owner: Executor
+    depends_on:
+      - T-070
+    dod:
+      - Add per-plot X-scale control in plot header (`linear`/`log`) and wire it to host intent flow.
+      - Update Plotly adapter/render relayout plumbing to convert raw-unit x-ranges <-> Plotly log-axis units deterministically.
+      - Preserve existing rangeslider, pan, and reset interactions in both scales per frozen spec.
+      - Ensure implementation conforms to frozen ADR/spec decisions from T-068/T-069 without editing ADR/spec/contract files.
+    verify:
+      - npm test -- tests/unit/webview/plotly/adapter.test.ts tests/unit/webview/plotly/renderPlot.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-071.md
+      adr: agents/adr/ADR-0022-plot-x-axis-linear-log-scale.md
+      spec: doc/specs/wave-viewer-mvp.md
+    files:
+      - src/webview/main.ts
+      - src/webview/index.html
+      - src/webview/styles.css
+      - src/webview/plotly/adapter.ts
+      - src/webview/plotly/renderPlot.ts
+      - tests/unit/webview/plotly/adapter.test.ts
+      - tests/unit/webview/plotly/renderPlot.test.ts
+  - id: T-072
+    title: Add end-to-end regression coverage for X-axis log workflows
+    owner: Executor
+    depends_on:
+      - T-071
+    dod:
+      - Add regression tests for valid log toggle, invalid log toggle rejection, relayout persistence, and replay/import roundtrip behavior.
+      - Confirm no regressions in existing lane/axis routing and snapshot replay flows.
+      - Ensure implementation conforms to frozen ADR/spec decisions from T-068/T-069 without editing ADR/spec/contract files.
+    verify:
+      - npm test -- tests/extension/smoke.test.ts tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-072.md
+      adr: agents/adr/ADR-0022-plot-x-axis-linear-log-scale.md
+      spec: doc/specs/wave-viewer-mvp.md
+    files:
+      - tests/extension/smoke.test.ts
+      - tests/unit/spec/roundtrip.test.ts
+      - tests/unit/spec/importErrors.test.ts
+      - tests/unit/webview/workspaceState.test.ts
 exploration_candidates:
   - Evaluate adding a one-shot CLI migrator from legacy v1 layout YAML to v2 outside MVP core scope.
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.

@@ -26,6 +26,7 @@ Active ADRs:
 - `ADR-0019` (Proposed): Non-CSV waveform ingestion should use a normalized run-centric HDF5 contract with canonical vectors and hierarchical VDS aliases.
 - `ADR-0020`: HDF5 ingestion uses a strict single-run schema (`/vectors`, `/vector_names`, `/indep_var`, `/signals`) and side-panel renders hierarchical signal tree labels while preserving canonical signal ids.
 - `ADR-0021` (Proposed): AC complex vectors are supported via host-side lazy projection with structured layout signal refs (`{base, accessor}`) while runtime payloads remain finite real arrays.
+- `ADR-0022`: Per-plot X-axis supports `linear`/`log` with host-authoritative updates, raw-unit persisted ranges, strict non-positive validation, and rangeslider retained in log mode.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -167,6 +168,7 @@ Active ADRs:
 - 2026-02-17: Proposed normalized run-centric HDF5 ingestion contract to decouple simulator raw quirks from viewer ingestion and preserve adaptive/multi-dimensional sweep fidelity (ADR-0019).
 - 2026-02-18: Accepted strict single-run HDF5 schema for MVP ingestion and hierarchical signal-tree display mapping while keeping canonical signal ids for actions/traces (ADR-0020).
 - 2026-02-18: Proposed host-side lazy complex projection for AC vectors with fixed accessor set (`re`, `im`, `mag`, `phase`, `db20`), `eps=1e-30` db floor policy, and structured layout signal refs `{base, accessor}` under schema version `3` (ADR-0021).
+- 2026-02-18: Accepted per-plot X-axis `linear`/`log` scale with host-authoritative intent updates, raw-unit `x.range` persistence in both scales, strict log-toggle rejection when no positive finite X values exist, and rangeslider retained in log mode (ADR-0022).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.

@@ -47,6 +47,12 @@ Rules:
   - payload: `{ viewerId: string; plotId: string; requestId: string }`
 - `webview/intent/setActiveAxis`
   - payload: `{ viewerId: string; plotId: string; axisId: string; requestId: string }`
+- `webview/intent/updatePlotXAxis`
+  - payload:
+    - `viewerId: string`
+    - `plotId: string`
+    - `patch: { scale?: "linear" | "log"; range?: [number, number] }`
+    - `requestId: string`
 - `webview/intent/dropSignal`
   - payload:
     - `viewerId: string`
@@ -84,6 +90,8 @@ Rules:
 - Message handlers must dispatch deterministic reducer actions.
 - Equivalent user intents from different UI paths must produce equivalent workspace deltas.
 - Protocol messages must not include transient DOM-only state.
+- For X-axis updates, persisted `x.range` values MUST remain in raw data units independent of rendered X scale.
+- Toggle-to-log requests with no positive finite X samples in active plot context MUST be rejected with non-fatal actionable feedback and no workspace mutation.
 
 ## Verification
 - Unit tests for envelope/type/payload validation.
