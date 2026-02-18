@@ -39,6 +39,7 @@ import {
   SIGNAL_BROWSER_ADD_TO_NEW_AXIS_COMMAND,
   SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND,
   runResolvedSidePanelQuickAdd,
+  resolveQuickAddSignal,
   runResolvedSidePanelSignalAction,
   resolveLoadedDatasetDeterministically,
   resolveSidePanelSelection,
@@ -698,7 +699,7 @@ describe("T-030 reference-only spec import workflow", () => {
     await command();
 
     expect(showError).toHaveBeenCalledWith(
-      "Wave Viewer reference-only spec points to '/workspace/examples/simulations/old.csv', but the active CSV is '/workspace/examples/simulations/new.csv'. Open the referenced CSV or re-export the spec from the current file."
+      "Wave Viewer reference-only spec points to '/workspace/examples/simulations/old.csv', but the active dataset is '/workspace/examples/simulations/new.csv'. Open the referenced dataset file or re-export the spec from the current file."
     );
     expect(showInformation).not.toHaveBeenCalled();
     expect(setCachedWorkspace).not.toHaveBeenCalled();
@@ -3930,6 +3931,22 @@ describe("T-025 standalone viewer side-panel routing", () => {
 });
 
 describe("T-027 side-panel quick-add tuple injection", () => {
+  it("maps complex base quick-add selections to db20", () => {
+    const loadedDataset: LoadedDatasetRecord = {
+      dataset: {
+        path: "/workspace/examples/tb.spice.h5",
+        rowCount: 3,
+        columns: [{ name: "sweep", values: [0, 1, 2] }]
+      },
+      defaultXSignal: "sweep",
+      complexSignalPaths: ["XOTA/V(D)"]
+    };
+
+    expect(resolveQuickAddSignal("XOTA/V(D)", loadedDataset)).toBe("XOTA/V(D).db20");
+    expect(resolveQuickAddSignal("XOTA/V(D).mag", loadedDataset)).toBe("XOTA/V(D).mag");
+    expect(resolveQuickAddSignal("sweep", loadedDataset)).toBe("sweep");
+  });
+
   it("routes quick-add to a standalone target and posts tupleUpsert payload", () => {
     const panelFixture = createPanelFixture();
     const bindViewerToDataset = vi.fn();
@@ -4489,7 +4506,7 @@ describe("T-042 multi-plot quick-add targeting", () => {
   it("keeps quick-add host fallback trace identity dataset-qualified", () => {
     const source = fs.readFileSync(path.resolve("src/extension.ts"), "utf8");
 
-    expect(source).toContain("sourceId: toTraceSourceId(selection.documentPath, selection.signal)");
+    expect(source).toContain("sourceId: toTraceSourceId(selection.documentPath, quickAddSignal)");
   });
 
   it("ensures no-active-viewer side-panel commands auto-open a viewer target before dispatch", () => {
