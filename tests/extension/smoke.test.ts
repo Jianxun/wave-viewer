@@ -2820,6 +2820,38 @@ describe("T-022 follow-up signal actions after remove", () => {
       signal: "XOTA/V(D)"
     });
   });
+
+  it("normalizes accessor-bearing alias selections for complex HDF5 signals", () => {
+    const showError = vi.fn();
+    const showWarning = vi.fn();
+    const selection = resolveSidePanelSelection({
+      selection: { signal: "V(XOTA:D).db20", datasetPath: "/workspace/examples/tb.spice.h5" },
+      getLoadedDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/tb.spice.h5",
+          rowCount: 2,
+          columns: [{ name: "sweep", values: [0, 1] }]
+        },
+        defaultXSignal: "sweep",
+        explorerSignals: ["XOTA/V(D)"],
+        signalAliasLookup: {
+          "V(XOTA:D)": "XOTA/V(D)"
+        },
+        resolveSignalValues: (signal) => (signal === "XOTA/V(D).db20" ? [0, 1] : undefined)
+      }),
+      getSingleLoadedDatasetPath: () => undefined,
+      wasDatasetRemoved: () => false,
+      showError,
+      showWarning
+    });
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).not.toHaveBeenCalled();
+    expect(selection).toMatchObject({
+      documentPath: "/workspace/examples/tb.spice.h5",
+      signal: "XOTA/V(D).db20"
+    });
+  });
 });
 
 describe("T-018 normalized protocol handling", () => {

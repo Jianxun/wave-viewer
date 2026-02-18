@@ -229,6 +229,26 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("rejects host tupleUpsert when tuple arrays contain non-finite values", () => {
+    const parsed = parseHostToWebviewMessage(
+      createProtocolEnvelope("host/tupleUpsert", {
+        tuples: [
+          {
+            traceId: "viewer-2:vin:3",
+            sourceId: "/workspace/examples/simulations/ota.spice.csv::vin",
+            datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+            xName: "time",
+            yName: "vin.db20",
+            x: [0, 1, 2],
+            y: [1, Number.POSITIVE_INFINITY, 3]
+          }
+        ]
+      })
+    );
+
+    expect(parsed).toBeUndefined();
+  });
+
   it("keeps tupleUpsert contract valid alongside replaySnapshot contract", () => {
     const replay = parseHostToWebviewMessage(
       createProtocolEnvelope("host/replaySnapshot", {

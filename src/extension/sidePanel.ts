@@ -1,6 +1,6 @@
 import * as path from "node:path";
 
-import { createProtocolEnvelope } from "../core/dataset/types";
+import { createProtocolEnvelope, parseComplexSignalReference } from "../core/dataset/types";
 import type { WorkspaceState } from "../webview/state/workspaceState";
 import { applySidePanelSignalAction } from "./workspaceActions";
 import type {
@@ -45,12 +45,12 @@ export function resolveSidePanelSelection(
   const signals = loadedDataset.explorerSignals ?? loadedDataset.dataset.columns.map((column) => column.name);
   let resolvedSignal = resolved.signal;
   if (!signals.includes(resolvedSignal)) {
-    const mapped = loadedDataset.signalAliasLookup?.[resolvedSignal];
-    if (typeof mapped === "string" && mapped.trim().length > 0) {
-      resolvedSignal = mapped.trim();
+    const normalizedAlias = normalizeSignalAliasWithAccessor(resolvedSignal, loadedDataset.signalAliasLookup);
+    if (normalizedAlias !== resolvedSignal) {
+      resolvedSignal = normalizedAlias;
     }
   }
-  if (!signals.includes(resolvedSignal)) {
+  if (!signals.includes(resolvedSignal) && !canResolveSignalValues(loadedDataset, resolvedSignal)) {
     deps.showError(
       `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
     );
@@ -208,28 +208,89 @@ export function createSidePanelTraceInjectedPayload(
   signal: string,
   options?: { traceId?: string; sourceId?: string }
 ): { viewerId: string; trace: Extract<HostToWebviewMessage, { type: "host/tupleUpsert" }>["payload"]["tuples"][number] } {
-  const xColumn = loadedDataset.dataset.columns.find(
-    (column) => column.name === loadedDataset.defaultXSignal
+  const xSignalValues = resolveDatasetSignalValues(
+    loadedDataset,
+    loadedDataset.defaultXSignal,
+    documentPath
   );
-  const yColumn = loadedDataset.dataset.columns.find((column) => column.name === signal);
-  if (!xColumn || !yColumn) {
-    throw new Error(
-      `Cannot build side-panel trace tuple for signal '${signal}' in '${path.basename(documentPath)}'.`
-    );
-  }
+  const ySignalValues = resolveDatasetSignalValues(loadedDataset, signal, documentPath);
 
   return {
     viewerId,
     trace: {
-      traceId: options?.traceId ?? `${viewerId}:${signal}:${yColumn.values.length}`,
+      traceId: options?.traceId ?? `${viewerId}:${signal}:${ySignalValues.values.length}`,
       sourceId: options?.sourceId ?? toTraceSourceId(documentPath, signal),
       datasetPath: documentPath,
-      xName: xColumn.name,
-      yName: yColumn.name,
-      x: xColumn.values,
-      y: yColumn.values
+      xName: xSignalValues.name,
+      yName: ySignalValues.name,
+      x: xSignalValues.values,
+      y: ySignalValues.values
     }
   };
+}
+
+function normalizeSignalAliasWithAccessor(
+  signal: string,
+  signalAliasLookup: Record<string, string> | undefined
+): string {
+  const trimmed = signal.trim();
+  if (trimmed.length === 0) {
+    return signal;
+  }
+
+  const directAlias = signalAliasLookup?.[trimmed];
+  if (typeof directAlias === "string" && directAlias.trim().length > 0) {
+    return directAlias.trim();
+  }
+
+  const { base, accessor } = parseComplexSignalReference(trimmed);
+  if (!accessor) {
+    return trimmed;
+  }
+
+  const mappedBase = signalAliasLookup?.[base];
+  if (typeof mappedBase !== "string" || mappedBase.trim().length === 0) {
+    return trimmed;
+  }
+
+  return `${mappedBase.trim()}.${accessor}`;
+}
+
+function canResolveSignalValues(loadedDataset: LoadedDatasetRecord, signal: string): boolean {
+  if (!loadedDataset.resolveSignalValues) {
+    return false;
+  }
+  try {
+    return Array.isArray(loadedDataset.resolveSignalValues(signal));
+  } catch {
+    return false;
+  }
+}
+
+function resolveDatasetSignalValues(
+  loadedDataset: LoadedDatasetRecord,
+  signal: string,
+  documentPath: string
+): { name: string; values: number[] } {
+  const projectedValues = loadedDataset.resolveSignalValues?.(signal);
+  if (projectedValues) {
+    return {
+      name: signal,
+      values: projectedValues
+    };
+  }
+
+  const column = loadedDataset.dataset.columns.find((next) => next.name === signal);
+  if (column) {
+    return {
+      name: column.name,
+      values: column.values
+    };
+  }
+
+  throw new Error(
+    `Cannot build side-panel trace tuple for signal '${signal}' in '${path.basename(documentPath)}'.`
+  );
 }
 
 function toSidePanelActionLabel(actionType: SidePanelSignalAction["type"]): string {
