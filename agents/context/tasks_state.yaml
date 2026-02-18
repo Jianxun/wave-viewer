@@ -8,6 +8,6 @@ T-066:
   pr: 82
   merged: true
 T-067:
-  status: review_clean
+  status: done
   pr: 84
-  merged: false
+  merged: true
