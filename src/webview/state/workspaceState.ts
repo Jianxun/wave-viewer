@@ -22,6 +22,7 @@ export type PlotState = {
   id: string;
   name: string;
   xSignal: string;
+  xScale?: "linear" | "log";
   axes: AxisState[];
   traces: TraceState[];
   nextAxisNumber: number;
@@ -147,6 +148,41 @@ export function setPlotXRange(
     ...plot,
     xRange: payload.xRange
   }));
+}
+
+export function updatePlotXAxis(
+  state: WorkspaceState,
+  payload: {
+    plotId?: string;
+    patch: { scale?: "linear" | "log"; xRange?: [number, number] };
+    xValues?: readonly number[];
+  }
+): WorkspaceState {
+  const plotId = payload.plotId ?? state.activePlotId;
+  return withUpdatedPlot(state, plotId, (plot) => {
+    if (payload.patch.scale === undefined && payload.patch.xRange === undefined) {
+      throw new Error("X-axis update patch cannot be empty.");
+    }
+
+    let nextRange = payload.patch.xRange ?? plot.xRange;
+    if (payload.patch.scale === "log") {
+      const hasPositiveFiniteX = (payload.xValues ?? []).some(
+        (value) => Number.isFinite(value) && value > 0
+      );
+      if (!hasPositiveFiniteX) {
+        throw new Error("Cannot set X-axis to log scale: plot has no positive finite X samples.");
+      }
+      if (nextRange && (nextRange[0] <= 0 || nextRange[1] <= 0)) {
+        nextRange = undefined;
+      }
+    }
+
+    return {
+      ...plot,
+      xScale: payload.patch.scale ?? plot.xScale,
+      xRange: nextRange
+    };
+  });
 }
 
 export function addAxis(

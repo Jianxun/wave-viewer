@@ -123,6 +123,15 @@ export type WebviewToHostMessage =
       }
     >
   | ProtocolEnvelope<
+      "webview/intent/updatePlotXAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        patch: { scale?: "linear" | "log"; range?: [number, number] };
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/setTraceAxis",
       {
         viewerId: string;
