@@ -1,15 +1,17 @@
 import * as path from "node:path";
 import { parse } from "yaml";
 
+import type { ComplexSignalAccessor } from "../dataset/types";
 import type {
   ImportPlotSpecInput,
   ImportPlotSpecResult,
-  PlotSpecLaneV2,
-  PlotSpecPlotV2,
-  PlotSpecSignalRefV2,
-  PlotSpecV2
+  PlotSpecLaneV3,
+  PlotSpecPlotV3,
+  PlotSpecSignalNameV3,
+  PlotSpecSignalRefV3,
+  PlotSpecV3
 } from "./plotSpecV1";
-import { PLOT_SPEC_V2_VERSION, PlotSpecImportError } from "./plotSpecV1";
+import { PLOT_SPEC_V3_VERSION, PlotSpecImportError } from "./plotSpecV1";
 
 export function importPlotSpecV1(input: ImportPlotSpecInput): ImportPlotSpecResult {
   const parsed = parseYaml(input.yamlText);
@@ -87,19 +89,19 @@ function parseYaml(yamlText: string): unknown {
   }
 }
 
-function validateSpecShape(parsed: unknown): PlotSpecV2 {
+function validateSpecShape(parsed: unknown): PlotSpecV3 {
   if (!isRecord(parsed)) {
     throw new PlotSpecImportError("Plot spec root must be a YAML mapping.");
   }
 
-  if (parsed.version !== PLOT_SPEC_V2_VERSION) {
+  if (parsed.version !== PLOT_SPEC_V3_VERSION) {
     throw new PlotSpecImportError(
-      `Unsupported plot spec version: ${String(parsed.version)}. Supported version is 2.`
+      `Unsupported plot spec version: ${String(parsed.version)}. Supported version is 3.`
     );
   }
 
   if (Object.hasOwn(parsed, "mode")) {
-    throw new PlotSpecImportError("Plot spec mode is not supported in v2 layout schema.");
+    throw new PlotSpecImportError("Plot spec mode is not supported in v3 layout schema.");
   }
 
   if (!Array.isArray(parsed.datasets) || parsed.datasets.length === 0) {
@@ -135,7 +137,7 @@ function validateSpecShape(parsed: unknown): PlotSpecV2 {
   const plots = parsed.plots.map((entry, index) => validatePlot(entry, index, datasetIds));
 
   return {
-    version: PLOT_SPEC_V2_VERSION,
+    version: PLOT_SPEC_V3_VERSION,
     datasets,
     active_dataset: parsed.active_dataset,
     active_plot: parsed.active_plot,
@@ -159,7 +161,7 @@ function validateDataset(value: unknown, index: number): { id: string; path: str
   return { id, path: datasetPath };
 }
 
-function validatePlot(value: unknown, index: number, datasetIds: Set<string>): PlotSpecPlotV2 {
+function validatePlot(value: unknown, index: number, datasetIds: Set<string>): PlotSpecPlotV3 {
   if (!isRecord(value)) {
     throw new PlotSpecImportError(`Plot at index ${index} must be an object.`);
   }
@@ -173,13 +175,13 @@ function validatePlot(value: unknown, index: number, datasetIds: Set<string>): P
     throw new PlotSpecImportError(`Plot ${id} has an invalid name.`);
   }
 
-  const xRef = validateSignalRef(
+  const xRef = validateXSignalRef(
     x,
     `Plot ${id} x` as const,
     datasetIds
   );
 
-  const normalized: PlotSpecPlotV2 = {
+  const normalized: PlotSpecPlotV3 = {
     id,
     name,
     x: xRef,
@@ -211,7 +213,7 @@ function validateLane(
   value: unknown,
   laneIndex: number,
   datasetIds: Set<string>
-): PlotSpecLaneV2 {
+): PlotSpecLaneV3 {
   if (!isRecord(value)) {
     throw new PlotSpecImportError(`Plot ${plotId} lane at index ${laneIndex} must be an object.`);
   }
@@ -222,7 +224,7 @@ function validateLane(
     throw new PlotSpecImportError(`Plot ${plotId} lane at index ${laneIndex} has invalid id.`);
   }
 
-  const lane: PlotSpecLaneV2 = {
+  const lane: PlotSpecLaneV3 = {
     id,
     signals: {}
   };
@@ -253,7 +255,8 @@ function validateLane(
     lane.signals[traceLabel] = validateSignalRef(
       signalRef,
       `Plot ${plotId} lane ${id} signal '${traceLabel}'` as const,
-      datasetIds
+      datasetIds,
+      true
     );
   }
 
@@ -263,8 +266,9 @@ function validateLane(
 function validateSignalRef(
   value: unknown,
   contextLabel: string,
-  datasetIds: Set<string>
-): PlotSpecSignalRefV2 {
+  datasetIds: Set<string>,
+  allowAccessor: boolean
+): PlotSpecSignalRefV3 {
   if (!isRecord(value)) {
     throw new PlotSpecImportError(`${contextLabel} must be an object with dataset and signal.`);
   }
@@ -276,15 +280,25 @@ function validateSignalRef(
   if (!datasetIds.has(dataset)) {
     throw new PlotSpecImportError(`${contextLabel}.dataset '${dataset}' is not declared in datasets.`);
   }
-  if (typeof signal !== "string" || signal.trim().length === 0) {
-    throw new PlotSpecImportError(`${contextLabel}.signal must be a non-empty string.`);
-  }
+  const parsedSignal = validateStructuredSignal(signal, `${contextLabel}.signal`, allowAccessor);
 
-  return { dataset, signal };
+  return { dataset, signal: parsedSignal };
+}
+
+function validateXSignalRef(
+  value: unknown,
+  contextLabel: string,
+  datasetIds: Set<string>
+): { dataset: string; signal: PlotSpecSignalNameV3 & { accessor?: never } } {
+  const parsed = validateSignalRef(value, contextLabel, datasetIds, false);
+  return {
+    dataset: parsed.dataset,
+    signal: { base: parsed.signal.base }
+  };
 }
 
 function toWorkspacePlot(
-  plot: PlotSpecPlotV2,
+  plot: PlotSpecPlotV3,
   datasetPathById: Record<string, string>
 ) {
   const usedTraceIds = new Set<string>();
@@ -319,10 +333,11 @@ function toWorkspacePlot(
       traceCounter += 1;
       const traceId = createUniqueTraceId(traceLabel.trim() || `trace-${traceCounter}`, usedTraceIds);
       const sourceDatasetPath = datasetPathById[signalRef.dataset];
+      const signalName = toRuntimeSignalName(signalRef.signal);
       return {
         id: traceId,
-        signal: signalRef.signal,
-        sourceId: `${sourceDatasetPath}::${signalRef.signal}`,
+        signal: signalName,
+        sourceId: `${sourceDatasetPath}::${signalName}`,
         axisId,
         visible: true
       };
@@ -332,7 +347,7 @@ function toWorkspacePlot(
   return {
     id: plot.id,
     name: plot.name,
-    xSignal: plot.x.signal,
+    xSignal: plot.x.signal.base,
     axes,
     traces,
     nextAxisNumber: axes.length + 1,
@@ -340,7 +355,7 @@ function toWorkspacePlot(
   };
 }
 
-function toAxisLaneIdMap(plot: PlotSpecPlotV2): Record<`y${number}`, string> {
+function toAxisLaneIdMap(plot: PlotSpecPlotV3): Record<`y${number}`, string> {
   const laneIds: Record<`y${number}`, string> = {};
   for (let laneIndex = 0; laneIndex < plot.y.length; laneIndex += 1) {
     const axisId = `y${laneIndex + 1}` as const;
@@ -366,19 +381,21 @@ function createUniqueTraceId(candidateId: string, usedIds: Set<string>): string 
 }
 
 function collectMissingSignals(
-  plot: PlotSpecPlotV2,
+  plot: PlotSpecPlotV3,
   availableSignalsByDatasetId: Map<string, Set<string>>
 ): string[] {
   const missing = new Set<string>();
 
-  if (isSignalMissing(plot.x.dataset, plot.x.signal, availableSignalsByDatasetId)) {
-    missing.add(`x.${plot.x.dataset}: ${plot.x.signal}`);
+  const xSignal = toRuntimeSignalName(plot.x.signal);
+  if (isSignalMissing(plot.x.dataset, xSignal, availableSignalsByDatasetId)) {
+    missing.add(`x.${plot.x.dataset}: ${xSignal}`);
   }
 
   for (const lane of plot.y) {
     for (const signalRef of Object.values(lane.signals)) {
-      if (isSignalMissing(signalRef.dataset, signalRef.signal, availableSignalsByDatasetId)) {
-        missing.add(`y.${lane.id}.${signalRef.dataset}: ${signalRef.signal}`);
+      const signal = toRuntimeSignalName(signalRef.signal);
+      if (isSignalMissing(signalRef.dataset, signal, availableSignalsByDatasetId)) {
+        missing.add(`y.${lane.id}.${signalRef.dataset}: ${signal}`);
       }
     }
   }
@@ -399,7 +416,7 @@ function isSignalMissing(
 }
 
 function createAvailableSignalsLookup(
-  spec: PlotSpecV2,
+  spec: PlotSpecV3,
   input: ImportPlotSpecInput["availableSignals"]
 ): Map<string, Set<string>> {
   const byDatasetId = new Map<string, Set<string>>();
@@ -412,6 +429,39 @@ function createAvailableSignalsLookup(
     byDatasetId.set(datasetId, new Set(signals));
   }
   return byDatasetId;
+}
+
+function validateStructuredSignal(
+  value: unknown,
+  contextLabel: string,
+  allowAccessor: boolean
+): PlotSpecSignalNameV3 {
+  if (!isRecord(value)) {
+    throw new PlotSpecImportError(`${contextLabel} must be an object with base and optional accessor.`);
+  }
+
+  const { base, accessor } = value;
+  if (typeof base !== "string" || base.trim().length === 0) {
+    throw new PlotSpecImportError(`${contextLabel}.base must be a non-empty string.`);
+  }
+  if (accessor === undefined) {
+    return { base };
+  }
+  if (!allowAccessor) {
+    throw new PlotSpecImportError(`${contextLabel}.accessor is not allowed for x.signal.`);
+  }
+  if (!isComplexSignalAccessor(accessor)) {
+    throw new PlotSpecImportError(`${contextLabel}.accessor must be one of: re, im, mag, phase, db20.`);
+  }
+  return { base, accessor };
+}
+
+function isComplexSignalAccessor(value: unknown): value is ComplexSignalAccessor {
+  return value === "re" || value === "im" || value === "mag" || value === "phase" || value === "db20";
+}
+
+function toRuntimeSignalName(signal: PlotSpecSignalNameV3): string {
+  return signal.accessor ? `${signal.base}.${signal.accessor}` : signal.base;
 }
 
 function parseNumberPair(value: unknown, label: string): [number, number] {

@@ -1,8 +1,9 @@
 import * as path from "node:path";
 import { stringify } from "yaml";
 
-import type { ExportPlotSpecInput, PlotSpecLaneV2, PlotSpecPlotV2, PlotSpecV2 } from "./plotSpecV1";
-import { PLOT_SPEC_V2_VERSION } from "./plotSpecV1";
+import { parseComplexSignalReference } from "../dataset/types";
+import type { ExportPlotSpecInput, PlotSpecLaneV3, PlotSpecPlotV3, PlotSpecV3 } from "./plotSpecV1";
+import { PLOT_SPEC_V3_VERSION } from "./plotSpecV1";
 
 export type ExportPlotDatasetEntry = {
   id: string;
@@ -38,8 +39,8 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
   };
 
   const activeDatasetId = idForDatasetPath(input.datasetPath);
-  const spec: PlotSpecV2 = {
-    version: PLOT_SPEC_V2_VERSION,
+  const spec: PlotSpecV3 = {
+    version: PLOT_SPEC_V3_VERSION,
     datasets: datasets.map((entry) => ({
       id: entry.id,
       path: serializeDatasetPath(entry.path, input.specPath)
@@ -47,13 +48,13 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     active_dataset: activeDatasetId,
     active_plot: input.workspace.activePlotId,
     plots: input.workspace.plots.map((plot) => {
-      const lanesByAxisId = new Map<string, PlotSpecLaneV2>();
+      const lanesByAxisId = new Map<string, PlotSpecLaneV3>();
       const laneIdByAxisId = input.laneIdByAxisIdByPlotId?.[plot.id] ?? {};
       const usedLaneIds = new Set<string>();
 
       for (let axisIndex = 0; axisIndex < plot.axes.length; axisIndex += 1) {
         const axis = plot.axes[axisIndex];
-        const lane: PlotSpecLaneV2 = {
+        const lane: PlotSpecLaneV3 = {
           id: toLaneId(
             laneIdByAxisId[axis.id],
             axisIndex,
@@ -85,17 +86,17 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
         const datasetPath = getTraceDatasetPath(trace.sourceId, input.datasetPath);
         lane.signals[traceLabel] = {
           dataset: idForDatasetPath(datasetPath),
-          signal: trace.signal
+          signal: toSignalNameRef(trace.signal)
         };
       }
 
       const xDatasetPath = getPlotXDatasetPath(plot.id, input.xDatasetPathByPlotId, input.datasetPath);
-      const specPlot: PlotSpecPlotV2 = {
+      const specPlot: PlotSpecPlotV3 = {
         id: plot.id,
         name: plot.name,
         x: {
           dataset: idForDatasetPath(xDatasetPath),
-          signal: plot.xSignal
+          signal: { base: plot.xSignal }
         },
         y: [...lanesByAxisId.values()]
       };
@@ -113,6 +114,11 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
     lineWidth: 0
   });
   return yamlText.endsWith("\n") ? yamlText : `${yamlText}\n`;
+}
+
+function toSignalNameRef(signal: string): { base: string; accessor?: ReturnType<typeof parseComplexSignalReference>["accessor"] } {
+  const parsed = parseComplexSignalReference(signal);
+  return parsed.accessor ? { base: parsed.base, accessor: parsed.accessor } : { base: parsed.base };
 }
 
 function getPlotXDatasetPath(
