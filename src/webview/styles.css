@@ -74,6 +74,20 @@ body {
   gap: 8px;
 }
 
+.plot-header-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.plot-header-scale label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .plot-canvas {
   position: relative;
   flex: 1;
@@ -197,6 +211,15 @@ body {
   font-size: 12px;
   padding: 6px 8px;
   cursor: pointer;
+}
+
+.chip-select {
+  border: 1px solid #4963a0;
+  border-radius: 8px;
+  background: #202c44;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
 }
 
 .chip-button:disabled {

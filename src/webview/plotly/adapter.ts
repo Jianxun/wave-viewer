@@ -2,6 +2,7 @@ import type { AxisId, AxisState, PlotState } from "../state/workspaceState";
 import type { SidePanelTraceTuplePayload } from "../../core/dataset/types";
 
 type PlotlyAxisRef = "y" | `y${number}`;
+export type XAxisScale = "linear" | "log";
 
 export type PlotlyTrace = {
   type: "scatter";
@@ -53,6 +54,7 @@ export type PlotlyLayout = {
   legend: { orientation: "h"; y: number; x: number };
   xaxis: {
     title?: { text: string };
+    type?: "linear" | "log";
     anchor?: `y${number}` | "y";
     autorange?: boolean;
     range?: [number, number];
@@ -110,7 +112,10 @@ export function buildPlotlyFigure(payload: {
     .map((trace) => (trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined))
     .filter((entry): entry is SidePanelTraceTuplePayload => entry !== undefined);
   const firstTuple = traceTuples[0];
-  const xBounds = normalizeRange(getBoundsAcrossTuples(traceTuples));
+  const xScale = getXAxisScale(payload.plot.xScale);
+  const xBounds = normalizeRange(getBoundsAcrossTuples(traceTuples, xScale));
+  const xAxisRange = toPlotlyXAxisRange(payload.plot.xRange, xScale);
+  const xSliderRange = toPlotlyXAxisRange(xBounds, xScale);
   const axisMappings = buildRenderAxisMappings(payload.plot.axes);
   const axisMappingById = new Map(axisMappings.map((mapping) => [mapping.axisId, mapping] as const));
   const defaultTraceAxisRef = axisMappings[0]?.traceRef ?? "y";
@@ -171,13 +176,14 @@ export function buildPlotlyFigure(payload: {
     legend: { orientation: "h", y: 1.08, x: 0 },
     xaxis: {
       title: { text: firstTuple?.xName ?? payload.plot.xSignal },
+      type: xScale,
       anchor: bottomLaneTraceAxisRef,
-      autorange: payload.plot.xRange === undefined,
-      range: payload.plot.xRange,
+      autorange: xAxisRange === undefined,
+      range: xAxisRange,
       rangeslider: {
         visible: true,
         thickness: 0.075,
-        range: xBounds
+        range: xSliderRange
       },
       automargin: true,
       fixedrange: false
@@ -208,7 +214,50 @@ export function getPlotXBounds(payload: {
   const traceTuples = payload.plot.traces
     .map((trace) => (trace.sourceId ? payload.traceTuplesBySourceId.get(trace.sourceId) : undefined))
     .filter((entry): entry is SidePanelTraceTuplePayload => entry !== undefined);
-  return normalizeRange(getBoundsAcrossTuples(traceTuples));
+  return normalizeRange(getBoundsAcrossTuples(traceTuples, getXAxisScale(payload.plot.xScale)));
+}
+
+export function getXAxisScale(scale: PlotState["xScale"]): XAxisScale {
+  return scale === "log" ? "log" : "linear";
+}
+
+export function toPlotlyXAxisRange(
+  range: [number, number] | undefined,
+  scale: XAxisScale
+): [number, number] | undefined {
+  if (!range) {
+    return undefined;
+  }
+  const normalized = normalizeRange(range);
+  if (!normalized) {
+    return undefined;
+  }
+  if (scale === "linear") {
+    return normalized;
+  }
+  if (normalized[0] <= 0 || normalized[1] <= 0) {
+    return undefined;
+  }
+  const converted: [number, number] = [Math.log10(normalized[0]), Math.log10(normalized[1])];
+  return normalizeRange(converted);
+}
+
+export function fromPlotlyXAxisRange(
+  range: [number, number] | undefined,
+  scale: XAxisScale
+): [number, number] | undefined {
+  if (!range) {
+    return undefined;
+  }
+  const normalized = normalizeRange(range);
+  if (!normalized) {
+    return undefined;
+  }
+  if (scale === "linear") {
+    return normalized;
+  }
+  const converted: [number, number] = [10 ** normalized[0], 10 ** normalized[1]];
+  return normalizeRange(converted);
 }
 
 function normalizeRange(range?: [number, number]): [number, number] | undefined {
@@ -324,7 +373,8 @@ export type PlotRangeUpdates = {
 
 export function parseRelayoutRanges(
   relayoutData: Record<string, unknown>,
-  axes: AxisState[]
+  axes: AxisState[],
+  xScale: XAxisScale = "linear"
 ): PlotRangeUpdates {
   const axisRanges: Array<{ axisId: AxisId; range?: [number, number] }> = [];
   const xRangeRead = readRangeUpdate(relayoutData, "xaxis");
@@ -341,7 +391,7 @@ export function parseRelayoutRanges(
 
   return {
     hasChanges,
-    xRange: xRangeRead.present ? xRangeRead.range : undefined,
+    xRange: xRangeRead.present ? fromPlotlyXAxisRange(xRangeRead.range, xScale) : undefined,
     axisRanges
   };
 }
@@ -382,12 +432,15 @@ function toFiniteNumber(value: unknown): number | undefined {
   return value;
 }
 
-function getBounds(values: number[]): [number, number] | undefined {
+function getBounds(values: number[], scale: XAxisScale): [number, number] | undefined {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
 
   for (const value of values) {
     if (!Number.isFinite(value)) {
+      continue;
+    }
+    if (scale === "log" && value <= 0) {
       continue;
     }
     if (value < min) {
@@ -406,13 +459,14 @@ function getBounds(values: number[]): [number, number] | undefined {
 }
 
 function getBoundsAcrossTuples(
-  tuples: ReadonlyArray<Pick<SidePanelTraceTuplePayload, "x">>
+  tuples: ReadonlyArray<Pick<SidePanelTraceTuplePayload, "x">>,
+  scale: XAxisScale
 ): [number, number] | undefined {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
 
   for (const tuple of tuples) {
-    const tupleBounds = getBounds(tuple.x);
+    const tupleBounds = getBounds(tuple.x, scale);
     if (!tupleBounds) {
       continue;
     }

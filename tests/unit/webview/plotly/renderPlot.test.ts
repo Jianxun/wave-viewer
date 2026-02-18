@@ -73,6 +73,32 @@ describe("plot renderer keyboard helpers", () => {
     });
   });
 
+  it("resets axes with raw x-range converted to plotly log units", async () => {
+    const react = vi.fn().mockResolvedValue(undefined);
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    const container = { on: vi.fn(), _fullLayout: {} } as unknown as HTMLElement;
+    const renderer = createPlotRenderer({
+      container,
+      onRelayout: () => undefined,
+      plotly: { react, relayout }
+    });
+
+    await renderer.resetAxes({
+      yAxisLayoutKeys: ["yaxis"],
+      xRange: [10, 1000],
+      xScale: "log"
+    });
+
+    expect(relayout).toHaveBeenCalledWith(container, {
+      "xaxis.autorange": false,
+      "xaxis.range[0]": 1,
+      "xaxis.range[1]": 3,
+      "xaxis.rangeslider.range[0]": 1,
+      "xaxis.rangeslider.range[1]": 3,
+      "yaxis.autorange": true
+    });
+  });
+
   it("updates active and bound viewport ranges together", async () => {
     const react = vi.fn().mockResolvedValue(undefined);
     const relayout = vi.fn().mockResolvedValue(undefined);
@@ -94,6 +120,31 @@ describe("plot renderer keyboard helpers", () => {
       "xaxis.range[1]": 6,
       "xaxis.rangeslider.range[0]": 0,
       "xaxis.rangeslider.range[1]": 10
+    });
+  });
+
+  it("updates viewport ranges using plotly log units when x-scale is log", async () => {
+    const react = vi.fn().mockResolvedValue(undefined);
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    const container = { on: vi.fn(), _fullLayout: {} } as unknown as HTMLElement;
+    const renderer = createPlotRenderer({
+      container,
+      onRelayout: () => undefined,
+      plotly: { react, relayout }
+    });
+
+    await renderer.setXViewport({
+      activeRange: [10, 100],
+      boundRange: [1, 1000],
+      xScale: "log"
+    });
+
+    expect(relayout).toHaveBeenCalledWith(container, {
+      "xaxis.autorange": false,
+      "xaxis.range[0]": 1,
+      "xaxis.range[1]": 2,
+      "xaxis.rangeslider.range[0]": 0,
+      "xaxis.rangeslider.range[1]": 3
     });
   });
 

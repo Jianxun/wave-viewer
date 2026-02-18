@@ -2,8 +2,10 @@ import Plotly from "plotly.js-dist-min";
 
 import {
   buildPlotlyFigure,
+  getXAxisScale,
   type PlotlyLayout,
-  type PlotlyTrace
+  type PlotlyTrace,
+  toPlotlyXAxisRange
 } from "./adapter";
 import type { PlotState } from "../state/workspaceState";
 import type { SidePanelTraceTuplePayload } from "../../core/dataset/types";
@@ -37,8 +39,16 @@ export function createPlotRenderer(payload: {
     plot: PlotState,
     traceTuplesBySourceId: ReadonlyMap<string, SidePanelTraceTuplePayload>
   ) => Promise<void>;
-  resetAxes: (payload: { yAxisLayoutKeys: string[]; xRange?: [number, number] }) => Promise<void>;
-  setXViewport: (payload: { activeRange: [number, number]; boundRange?: [number, number] }) => Promise<void>;
+  setXViewport: (payload: {
+    activeRange: [number, number];
+    boundRange?: [number, number];
+    xScale?: "linear" | "log";
+  }) => Promise<void>;
+  resetAxes: (payload: {
+    yAxisLayoutKeys: string[];
+    xRange?: [number, number];
+    xScale?: "linear" | "log";
+  }) => Promise<void>;
   pan: (payload: { direction: PanDirection; yAxisLayoutKey: string; fraction?: number }) => Promise<boolean>;
 } {
   const plotly = payload.plotly ?? (Plotly as unknown as PlotlyLike);
@@ -89,9 +99,14 @@ export function createPlotRenderer(payload: {
   async function setXViewport(payloadArg: {
     activeRange: [number, number];
     boundRange?: [number, number];
+    xScale?: "linear" | "log";
   }): Promise<void> {
-    const activeRange = ensureIncreasingRange(payloadArg.activeRange);
-    const boundRange = ensureIncreasingRange(payloadArg.boundRange ?? activeRange);
+    const scale = getXAxisScale(payloadArg.xScale);
+    const activeRange = toPlotlyXAxisRange(payloadArg.activeRange, scale);
+    const boundRange = toPlotlyXAxisRange(payloadArg.boundRange ?? payloadArg.activeRange, scale);
+    if (!activeRange || !boundRange) {
+      return;
+    }
     await plotly.relayout(payload.container, {
       "xaxis.autorange": false,
       "xaxis.range[0]": activeRange[0],
@@ -104,15 +119,21 @@ export function createPlotRenderer(payload: {
   async function resetAxes(payloadArg: {
     yAxisLayoutKeys: string[];
     xRange?: [number, number];
+    xScale?: "linear" | "log";
   }): Promise<void> {
     const update: Record<string, unknown> = {};
     if (payloadArg.xRange) {
-      const xRange = ensureIncreasingRange(payloadArg.xRange);
-      update["xaxis.autorange"] = false;
-      update["xaxis.range[0]"] = xRange[0];
-      update["xaxis.range[1]"] = xRange[1];
-      update["xaxis.rangeslider.range[0]"] = xRange[0];
-      update["xaxis.rangeslider.range[1]"] = xRange[1];
+      const scale = getXAxisScale(payloadArg.xScale);
+      const xRange = toPlotlyXAxisRange(payloadArg.xRange, scale);
+      if (!xRange) {
+        update["xaxis.autorange"] = true;
+      } else {
+        update["xaxis.autorange"] = false;
+        update["xaxis.range[0]"] = xRange[0];
+        update["xaxis.range[1]"] = xRange[1];
+        update["xaxis.rangeslider.range[0]"] = xRange[0];
+        update["xaxis.rangeslider.range[1]"] = xRange[1];
+      }
     } else {
       update["xaxis.autorange"] = true;
     }
@@ -179,12 +200,4 @@ function toFiniteNumber(value: unknown): number | undefined {
     return undefined;
   }
   return value;
-}
-
-function ensureIncreasingRange(range: [number, number]): [number, number] {
-  if (range[1] > range[0]) {
-    return range;
-  }
-  const halfSpan = Math.max(Math.abs(range[0]) * 1e-6, 1e-9);
-  return [range[0] - halfSpan, range[0] + halfSpan];
 }
