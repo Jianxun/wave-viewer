@@ -25,6 +25,7 @@ Active ADRs:
 - `ADR-0018`: Dataset reload uses atomic host replay snapshots so workspace/viewerState/tuples update coherently.
 - `ADR-0019` (Proposed): Non-CSV waveform ingestion should use a normalized run-centric HDF5 contract with canonical vectors and hierarchical VDS aliases.
 - `ADR-0020`: HDF5 ingestion uses a strict single-run schema (`/vectors`, `/vector_names`, `/indep_var`, `/signals`) and side-panel renders hierarchical signal tree labels while preserving canonical signal ids.
+- `ADR-0021` (Proposed): AC complex vectors are supported via host-side lazy projection with structured layout signal refs (`{base, accessor}`) while runtime payloads remain finite real arrays.
 
 ## System boundaries / components
 - VS Code extension host (TypeScript): commands, CSV loading orchestration, webview lifecycle, side-panel view, protocol validation.
@@ -44,7 +45,9 @@ Active ADRs:
   - `*.h5` / `*.spice.h5` single-run waveform container (see ADR-0020 + spec below).
     - Required layout: `/vectors`, `/vector_names`, `/indep_var/<indep_var_name>`, `/signals`.
     - Required attrs: `num_points`, `num_variables`, `indep_var_name`, `indep_var_index`.
-    - Canonical numeric payload is root `vectors` + `vector_names`; `indep_var` and `signals` may be VDS aliases.
+    - Vector samples may be real scalar `number` or complex pair `[re, im]`; independent variable must be real-valued.
+    - Canonical vector payload is root `vectors` + `vector_names`; `indep_var` and `signals` may be VDS aliases.
+    - Complex derived accessors are symbolic (`re`, `im`, `mag`, `phase`, `db20`) and projected lazily when emitting trace tuples.
     - Full contract: `doc/specs/hdf5-normalized-waveform-format.md`.
 - Normalized in-memory structure:
   - `Dataset`:
@@ -64,7 +67,7 @@ Active ADRs:
     - `traces: TraceState[]` where each trace instance references one `axisId` and source `datasetId`
   - Same signal MAY appear in multiple trace instances across different axes.
 - Layout YAML contract (MVP):
-  - Only `version: 2` is supported for import/export.
+  - Only `version: 3` is supported for import/export.
   - `mode` field is not part of the schema.
   - Layout uses:
     - `datasets[]` (`id`, `path`)
@@ -72,9 +75,13 @@ Active ADRs:
     - `active_plot`
     - `plots[]` with per-plot `x.dataset`, `x.signal`, optional `x.label`, optional `x.range`
     - `plots[].y[]` lanes with required user-facing `id`, optional `label`/`scale`/`range`, and `signals` map (`label -> {dataset, signal}`)
+  - `signal` persistence shape is structured:
+    - `{ base: string, accessor?: "re" | "im" | "mag" | "phase" | "db20" }`
+    - Omitted `accessor` means base/raw signal.
+    - `x.signal.accessor` MUST be omitted.
   - Layout does not persist trace visibility; import defaults all traces to `visible: true`.
   - Friendly lane IDs are mapped to internal canonical axis IDs (`y1..yN`) by per-plot lane order.
-  - Importing non-v2 schema must fail with actionable errors.
+  - Importing non-v3 schema must fail with actionable errors.
 - Host/webview protocol:
   - Envelope requires `{ version, type, payload }`.
   - Webview emits intent messages only; host emits authoritative revisioned state.
@@ -121,10 +128,13 @@ Active ADRs:
 - MUST register layout-referenced datasets into explorer loaded-dataset state on open/import.
 - MUST keep exported YAML deterministic for rendered state (tab/trace/axis order and assignments).
 - MUST fail clearly when importing a YAML spec that references missing datasets or signals.
-- MUST treat MVP layout schema as `version: 2` only and reject unsupported versions.
+- MUST treat MVP layout schema as `version: 3` only and reject unsupported versions.
 - MUST keep frozen export separate from active interactive layout persistence and support one frozen CSV output per referenced dataset.
 - MUST validate HDF5 input against the single-run schema contract before loading (`/vectors`, `/vector_names`, `/indep_var`, `/signals` + required attrs).
 - MUST preserve canonical signal identifiers for action payloads and trace identity, even when signal tree display is hierarchical.
+- MUST reject HDF5 files where the independent variable is complex-encoded.
+- MUST use fixed `eps = 1e-30` for `db20` projection to keep derived arrays finite (about `-600 dB` floor).
+- MUST treat complex accessor nodes as symbolic metadata and only project values for traces actually emitted to the viewer.
 
 ## Verification protocol
 - Context/schema consistency:
@@ -156,6 +166,7 @@ Active ADRs:
 - 2026-02-14: Accepted atomic reload replay snapshots so dataset reload updates apply as one coherent host snapshot (workspace + viewerState + tuples), avoiding stale trace vectors until later user intents (ADR-0018).
 - 2026-02-17: Proposed normalized run-centric HDF5 ingestion contract to decouple simulator raw quirks from viewer ingestion and preserve adaptive/multi-dimensional sweep fidelity (ADR-0019).
 - 2026-02-18: Accepted strict single-run HDF5 schema for MVP ingestion and hierarchical signal-tree display mapping while keeping canonical signal ids for actions/traces (ADR-0020).
+- 2026-02-18: Proposed host-side lazy complex projection for AC vectors with fixed accessor set (`re`, `im`, `mag`, `phase`, `db20`), `eps=1e-30` db floor policy, and structured layout signal refs `{base, accessor}` under schema version `3` (ADR-0021).
 - 2026-02-11: Multi-plot workspace uses tabs (not tiled layout) for MVP to keep state and deterministic replay simpler.
 - 2026-02-11: Signal-to-axis assignment uses trace instances so one signal can be plotted on multiple axes.
 - 2026-02-11: Axis model is provisioned for `y1..yN` now, while MVP UI can expose a smaller subset initially.

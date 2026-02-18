@@ -5,11 +5,15 @@ import type { Dataset } from "../dataset/types";
 
 export type LoadedNormalizedHdf5Dataset = {
   dataset: Dataset;
+  signalPaths: string[];
+  signalAliasLookup: Record<string, string>;
 };
 
 type NormalizedHdf5LoaderOutput = {
   rowCount: number;
   columns: Array<{ name: string; values: number[] }>;
+  signalPaths: string[];
+  signalAliasLookup: Record<string, string>;
 };
 
 const HDF5_LOADER_SCRIPT = String.raw`
@@ -50,8 +54,8 @@ const HDF5_LOADER_SCRIPT = String.raw`
     const vectorsPath = "/vectors";
     const vectorNamesPath = "/vector_names";
 
-    requiredNode("/indep_var");
-    requiredNode("/signals");
+    const indepVarGroup = requiredNode("/indep_var");
+    const signalsGroup = requiredNode("/signals");
     const vectorsDataset = requiredNode(vectorsPath);
     const vectorNamesDataset = requiredNode(vectorNamesPath);
 
@@ -151,8 +155,15 @@ const HDF5_LOADER_SCRIPT = String.raw`
       );
     }
 
-    const columns = columnNames.map((name, columnIndex) => {
-      const values = vectors.map((row, rowIndex) => {
+    if (indepVarGroup?.constructor?.name !== "Group") {
+      fail("'/indep_var' must be an HDF5 group.");
+    }
+    if (signalsGroup?.constructor?.name !== "Group") {
+      fail("'/signals' must be an HDF5 group.");
+    }
+
+    const readColumnValues = (columnIndex) =>
+      vectors.map((row, rowIndex) => {
         const value = Number(row[columnIndex]);
         if (!Number.isFinite(value)) {
           fail(
@@ -161,13 +172,146 @@ const HDF5_LOADER_SCRIPT = String.raw`
         }
         return value;
       });
-      return { name, values };
+
+    const signalLeaves = [];
+    const collectSignalLeaves = (groupNode, groupPathSegments) => {
+      const childNames = Array.isArray(groupNode.keys()) ? groupNode.keys().slice().sort() : [];
+      for (const childName of childNames) {
+        const child = groupNode.get(childName);
+        const childPathSegments = [...groupPathSegments, childName];
+        const childPath = childPathSegments.join("/");
+        const childKind = child?.constructor?.name;
+
+        if (childKind === "Group") {
+          collectSignalLeaves(child, childPathSegments);
+          continue;
+        }
+
+        if (childKind !== "Dataset") {
+          fail(
+            "signal tree node '/signals/" +
+              childPath +
+              "' must be a dataset or group."
+          );
+        }
+
+        const indexValue = Number(readAttr(child, "index"));
+        if (!Number.isInteger(indexValue) || indexValue < 0) {
+          fail(
+            "signal dataset '/signals/" +
+              childPath +
+              "' must define non-negative integer attribute 'index'."
+          );
+        }
+        if (indexValue >= columnCount) {
+          fail(
+            "signal dataset '/signals/" +
+              childPath +
+              "' attribute 'index' is out of range for '" +
+              vectorsPath +
+              "' columns."
+          );
+        }
+
+        const originalNameRaw = readAttr(child, "original_name");
+        const originalName =
+          typeof originalNameRaw === "string" && originalNameRaw.trim().length > 0
+            ? originalNameRaw.trim()
+            : columnNames[indexValue];
+
+        signalLeaves.push({
+          signalPath: childPath,
+          columnIndex: indexValue,
+          canonicalName: originalName
+        });
+      }
+    };
+    collectSignalLeaves(signalsGroup, []);
+
+    if (signalLeaves.length === 0) {
+      fail("'/signals' must contain at least one signal dataset.");
+    }
+
+    const seenSignalNames = new Set();
+    const columns = [
+      {
+        name: indepVarName,
+        values: readColumnValues(indepVarIndex)
+      }
+    ];
+    const signalPaths = [];
+    const signalAliasLookup = {};
+
+    for (const leaf of signalLeaves) {
+      if (typeof leaf.signalPath !== "string" || leaf.signalPath.trim().length === 0) {
+        fail("signal dataset paths under '/signals' must be non-empty.");
+      }
+      const signalPath = leaf.signalPath.trim();
+      if (seenSignalNames.has(signalPath)) {
+        fail("duplicate signal path '" + signalPath + "' under '/signals'.");
+      }
+      seenSignalNames.add(signalPath);
+      signalPaths.push(signalPath);
+      columns.push({
+        name: signalPath,
+        values: readColumnValues(leaf.columnIndex)
+      });
+      const alias = typeof leaf.canonicalName === "string" ? leaf.canonicalName.trim() : "";
+      if (alias.length > 0 && alias !== signalPath) {
+        signalAliasLookup[alias] = signalPath;
+      }
+    }
+
+    if (seenSignalNames.has(indepVarName)) {
+      fail(
+        "independent variable name '" +
+          indepVarName +
+          "' conflicts with a '/signals' path."
+      );
+    }
+
+    if (columns.length !== declaredNumVariables) {
+      fail(
+        "resolved columns count (" +
+          columns.length +
+          ") must match file attribute 'num_variables' (" +
+          declaredNumVariables +
+          ")."
+      );
+    }
+
+    if (columns.length !== vectorNames.length) {
+      fail(
+        "resolved columns count (" +
+          columns.length +
+          ") must match '" +
+          vectorNamesPath +
+          "' length (" +
+          vectorNames.length +
+          ")."
+      );
+    }
+
+    columns.forEach((column, index) => {
+      if (column.values.length !== rowCount) {
+        fail(
+          "resolved column '" +
+            column.name +
+            "' at index " +
+            index +
+            " has invalid length (" +
+            column.values.length +
+            ")."
+        );
+      }
     });
 
     console.log(
       JSON.stringify({
         rowCount,
-        columns
+        columns,
+        signalPaths,
+        signalAliasLookup
       })
     );
   } finally {
@@ -209,13 +353,25 @@ export function loadNormalizedHdf5Dataset(filePath: string): LoadedNormalizedHdf
   if (!Array.isArray(parsed.columns)) {
     throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing columns.`);
   }
+  if (!Array.isArray(parsed.signalPaths)) {
+    throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing signalPaths.`);
+  }
+  if (
+    typeof parsed.signalAliasLookup !== "object" ||
+    parsed.signalAliasLookup === null ||
+    Array.isArray(parsed.signalAliasLookup)
+  ) {
+    throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing signalAliasLookup.`);
+  }
 
   return {
     dataset: {
       path: filePath,
       rowCount: parsed.rowCount,
       columns: parsed.columns
-    }
+    },
+    signalPaths: parsed.signalPaths,
+    signalAliasLookup: parsed.signalAliasLookup
   };
 }
 

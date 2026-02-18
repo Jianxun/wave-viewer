@@ -31,7 +31,8 @@ import type {
   RemoveLoadedFileCommandDeps,
   SaveLayoutAsCommandDeps,
   SaveLayoutCommandDeps,
-  ExportFrozenBundleCommandDeps
+  ExportFrozenBundleCommandDeps,
+  LoadedDatasetRecord
 } from "./types";
 import { resolveDatasetPathFromCommandArgument } from "./signalTree";
 
@@ -55,7 +56,7 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         ? activeDocument.uri.fsPath
         : undefined;
     const datasetPath = activeDatasetPath ?? deps.getPreferredDatasetPath?.();
-    let normalizedDataset: { dataset: Dataset; defaultXSignal: string } | undefined;
+    let normalizedDataset: LoadedDatasetRecord | undefined;
 
     if (datasetPath) {
       try {
@@ -71,14 +72,14 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
     const viewerId = deps.onPanelCreated?.(datasetPath, panel) ?? "viewer-unknown";
     panel.webview.html = deps.buildHtml(panel.webview, deps.extensionUri);
 
-    const normalizedByDatasetPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
+    const normalizedByDatasetPath = new Map<string, LoadedDatasetRecord>();
     if (datasetPath && normalizedDataset) {
       normalizedByDatasetPath.set(datasetPath, normalizedDataset);
     }
 
     const resolveDatasetContext = (
       requestedViewerId: string
-    ): { datasetPath: string; normalizedDataset: { dataset: Dataset; defaultXSignal: string } } | undefined => {
+    ): { datasetPath: string; normalizedDataset: LoadedDatasetRecord } | undefined => {
       const resolvedDatasetPath =
         deps.resolveViewerSessionContext?.(requestedViewerId)?.datasetPath ?? datasetPath;
       if (!resolvedDatasetPath) {
@@ -902,7 +903,7 @@ export function createLoadCsvFilesCommand(deps: LoadCsvFilesCommandDeps): () => 
         if (hasExistingSidecar) {
           const yamlText = deps.readTextFile!(sidecarLayoutPath);
           const sidecarDatasets = readPlotSpecDatasetsV1(yamlText, sidecarLayoutPath);
-          const loadedByPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
+          const loadedByPath = new Map<string, LoadedDatasetRecord>();
           const availableSignalsByDatasetId: Record<string, string[]> = {};
           for (const sidecarDataset of sidecarDatasets) {
             let loadedSidecarDataset = loadedByPath.get(sidecarDataset.path);
@@ -911,15 +912,16 @@ export function createLoadCsvFilesCommand(deps: LoadCsvFilesCommandDeps): () => 
               loadedByPath.set(sidecarDataset.path, loadedSidecarDataset);
               deps.registerLoadedDataset(sidecarDataset.path, loadedSidecarDataset);
             }
-            availableSignalsByDatasetId[sidecarDataset.id] = loadedSidecarDataset.dataset.columns.map(
-              (column) => column.name
+            availableSignalsByDatasetId[sidecarDataset.id] = collectAvailableSignalsForSpecImport(
+              loadedSidecarDataset
             );
           }
-          const imported = importPlotSpecV1({
+          const importedRaw = importPlotSpecV1({
             yamlText,
             availableSignals: availableSignalsByDatasetId,
             specPath: sidecarLayoutPath
           });
+          const imported = normalizeImportedWorkspaceSignals(importedRaw, loadedByPath);
           workspace = imported.workspace;
           laneIdByAxisIdByPlotId = imported.laneIdByAxisIdByPlotId;
           xDatasetPathByPlotId = imported.xDatasetPathByPlotId;
@@ -1011,7 +1013,7 @@ export function createExportSpecCommand(deps: ExportSpecCommandDeps): () => Prom
       return;
     }
 
-    let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
+    let normalizedDataset: LoadedDatasetRecord;
     try {
       normalizedDataset = deps.loadDataset(activeDocument.uri.fsPath);
     } catch (error) {
@@ -1053,7 +1055,7 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
       return;
     }
 
-    let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
+    let normalizedDataset: LoadedDatasetRecord;
     try {
       normalizedDataset = deps.loadDataset(activeDocument.uri.fsPath);
     } catch (error) {
@@ -1070,7 +1072,7 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
     try {
       parsed = importPlotSpecV1({
         yamlText: deps.readTextFile(specPath),
-        availableSignals: normalizedDataset.dataset.columns.map((column) => column.name),
+        availableSignals: collectAvailableSignalsForSpecImport(normalizedDataset),
         specPath
       });
     } catch (error) {
@@ -1099,8 +1101,8 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
 
     let parsed: ReturnType<typeof importPlotSpecV1>;
     let activeViewerId = deps.getActiveViewerId();
-    let loadedDataset: { dataset: Dataset; defaultXSignal: string };
-    const loadedDatasetByPath = new Map<string, { dataset: Dataset; defaultXSignal: string }>();
+    let loadedDataset: LoadedDatasetRecord;
+    const loadedDatasetByPath = new Map<string, LoadedDatasetRecord>();
     try {
       const yamlText = deps.readTextFile(layoutPath);
       const datasetPath = readPlotSpecDatasetPathV1(yamlText, layoutPath);
@@ -1112,17 +1114,18 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
           loadedReferencedDataset = deps.loadDataset(referencedDataset.path);
           loadedDatasetByPath.set(referencedDataset.path, loadedReferencedDataset);
         }
-        availableSignalsByDatasetId[referencedDataset.id] = loadedReferencedDataset.dataset.columns.map(
-          (column) => column.name
+        availableSignalsByDatasetId[referencedDataset.id] = collectAvailableSignalsForSpecImport(
+          loadedReferencedDataset
         );
       }
       loadedDataset = loadedDatasetByPath.get(datasetPath) ?? deps.loadDataset(datasetPath);
       loadedDatasetByPath.set(datasetPath, loadedDataset);
-      parsed = importPlotSpecV1({
+      const parsedRaw = importPlotSpecV1({
         yamlText,
         availableSignals: availableSignalsByDatasetId,
         specPath: layoutPath
       });
+      parsed = normalizeImportedWorkspaceSignals(parsedRaw, loadedDatasetByPath);
 
       const referencedDatasetPaths = collectReferencedDatasetPaths(
         parsed.datasetPath,
@@ -1191,7 +1194,7 @@ export function createOpenLayoutCommand(deps: OpenLayoutCommandDeps): () => Prom
 type SaveLayoutContextDeps = {
   getActiveViewerId(): string | undefined;
   resolveViewerSessionContext(viewerId: string): { datasetPath: string; layoutUri: string } | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   showError(message: string): void;
 };
@@ -1215,7 +1218,7 @@ function resolveSaveLayoutContext(deps: SaveLayoutContextDeps): {
     return undefined;
   }
 
-  let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
+  let normalizedDataset: LoadedDatasetRecord;
   try {
     normalizedDataset = deps.loadDataset(context.datasetPath);
   } catch (error) {
@@ -1226,12 +1229,17 @@ function resolveSaveLayoutContext(deps: SaveLayoutContextDeps): {
   const workspace =
     deps.getCachedWorkspace(context.datasetPath) ??
     createWorkspaceState(normalizedDataset.defaultXSignal);
+  const normalizedWorkspace = normalizeWorkspaceSignalsForActiveDataset(
+    workspace,
+    context.datasetPath,
+    normalizedDataset
+  );
 
   return {
     viewerId,
     datasetPath: context.datasetPath,
     layoutUri: context.layoutUri,
-    workspace,
+    workspace: normalizedWorkspace,
     dataset: normalizedDataset.dataset
   };
 }
@@ -1278,7 +1286,7 @@ export function createClearLayoutCommand(deps: ClearLayoutCommandDeps): () => Pr
       return;
     }
 
-    let normalizedDataset: { dataset: Dataset; defaultXSignal: string };
+    let normalizedDataset: LoadedDatasetRecord;
     try {
       normalizedDataset = deps.loadDataset(context.datasetPath);
     } catch (error) {
@@ -1391,7 +1399,7 @@ export function createExportFrozenBundleCommand(
     const datasetExports: Array<{ datasetId: string; path: string; csvText: string }> = [];
     const missingSignalsByDataset: string[] = [];
     for (const referencedDataset of referencedDatasets) {
-      let loadedDataset: { dataset: Dataset; defaultXSignal: string };
+      let loadedDataset: LoadedDatasetRecord;
       try {
         loadedDataset = deps.loadDataset(referencedDataset.path);
       } catch (error) {
@@ -1535,6 +1543,150 @@ function collectReferencedDatasetPaths(
   }
 
   return paths;
+}
+
+function collectAvailableSignalsForSpecImport(loaded: LoadedDatasetRecord): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  const add = (signal: string): void => {
+    const next = signal.trim();
+    if (next.length === 0 || seen.has(next)) {
+      return;
+    }
+    seen.add(next);
+    ordered.push(next);
+  };
+
+  for (const column of loaded.dataset.columns) {
+    add(column.name);
+  }
+  for (const signal of loaded.explorerSignals ?? []) {
+    add(signal);
+  }
+  for (const alias of Object.keys(loaded.signalAliasLookup ?? {})) {
+    add(alias);
+  }
+
+  return ordered;
+}
+
+function normalizeSignalForDataset(signal: string, loadedDataset: LoadedDatasetRecord | undefined): string {
+  const trimmed = signal.trim();
+  if (trimmed.length === 0) {
+    return signal;
+  }
+  const mapped = loadedDataset?.signalAliasLookup?.[trimmed];
+  return typeof mapped === "string" && mapped.trim().length > 0 ? mapped.trim() : trimmed;
+}
+
+function rewriteSourceIdSignal(sourceId: string | undefined, signal: string): string | undefined {
+  if (!sourceId) {
+    return sourceId;
+  }
+  const separatorIndex = sourceId.lastIndexOf("::");
+  if (separatorIndex <= 0) {
+    return sourceId;
+  }
+  return `${sourceId.slice(0, separatorIndex)}::${signal}`;
+}
+
+function normalizeWorkspaceSignalsForActiveDataset(
+  workspace: WorkspaceState,
+  activeDatasetPath: string,
+  loadedDataset: LoadedDatasetRecord
+): WorkspaceState {
+  let changed = false;
+  const nextPlots = workspace.plots.map((plot) => {
+    const normalizedXSignal = normalizeSignalForDataset(plot.xSignal, loadedDataset);
+    if (normalizedXSignal !== plot.xSignal) {
+      changed = true;
+    }
+    const nextTraces = plot.traces.map((trace) => {
+      const traceDatasetPath = getTraceDatasetPath(trace.sourceId, activeDatasetPath);
+      if (traceDatasetPath !== activeDatasetPath) {
+        return trace;
+      }
+      const normalizedSignal = normalizeSignalForDataset(trace.signal, loadedDataset);
+      const normalizedSourceId = rewriteSourceIdSignal(trace.sourceId, normalizedSignal);
+      if (normalizedSignal === trace.signal && normalizedSourceId === trace.sourceId) {
+        return trace;
+      }
+      changed = true;
+      return {
+        ...trace,
+        signal: normalizedSignal,
+        sourceId: normalizedSourceId
+      };
+    });
+    if (!changed && normalizedXSignal === plot.xSignal && nextTraces.every((trace, idx) => trace === plot.traces[idx])) {
+      return plot;
+    }
+    return {
+      ...plot,
+      xSignal: normalizedXSignal,
+      traces: nextTraces
+    };
+  });
+
+  return changed
+    ? {
+        ...workspace,
+        plots: nextPlots
+      }
+    : workspace;
+}
+
+function normalizeImportedWorkspaceSignals(
+  parsed: ReturnType<typeof importPlotSpecV1>,
+  loadedDatasetByPath: ReadonlyMap<string, LoadedDatasetRecord>
+): ReturnType<typeof importPlotSpecV1> {
+  let changed = false;
+  const nextPlots = parsed.workspace.plots.map((plot) => {
+    const xDatasetPath = getPlotXDatasetPath(plot.id, parsed.xDatasetPathByPlotId, parsed.datasetPath);
+    const normalizedXSignal = normalizeSignalForDataset(
+      plot.xSignal,
+      loadedDatasetByPath.get(xDatasetPath)
+    );
+    if (normalizedXSignal !== plot.xSignal) {
+      changed = true;
+    }
+    const nextTraces = plot.traces.map((trace) => {
+      const traceDatasetPath = getTraceDatasetPath(trace.sourceId, parsed.datasetPath);
+      const normalizedSignal = normalizeSignalForDataset(
+        trace.signal,
+        loadedDatasetByPath.get(traceDatasetPath)
+      );
+      const normalizedSourceId = rewriteSourceIdSignal(trace.sourceId, normalizedSignal);
+      if (normalizedSignal === trace.signal && normalizedSourceId === trace.sourceId) {
+        return trace;
+      }
+      changed = true;
+      return {
+        ...trace,
+        signal: normalizedSignal,
+        sourceId: normalizedSourceId
+      };
+    });
+    if (!changed && normalizedXSignal === plot.xSignal && nextTraces.every((trace, idx) => trace === plot.traces[idx])) {
+      return plot;
+    }
+    return {
+      ...plot,
+      xSignal: normalizedXSignal,
+      traces: nextTraces
+    };
+  });
+
+  if (!changed) {
+    return parsed;
+  }
+  return {
+    ...parsed,
+    workspace: {
+      ...parsed.workspace,
+      plots: nextPlots
+    }
+  };
 }
 
 function toFrozenLayoutPath(filePath: string): string {

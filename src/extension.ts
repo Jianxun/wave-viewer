@@ -555,7 +555,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     const loadedDatasets = Array.from(loadedDatasetByPath.entries()).map(([datasetPath, loaded]) => ({
       datasetPath,
       fileName: path.basename(datasetPath),
-      signals: loaded.dataset.columns.map((column) => column.name)
+      signals: loaded.explorerSignals ?? loaded.dataset.columns.map((column) => column.name)
     }));
     signalTreeProvider.setLoadedDatasets(loadedDatasets);
   }
@@ -592,12 +592,22 @@ export function activate(context: VSCode.ExtensionContext): void {
     return existed;
   }
 
-  const loadDataset = (documentPath: string): { dataset: Dataset; defaultXSignal: string } => {
-    const dataset = isHdf5DatasetFile(documentPath)
-      ? loadNormalizedHdf5Dataset(documentPath).dataset
-      : parseCsv({ path: documentPath, csvText: fs.readFileSync(documentPath, "utf8") });
-    const defaultXSignal = selectDefaultX(dataset);
-    return { dataset, defaultXSignal };
+  const loadDataset = (documentPath: string): LoadedDatasetRecord => {
+    if (isHdf5DatasetFile(documentPath)) {
+      const loaded = loadNormalizedHdf5Dataset(documentPath);
+      return {
+        dataset: loaded.dataset,
+        defaultXSignal: selectDefaultX(loaded.dataset),
+        explorerSignals: loaded.signalPaths,
+        signalAliasLookup: loaded.signalAliasLookup
+      };
+    }
+
+    const dataset = parseCsv({ path: documentPath, csvText: fs.readFileSync(documentPath, "utf8") });
+    return {
+      dataset,
+      defaultXSignal: selectDefaultX(dataset)
+    };
   };
 
   const layoutExternalEdit = createLayoutExternalEditController({

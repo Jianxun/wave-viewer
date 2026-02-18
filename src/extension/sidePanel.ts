@@ -42,15 +42,22 @@ export function resolveSidePanelSelection(
     return undefined;
   }
 
-  const signals = loadedDataset.dataset.columns.map((column) => column.name);
-  if (!signals.includes(resolved.signal)) {
+  const signals = loadedDataset.explorerSignals ?? loadedDataset.dataset.columns.map((column) => column.name);
+  let resolvedSignal = resolved.signal;
+  if (!signals.includes(resolvedSignal)) {
+    const mapped = loadedDataset.signalAliasLookup?.[resolvedSignal];
+    if (typeof mapped === "string" && mapped.trim().length > 0) {
+      resolvedSignal = mapped.trim();
+    }
+  }
+  if (!signals.includes(resolvedSignal)) {
     deps.showError(
       `Signal '${resolved.signal}' is not available in loaded dataset '${path.basename(documentPath)}'.`
     );
     return undefined;
   }
 
-  return { documentPath, loadedDataset, signal: resolved.signal };
+  return { documentPath, loadedDataset, signal: resolvedSignal };
 }
 
 export function createDatasetLoadedPayload(

@@ -13,6 +13,29 @@ describe("loadNormalizedHdf5Dataset", () => {
     expect(loaded.dataset.path).toBe(fixturePath);
     expect(loaded.dataset.rowCount).toBe(251);
     expect(loaded.dataset.columns).toHaveLength(8);
+    expect(loaded.dataset.columns.map((column) => column.name)).toEqual([
+      "sweep",
+      "V(IN)",
+      "V(OUT)",
+      "V(VBN)",
+      "V(VDD)",
+      "V(VSS)",
+      "XOTA/V(D)",
+      "XOTA/V(TAIL)"
+    ]);
+    expect(loaded.signalPaths).toEqual([
+      "V(IN)",
+      "V(OUT)",
+      "V(VBN)",
+      "V(VDD)",
+      "V(VSS)",
+      "XOTA/V(D)",
+      "XOTA/V(TAIL)"
+    ]);
+    expect(loaded.signalAliasLookup).toMatchObject({
+      "V(XOTA:D)": "XOTA/V(D)",
+      "V(XOTA:TAIL)": "XOTA/V(TAIL)"
+    });
     expect(loaded.dataset.columns[0]).toEqual({
       name: "sweep",
       values: expect.arrayContaining([0, 0.01, 0.02])
