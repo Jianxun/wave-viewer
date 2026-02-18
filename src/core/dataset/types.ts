@@ -71,6 +71,7 @@ export type WebviewToHostMessageType =
   | "webview/intent/removePlot"
   | "webview/intent/renamePlot"
   | "webview/intent/setActiveAxis"
+  | "webview/intent/updatePlotXAxis"
   | "webview/intent/setTraceAxis"
   | "webview/intent/addAxis"
   | "webview/intent/reorderAxis"
@@ -147,6 +148,15 @@ export type ParsedWebviewToHostMessage =
       { viewerId: string; plotId: string; axisId: string; requestId: string }
     >
   | ProtocolEnvelope<
+      "webview/intent/updatePlotXAxis",
+      {
+        viewerId: string;
+        plotId: string;
+        patch: { scale?: "linear" | "log"; range?: [number, number] };
+        requestId: string;
+      }
+    >
+  | ProtocolEnvelope<
       "webview/intent/setTraceAxis",
       { viewerId: string; plotId: string; traceId: string; axisId: string; requestId: string }
     >
@@ -206,6 +216,7 @@ type WorkspaceStateLike = {
     id: string;
     name: string;
     xSignal: string;
+    xScale?: "linear" | "log";
     axes: Array<{
       id: `y${number}` | string;
       side?: "left" | "right";
@@ -305,6 +316,7 @@ function isWebviewMessageType(type: string): type is WebviewToHostMessageType {
     type === "webview/intent/removePlot" ||
     type === "webview/intent/renamePlot" ||
     type === "webview/intent/setActiveAxis" ||
+    type === "webview/intent/updatePlotXAxis" ||
     type === "webview/intent/setTraceAxis" ||
     type === "webview/intent/addAxis" ||
     type === "webview/intent/reorderAxis" ||
@@ -441,6 +453,25 @@ function isValidWebviewPayload(type: WebviewToHostMessageType, payload: unknown)
       isNonEmptyString(payload.plotId) &&
       isAxisId(payload.axisId) &&
       isNonEmptyString(payload.requestId)
+    );
+  }
+
+  if (type === "webview/intent/updatePlotXAxis") {
+    const patch = payload.patch;
+    if (!isRecord(patch)) {
+      return false;
+    }
+    const hasScale = patch.scale !== undefined;
+    const hasRange = patch.range !== undefined;
+    const scaleValid = !hasScale || patch.scale === "linear" || patch.scale === "log";
+    const rangeValid = !hasRange || isNumericRange(patch.range);
+    return (
+      isNonEmptyString(payload.viewerId) &&
+      isNonEmptyString(payload.plotId) &&
+      isNonEmptyString(payload.requestId) &&
+      (hasScale || hasRange) &&
+      scaleValid &&
+      rangeValid
     );
   }
 
@@ -617,6 +648,10 @@ function isPlotStateLike(value: unknown): boolean {
   }
 
   if (value.xRange !== undefined && !isNumericRange(value.xRange)) {
+    return false;
+  }
+
+  if (value.xScale !== undefined && value.xScale !== "linear" && value.xScale !== "log") {
     return false;
   }
 

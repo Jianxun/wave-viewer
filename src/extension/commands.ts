@@ -393,6 +393,61 @@ export function createOpenViewerCommand(deps: CommandDeps): () => Promise<void> 
         return;
       }
 
+      if (message.type === "webview/intent/updatePlotXAxis") {
+        const context = resolveDatasetContext(message.payload.viewerId);
+        if (!context) {
+          deps.logDebug?.("Ignored updatePlotXAxis because no dataset is bound to this panel.", {
+            payload: message.payload
+          });
+          return;
+        }
+        const { datasetPath: resolvedDatasetPath, normalizedDataset: resolvedDataset } = context;
+
+        try {
+          const transaction = deps.commitHostStateTransaction({
+            datasetPath: resolvedDatasetPath,
+            defaultXSignal: resolvedDataset.defaultXSignal,
+            reason: "updatePlotXAxis:plot-controls",
+            mutate: (workspace) => {
+              const activePlotWorkspace = reduceWorkspaceState(workspace, {
+                type: "plot/setActive",
+                payload: { plotId: message.payload.plotId }
+              });
+              return reduceWorkspaceState(activePlotWorkspace, {
+                type: "plot/updateXAxis",
+                payload: {
+                  plotId: message.payload.plotId,
+                  patch: {
+                    scale: message.payload.patch.scale,
+                    xRange: message.payload.patch.range
+                  },
+                  xValues: resolvePlotXValues(activePlotWorkspace, resolvedDataset, message.payload.plotId)
+                }
+              });
+            }
+          });
+
+          void panel.webview.postMessage(
+            createProtocolEnvelope("host/statePatch", {
+              revision: transaction.next.revision,
+              workspace: transaction.next.workspace,
+              viewerState: transaction.next.viewerState,
+              reason: transaction.reason
+            })
+          );
+        } catch (error) {
+          const errorMessage = getErrorMessage(error);
+          if (errorMessage === "Cannot set X-axis to log scale: plot has no positive finite X samples.") {
+            deps.showError(errorMessage);
+          }
+          deps.logDebug?.("Ignored invalid webview updatePlotXAxis message payload.", {
+            payload: message.payload,
+            error: errorMessage
+          });
+        }
+        return;
+      }
+
       if (message.type === "webview/intent/setTraceAxis") {
         const context = resolveDatasetContext(message.payload.viewerId);
         if (!context) {
@@ -861,6 +916,22 @@ function findNewAxisId(
   return nextWorkspace.plots
     .find((plot) => plot.id === plotId)
     ?.axes.find((axis) => !previousAxisIds.has(axis.id))?.id;
+}
+
+function resolvePlotXValues(
+  workspace: WorkspaceState,
+  loadedDataset: LoadedDatasetRecord,
+  plotId: string
+): number[] | undefined {
+  const plot = workspace.plots.find((entry) => entry.id === plotId);
+  if (!plot) {
+    throw new Error(`Unknown plot id: ${plotId}`);
+  }
+  const fromResolver = loadedDataset.resolveSignalValues?.(plot.xSignal);
+  if (Array.isArray(fromResolver)) {
+    return fromResolver;
+  }
+  return loadedDataset.dataset.columns.find((column) => column.name === plot.xSignal)?.values;
 }
 
 function isAxisId(value: string): value is `y${number}` {

@@ -13,6 +13,7 @@ import {
   setActivePlot,
   setPlotXSignal,
   setPlotXRange,
+  updatePlotXAxis,
   setTraceAxis,
   setTraceVisible,
   updateAxis,
@@ -28,6 +29,14 @@ export type WorkspaceAction =
   | { type: "plot/setActive"; payload: { plotId: string } }
   | { type: "plot/setXSignal"; payload: { plotId?: string; xSignal: string } }
   | { type: "plot/setXRange"; payload: { plotId?: string; xRange?: [number, number] } }
+  | {
+      type: "plot/updateXAxis";
+      payload: {
+        plotId?: string;
+        patch: { scale?: "linear" | "log"; xRange?: [number, number] };
+        xValues?: readonly number[];
+      };
+    }
   | { type: "axis/add"; payload?: { plotId?: string; afterAxisId?: `y${number}` } }
   | { type: "axis/reorder"; payload: { plotId?: string; axisId: `y${number}`; toIndex: number } }
   | {
@@ -82,6 +91,8 @@ export function reduceWorkspaceState(state: WorkspaceState, action: WorkspaceAct
       return setPlotXSignal(state, action.payload);
     case "plot/setXRange":
       return setPlotXRange(state, action.payload);
+    case "plot/updateXAxis":
+      return updatePlotXAxis(state, action.payload);
     case "axis/add":
       return addAxis(state, action.payload ?? {});
     case "axis/reorder":
