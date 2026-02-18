@@ -20,7 +20,7 @@ T-069:
   pr: 85
   merged: true
 T-070:
-  status: ready_for_review
+  status: review_clean
   pr: 86
   merged: false
 T-071:
