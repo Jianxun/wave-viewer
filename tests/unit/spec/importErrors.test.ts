@@ -155,4 +155,33 @@ describe("T-067 spec import errors", () => {
       })
     ).toThrow("Plot plot-1 x.signal.accessor is not allowed for x.signal.");
   });
+
+  it("rejects invalid x.scale values with actionable guidance", () => {
+    const yamlText = [
+      "version: 3",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-a",
+      "      signal:",
+      "        base: time",
+      "      scale: ln",
+      "    y:",
+      "      - id: lane-main",
+      "        signals: {}"
+    ].join("\n");
+
+    expect(() =>
+      importPlotSpecV1({
+        yamlText,
+        availableSignals: ["time"]
+      })
+    ).toThrow("Plot plot-1 x.scale must be 'linear' or 'log' when provided.");
+  });
 });

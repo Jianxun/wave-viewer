@@ -195,6 +195,13 @@ function validatePlot(value: unknown, index: number, datasetIds: Set<string>): P
     normalized.x.label = x.label;
   }
 
+  if (isRecord(x) && x.scale !== undefined) {
+    if (x.scale !== "linear" && x.scale !== "log") {
+      throw new PlotSpecImportError(`Plot ${id} x.scale must be 'linear' or 'log' when provided.`);
+    }
+    normalized.x.scale = x.scale;
+  }
+
   if (isRecord(x) && x.range !== undefined) {
     normalized.x.range = parseNumberPair(x.range, `plot ${id} x.range`);
   }
@@ -348,6 +355,7 @@ function toWorkspacePlot(
     id: plot.id,
     name: plot.name,
     xSignal: plot.x.signal.base,
+    ...(plot.x.scale !== undefined ? { xScale: plot.x.scale } : {}),
     axes,
     traces,
     nextAxisNumber: axes.length + 1,

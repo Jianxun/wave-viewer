@@ -24,6 +24,7 @@ export type PlotSpecLaneV3 = {
 export type PlotSpecXConfigV3 = {
   dataset: string;
   signal: PlotSpecSignalNameV3 & { accessor?: never };
+  scale?: "linear" | "log";
   label?: string;
   range?: [number, number];
 };
