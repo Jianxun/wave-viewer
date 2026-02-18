@@ -58,3 +58,4 @@ archive:
   - { T-061: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-061.md, pr: 72 } }
   - { T-062: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-062.md, pr: 73 } }
   - { T-063: { completed_on: 2026-02-14, owner: Executor, scratchpad: agents/scratchpads/T-063.md, pr: 74 } }
+  - { T-064: { completed_on: 2026-02-18, owner: Executor, scratchpad: agents/scratchpads/T-064.md, pr: 78 } }

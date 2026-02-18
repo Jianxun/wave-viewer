@@ -1,31 +1,83 @@
 schema_version: 2
 current_sprint:
-  - id: T-064
-    title: Implement normalized HDF5 waveform loader with run selection defaults
+  - id: T-065
+    title: Implement lazy host-side complex accessor projection for HDF5 AC datasets
     owner: Executor
     dod:
-      - Add extension-host ingestion path for normalized HDF5 files conforming to `doc/specs/hdf5-normalized-waveform-format.md`.
-      - Map one selected run (`run_id`) into existing in-memory `Dataset` contract without changing reducer semantics.
-      - Default run selection to first `/catalog/runs` entry and expose deterministic dataset path identity (`<file>#<run_id>`).
-      - Validate required HDF5 metadata/paths and return actionable user-facing errors for invalid files.
+      - Extend HDF5 loader ingestion to accept scalar real samples and complex pair samples `[re, im]` while preserving real-only runtime payloads.
+      - Enforce strict independent-variable policy: reject files where independent variable samples are complex-encoded.
+      - Implement symbolic accessor model with deterministic accessor set/order (`re`, `im`, `mag`, `phase`, `db20`) and lazy projection only when emitting trace tuples.
+      - Enforce finite projection outputs, including `db20` floor via `eps=1e-30`, with actionable loader/projection errors.
     verify:
-      - npm test -- tests/unit/dataset/selectDefaultX.test.ts
+      - npm test -- tests/unit/core/hdf5/loadNormalizedHdf5.test.ts
+      - npm test -- tests/unit/protocol/messages.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-065.md
+      adr: agents/adr/ADR-0021-host-side-complex-projection-and-structured-signal-refs.md
+      spec: doc/specs/hdf5-normalized-waveform-format.md
+    files:
+      - src/core/hdf5/loadNormalizedHdf5.ts
+      - src/core/dataset/types.ts
+      - src/extension.ts
+      - src/extension/types.ts
+      - tests/unit/core/hdf5/loadNormalizedHdf5.test.ts
+      - tests/unit/protocol/messages.test.ts
+      - examples/simulations/tb.spice.ac.h5
+  - id: T-066
+    title: Add symbolic accessor UX in signal tree with AC-default quick-add behavior
+    owner: Executor
+    depends_on:
+      - T-065
+    dod:
+      - Make complex base signals expandable into virtual accessor children (`re`, `im`, `mag`, `phase`, `db20`) without eager vector materialization.
+      - Ensure quick-add on complex base signal maps deterministically to `<base>.db20`.
+      - Preserve existing behavior for real-only datasets and canonical signal actions.
+      - Add/update unit coverage for signal tree hierarchy and quick-add mapping behavior.
+    verify:
+      - npm test -- tests/unit/extension/signalTree.test.ts
       - npm test -- tests/extension/smoke.test.ts
       - npm run lint
     links:
-      scratchpad: agents/scratchpads/T-064.md
-      adr: agents/adr/ADR-0019-normalized-hdf5-waveform-ingestion-contract.md
-      spec: doc/specs/hdf5-normalized-waveform-format.md
+      scratchpad: agents/scratchpads/T-066.md
+      adr: agents/adr/ADR-0021-host-side-complex-projection-and-structured-signal-refs.md
     files:
-      - src/extension.ts
+      - src/extension/signalTree.ts
       - src/extension/commands.ts
-      - src/core/dataset/types.ts
-      - src/core/dataset/selectDefaultX.ts
+      - src/extension.ts
+      - tests/unit/extension/signalTree.test.ts
       - tests/extension/smoke.test.ts
-      - tests/unit/dataset/selectDefaultX.test.ts
+  - id: T-067
+    title: Upgrade layout persistence to schema v3 with structured signal refs
+    owner: Executor
+    depends_on:
+      - T-065
+    dod:
+      - Introduce layout schema `version: 3` with signal refs persisted as `{ base, accessor? }`.
+      - Keep runtime trace identity stable while decoupling persistence from flat accessor-string parsing.
+      - Reject non-v3 layout imports with actionable errors and update docs/tests accordingly.
+      - Ensure deterministic export ordering and roundtrip stability with accessor-bearing traces.
+    verify:
+      - npm test -- tests/unit/core/spec/importSpec.test.ts tests/unit/core/spec/exportSpec.test.ts tests/unit/spec/roundtrip.test.ts tests/unit/spec/importErrors.test.ts
+      - npm run lint
+    links:
+      scratchpad: agents/scratchpads/T-067.md
+      adr: agents/adr/ADR-0021-host-side-complex-projection-and-structured-signal-refs.md
+      spec: doc/specs/wave-viewer-mvp.md
+    files:
+      - src/core/spec/importSpec.ts
+      - src/core/spec/exportSpec.ts
+      - src/core/spec/plotSpecV1.ts
+      - tests/unit/core/spec/importSpec.test.ts
+      - tests/unit/core/spec/exportSpec.test.ts
+      - tests/unit/spec/roundtrip.test.ts
+      - tests/unit/spec/importErrors.test.ts
+      - doc/specs/wave-viewer-mvp.md
+      - doc/specs/host-webview-protocol.md
 backlog: []
 exploration_candidates:
   - Evaluate adding a one-shot CLI migrator from legacy v1 layout YAML to v2 outside MVP core scope.
   - Evaluate migrating Wave Viewer from command-opened panel to custom editor architecture (`viewType`) only after host-authoritative protocol migration is complete.
   - Evaluate grouped signal tree taxonomy (flat vs prefix-grouped) for large datasets.
   - Evaluate decimation strategy for large CSV files under side-panel-driven multi-trace workflows.
+  - Evaluate lazy projection cache eviction policy for large AC datasets with many accessor-bearing traces.
