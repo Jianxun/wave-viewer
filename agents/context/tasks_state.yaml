@@ -28,6 +28,6 @@ T-071:
   pr: 87
   merged: true
 T-072:
-  status: ready
+  status: in_progress
   pr: null
   merged: false
