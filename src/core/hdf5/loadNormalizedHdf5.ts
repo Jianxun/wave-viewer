@@ -263,14 +263,33 @@ const HDF5_LOADER_SCRIPT = String.raw`
     };
 
     const indepDecoded = decodeColumn(indepVarIndex);
-    if (indepDecoded.kind !== "real") {
-      fail(
-        "independent variable '" +
-          indepVarName +
-          "' is complex-encoded in '/vectors' column " +
-          indepVarIndex +
-          ". Independent variable samples must be real scalars."
+    let indepValues;
+    if (indepDecoded.kind === "real") {
+      indepValues = indepDecoded.values;
+    } else {
+      const maxAbsImag = indepDecoded.im.reduce(
+        (max, value) => Math.max(max, Math.abs(value)),
+        0
       );
+      const maxAbsReal = indepDecoded.re.reduce(
+        (max, value) => Math.max(max, Math.abs(value)),
+        0
+      );
+      const imagTolerance = Math.max(1e-12, maxAbsReal * 1e-9);
+      if (maxAbsImag > imagTolerance) {
+        fail(
+          "independent variable '" +
+            indepVarName +
+            "' has significant imaginary content in '/vectors' column " +
+            indepVarIndex +
+            " (max |imag| = " +
+            maxAbsImag +
+            ", tolerance = " +
+            imagTolerance +
+            ")."
+        );
+      }
+      indepValues = indepDecoded.re;
     }
 
     const signalLeaves = [];
@@ -336,7 +355,7 @@ const HDF5_LOADER_SCRIPT = String.raw`
     const columns = [
       {
         name: indepVarName,
-        values: indepDecoded.values
+        values: indepValues
       }
     ];
     const signalPaths = [];

@@ -45,7 +45,7 @@ Active ADRs:
   - `*.h5` / `*.spice.h5` single-run waveform container (see ADR-0020 + spec below).
     - Required layout: `/vectors`, `/vector_names`, `/indep_var/<indep_var_name>`, `/signals`.
     - Required attrs: `num_points`, `num_variables`, `indep_var_name`, `indep_var_index`.
-    - Vector samples may be real scalar `number` or complex pair `[re, im]`; independent variable must be real-valued.
+    - Vector samples may be real scalar `number` or complex pair `[re, im]`; independent variable plotting values use real-part projection.
     - Canonical vector payload is root `vectors` + `vector_names`; `indep_var` and `signals` may be VDS aliases.
     - Complex derived accessors are symbolic (`re`, `im`, `mag`, `phase`, `db20`) and projected lazily when emitting trace tuples.
     - Full contract: `doc/specs/hdf5-normalized-waveform-format.md`.
@@ -132,7 +132,7 @@ Active ADRs:
 - MUST keep frozen export separate from active interactive layout persistence and support one frozen CSV output per referenced dataset.
 - MUST validate HDF5 input against the single-run schema contract before loading (`/vectors`, `/vector_names`, `/indep_var`, `/signals` + required attrs).
 - MUST preserve canonical signal identifiers for action payloads and trace identity, even when signal tree display is hierarchical.
-- MUST reject HDF5 files where the independent variable is complex-encoded.
+- MUST project independent-variable values from real part for plotting; MUST fail only when independent-variable imaginary content exceeds sanity tolerance.
 - MUST use fixed `eps = 1e-30` for `db20` projection to keep derived arrays finite (about `-600 dB` floor).
 - MUST treat complex accessor nodes as symbolic metadata and only project values for traces actually emitted to the viewer.
 

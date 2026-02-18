@@ -103,12 +103,15 @@ describe("loadNormalizedHdf5Dataset", () => {
     );
   });
 
-  it("rejects files where independent-variable samples are complex-encoded", () => {
+  it("uses real-part independent variable values when frequency is complex-encoded with negligible imag", () => {
     const fixturePath = path.resolve(process.cwd(), "examples/simulations/tb.spice.ac.h5");
 
-    expect(() => loadNormalizedHdf5Dataset(fixturePath)).toThrowError(
-      "independent variable 'FREQUENCY' is complex-encoded"
-    );
+    const loaded = loadNormalizedHdf5Dataset(fixturePath);
+
+    expect(loaded.dataset.columns[0]?.name).toBe("FREQUENCY");
+    expect(loaded.dataset.columns[0]?.values[0]).toBeCloseTo(1);
+    expect(loaded.dataset.columns[0]?.values[1]).toBeCloseTo(1.023292992280754);
+    expect(loaded.complexSignalPaths).toContain("V(OUT)");
   });
 
   it("throws when required '/indep_var' group is missing", () => {
