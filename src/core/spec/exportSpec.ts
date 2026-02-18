@@ -104,6 +104,9 @@ export function exportPlotSpecV1(input: ExportPlotSpecInput): string {
       if (plot.xRange !== undefined) {
         specPlot.x.range = plot.xRange;
       }
+      if (plot.xScale !== undefined) {
+        specPlot.x.scale = plot.xScale;
+      }
 
       return specPlot;
     })

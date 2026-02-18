@@ -250,8 +250,11 @@ function createLoadedDatasetFixture(
   };
 }
 
-function createReferenceOnlySpecYaml(datasetPath: string): string {
-  return [
+function createReferenceOnlySpecYaml(
+  datasetPath: string,
+  options?: { xScale?: "linear" | "log"; xRange?: [number, number] }
+): string {
+  const lines = [
     "version: 3",
     "datasets:",
     "  - id: ds-1",
@@ -264,11 +267,25 @@ function createReferenceOnlySpecYaml(datasetPath: string): string {
     "    x:",
     "      dataset: ds-1",
     "      signal:",
-    "        base: time",
+    "        base: time"
+  ];
+
+  if (options?.xScale) {
+    lines.push(`      scale: ${options.xScale}`);
+  }
+  if (options?.xRange) {
+    lines.push("      range:");
+    lines.push(`        - ${options.xRange[0]}`);
+    lines.push(`        - ${options.xRange[1]}`);
+  }
+
+  lines.push(
     "    y:",
     "      - id: lane-main",
     "        signals: {}"
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }
 
 function createMultiDatasetSpecYaml(primaryDatasetPath: string, secondaryDatasetPath: string): string {
@@ -2643,6 +2660,93 @@ describe("T-062 reload replay snapshot coverage", () => {
         reason: "reloadAllFiles:command"
       }
     });
+  });
+
+  it("replays persisted x-axis log scale from layout import into host state patch", async () => {
+    const showError = vi.fn();
+    const showInformation = vi.fn();
+    const panelFixture = createPanelFixture();
+    const setCachedWorkspace = vi.fn((_documentPath: string, workspace: WorkspaceState) => ({
+      workspace,
+      revision: 4,
+      viewerState: {
+        activePlotId: workspace.activePlotId,
+        activeAxisByPlotId: { "plot-1": "y1" as const }
+      }
+    }));
+    const command = createOpenLayoutCommand({
+      getActiveViewerId: () => "viewer-1",
+      showOpenDialog: async () => "/workspace/layouts/lab.wave-viewer.yaml",
+      readTextFile: () =>
+        createReferenceOnlySpecYaml("/workspace/examples/simulations/ota.spice.csv", {
+          xScale: "log",
+          xRange: [1, 2]
+        }),
+      loadDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [{ name: "time", values: [1, 10, 100] }, { name: "vin", values: [1, 2, 3] }]
+        },
+        defaultXSignal: "time"
+      }),
+      setCachedWorkspace,
+      bindViewerToLayout: vi.fn(),
+      getPanelForViewer: () => panelFixture.panel,
+      showError,
+      showInformation
+    });
+
+    await command();
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(setCachedWorkspace).toHaveBeenCalledWith("/workspace/examples/simulations/ota.spice.csv", {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "Plot 1",
+          xSignal: "time",
+          xScale: "log",
+          xRange: [1, 2],
+          axes: [{ id: "y1" }],
+          traces: [],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+    expect(panelFixture.sentMessages[1]).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "host/statePatch",
+      payload: {
+        revision: 4,
+        workspace: {
+          activePlotId: "plot-1",
+          plots: [
+            {
+              id: "plot-1",
+              name: "Plot 1",
+              xSignal: "time",
+              xScale: "log",
+              xRange: [1, 2],
+              axes: [{ id: "y1" }],
+              traces: [],
+              nextAxisNumber: 2
+            }
+          ]
+        },
+        viewerState: {
+          activePlotId: "plot-1",
+          activeAxisByPlotId: {
+            "plot-1": "y1"
+          }
+        },
+        reason: "openLayout:command"
+      }
+    });
+    expect(showInformation).toHaveBeenCalledWith(
+      "Wave Viewer layout opened from /workspace/layouts/lab.wave-viewer.yaml"
+    );
   });
 
   it("hydrates persisted traces missing sourceId and resolves normalized dataset aliases during replay", async () => {

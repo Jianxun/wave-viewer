@@ -13,6 +13,7 @@ import {
   renamePlot,
   reassignAxisTraces,
   setActivePlot,
+  updatePlotXAxis,
   updateAxis
 } from "../../../src/webview/state/workspaceState";
 import { reduceWorkspaceState, type WorkspaceAction } from "../../../src/webview/state/reducer";
@@ -253,6 +254,34 @@ describe("workspaceState", () => {
       "Axis reorder index out of bounds."
     );
   });
+
+  it("persists log x-axis scale and relayout range updates on the active plot", () => {
+    let workspace = createWorkspaceState("time");
+
+    workspace = updatePlotXAxis(workspace, {
+      patch: { scale: "log" },
+      xValues: [0, 1, 10]
+    });
+    workspace = updatePlotXAxis(workspace, {
+      patch: { xRange: [1, 10] }
+    });
+
+    expect(workspace.plots[0]).toMatchObject({
+      xSignal: "time",
+      xScale: "log",
+      xRange: [1, 10]
+    });
+  });
+
+  it("rejects switching to log scale when no positive finite x values exist", () => {
+    const workspace = createWorkspaceState("time");
+    expect(() =>
+      updatePlotXAxis(workspace, {
+        patch: { scale: "log" },
+        xValues: [0, -1, Number.NaN]
+      })
+    ).toThrow("Cannot set X-axis to log scale: plot has no positive finite X samples.");
+  });
 });
 
 describe("workspace reducer", () => {
@@ -294,5 +323,32 @@ describe("workspace reducer", () => {
       { signal: "vin", axisId: "y2" },
       { signal: "vout", axisId: "y1" }
     ]);
+  });
+
+  it("keeps lane routing unchanged when plot x-axis is updated", () => {
+    const actions: WorkspaceAction[] = [
+      { type: "axis/add" },
+      { type: "trace/add", payload: { signal: "vin", axisId: "y2" } },
+      {
+        type: "plot/updateXAxis",
+        payload: {
+          patch: { scale: "log", xRange: [1, 2] },
+          xValues: [0, 1, 2]
+        }
+      }
+    ];
+
+    const finalState = actions.reduce(
+      (state, action) => reduceWorkspaceState(state, action),
+      createWorkspaceState("time")
+    );
+
+    const activePlot = finalState.plots.find((plot) => plot.id === finalState.activePlotId);
+    expect(activePlot?.axes.map((axis) => axis.id)).toEqual(["y1", "y2"]);
+    expect(activePlot?.traces.map((trace) => ({ signal: trace.signal, axisId: trace.axisId }))).toEqual([
+      { signal: "vin", axisId: "y2" }
+    ]);
+    expect(activePlot?.xScale).toBe("log");
+    expect(activePlot?.xRange).toEqual([1, 2]);
   });
 });

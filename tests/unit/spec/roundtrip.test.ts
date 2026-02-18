@@ -226,4 +226,58 @@ describe("T-067 spec roundtrip", () => {
       ]
     });
   });
+
+  it("roundtrips x-axis log scale and range in replay/import workflow", () => {
+    const workspace: WorkspaceState = {
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "AC",
+          xSignal: "FREQ",
+          xScale: "log",
+          xRange: [1, 1000],
+          axes: [{ id: "y1", title: "Magnitude" }],
+          traces: [{ id: "trace-1", signal: "vout", axisId: "y1", visible: true }],
+          nextAxisNumber: 2
+        }
+      ]
+    };
+
+    const yaml = exportPlotSpecV1({
+      datasetPath: "/workspace/examples/simulations/ota.spice.csv",
+      workspace
+    });
+    expect(yaml).toContain("scale: log");
+    expect(yaml).toContain("range:");
+
+    const parsed = importPlotSpecV1({
+      yamlText: yaml,
+      availableSignals: ["FREQ", "vout"]
+    });
+
+    expect(parsed.workspace).toEqual({
+      activePlotId: "plot-1",
+      plots: [
+        {
+          id: "plot-1",
+          name: "AC",
+          xSignal: "FREQ",
+          xScale: "log",
+          xRange: [1, 1000],
+          axes: [{ id: "y1", title: "Magnitude" }],
+          traces: [
+            {
+              id: "trace-1",
+              signal: "vout",
+              sourceId: "/workspace/examples/simulations/ota.spice.csv::vout",
+              axisId: "y1",
+              visible: true
+            }
+          ],
+          nextAxisNumber: 2
+        }
+      ]
+    });
+  });
 });
