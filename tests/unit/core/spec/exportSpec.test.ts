@@ -17,7 +17,7 @@ const WORKSPACE: WorkspaceState = {
   ]
 };
 
-describe("T-050 export spec v2 path serialization", () => {
+describe("T-067 export spec v3 path serialization", () => {
   it("writes relative dataset.path when layout and dataset are colocated", () => {
     const yamlText = exportPlotSpecV1({
       datasetPath: "/workspace/layouts/ota.spice.csv",
@@ -25,7 +25,7 @@ describe("T-050 export spec v2 path serialization", () => {
       specPath: "/workspace/layouts/lab.wave-viewer.yaml"
     });
 
-    expect(yamlText).toContain("version: 2");
+    expect(yamlText).toContain("version: 3");
     expect(yamlText).toContain("active_plot: plot-1");
     expect(yamlText).toContain("active_dataset: dataset-1");
     expect(yamlText).toContain("datasets:");
@@ -33,8 +33,7 @@ describe("T-050 export spec v2 path serialization", () => {
     expect(yamlText).toContain("path: ./ota.spice.csv");
     expect(yamlText).not.toContain("mode:");
     expect(yamlText).toContain("dataset: dataset-1");
-    expect(yamlText).toContain("y:");
-    expect(yamlText).toContain("signal: vin");
+    expect(yamlText).toContain("base: vin");
   });
 
   it("writes portable relative dataset.path when layout is outside dataset folder", () => {
@@ -99,7 +98,37 @@ describe("T-050 export spec v2 path serialization", () => {
     expect(yamlText).toContain("path: /workspace/examples/run-b.csv");
     expect(yamlText).toContain("trace-run-b:");
     expect(yamlText).toContain("dataset: dataset-2");
-    expect(yamlText).toContain("signal: vin");
+    expect(yamlText).toContain("base: vin");
+  });
+
+  it("persists accessor-bearing signals as structured refs", () => {
+    const yamlText = exportPlotSpecV1({
+      datasetPath: "/workspace/examples/tb.spice.h5",
+      workspace: {
+        activePlotId: "plot-1",
+        plots: [
+          {
+            id: "plot-1",
+            name: "Plot 1",
+            xSignal: "FREQ",
+            axes: [{ id: "y1" }],
+            traces: [
+              {
+                id: "trace-vout-db",
+                signal: "XOTA/V(OUT).db20",
+                sourceId: "/workspace/examples/tb.spice.h5::XOTA/V(OUT).db20",
+                axisId: "y1",
+                visible: true
+              }
+            ],
+            nextAxisNumber: 2
+          }
+        ]
+      }
+    });
+
+    expect(yamlText).toContain("base: XOTA/V(OUT)");
+    expect(yamlText).toContain("accessor: db20");
   });
 
   it("preserves per-plot x.dataset independent from active_dataset", () => {
@@ -136,7 +165,7 @@ describe("T-050 export spec v2 path serialization", () => {
     expect(yamlText).toContain("path: /workspace/examples/run-b.csv");
     expect(yamlText).toContain("x:");
     expect(yamlText).toContain("dataset: dataset-2");
-    expect(yamlText).toContain("signal: time_b");
+    expect(yamlText).toContain("base: time_b");
   });
 
   it("collects deterministic dataset ids for export order", () => {

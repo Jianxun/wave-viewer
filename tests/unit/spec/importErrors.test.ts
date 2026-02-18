@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { importPlotSpecV1 } from "../../../src/core/spec/importSpec";
 
-describe("T-006 spec import errors", () => {
-  it("throws explicit error when mode is missing", () => {
+describe("T-067 spec import errors", () => {
+  it("rejects non-v3 layouts with actionable version guidance", () => {
     const yamlText = [
-      "version: 1",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "workspace:",
-      "  activePlotId: plot-1",
-      "  plots: []"
+      "version: 2",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots: []"
     ].join("\n");
 
     expect(() =>
@@ -18,18 +19,19 @@ describe("T-006 spec import errors", () => {
         yamlText,
         availableSignals: ["time", "vin"]
       })
-    ).toThrow("Plot spec mode must be explicitly set to 'reference-only'.");
+    ).toThrow("Unsupported plot spec version: 2. Supported version is 3.");
   });
 
-  it("throws explicit error for unsupported mode", () => {
+  it("rejects deprecated mode in v3 layouts", () => {
     const yamlText = [
-      "version: 1",
-      "mode: portable-archive",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "workspace:",
-      "  activePlotId: plot-1",
-      "  plots: []"
+      "version: 3",
+      "mode: reference-only",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots: []"
     ].join("\n");
 
     expect(() =>
@@ -37,20 +39,18 @@ describe("T-006 spec import errors", () => {
         yamlText,
         availableSignals: ["time", "vin"]
       })
-    ).toThrow(
-      "Plot spec mode 'portable-archive' is not supported by this Wave Viewer version. Re-export as 'reference-only'."
-    );
+    ).toThrow("Plot spec mode is not supported in v3 layout schema.");
   });
 
   it("throws explicit error for missing plots", () => {
     const yamlText = [
-      "version: 1",
-      "mode: reference-only",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "workspace:",
-      "  activePlotId: plot-1",
-      "  plots: []"
+      "version: 3",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots: []"
     ].join("\n");
 
     expect(() =>
@@ -58,32 +58,35 @@ describe("T-006 spec import errors", () => {
         yamlText,
         availableSignals: ["time", "vin"]
       })
-    ).toThrow("Plot spec must include at least one plot in workspace.plots.");
+    ).toThrow("Plot spec must include at least one plot in plots.");
   });
 
   it("throws explicit error for missing signal references by plot", () => {
     const yamlText = [
-      "version: 1",
-      "mode: reference-only",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "workspace:",
-      "  activePlotId: plot-1",
-      "  plots:",
-      "    - id: plot-1",
-      "      name: Plot 1",
-      "      xSignal: time",
-      "      axes:",
-      "        - id: y1",
-      "      traces:",
-      "        - id: trace-1",
-      "          signal: vin",
-      "          axisId: y1",
-      "          visible: true",
-      "        - id: trace-2",
-      "          signal: unknownSignal",
-      "          axisId: y1",
-      "          visible: true"
+      "version: 3",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-a",
+      "      signal:",
+      "        base: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals:",
+      "          trace-1:",
+      "            dataset: run-a",
+      "            signal:",
+      "              base: vin",
+      "          trace-2:",
+      "            dataset: run-a",
+      "            signal:",
+      "              base: unknownSignal"
     ].join("\n");
 
     expect(() =>
@@ -92,25 +95,28 @@ describe("T-006 spec import errors", () => {
         availableSignals: ["vin"]
       })
     ).toThrow(
-      "Missing signals in plot spec: plot plot-1 (xSignal: time; traces: unknownSignal)."
+      "Missing signals in plot spec: plot plot-1 (x.run-a: time; y.lane-main.run-a: unknownSignal)."
     );
   });
 
   it("throws explicit error when active plot id is not present", () => {
     const yamlText = [
-      "version: 1",
-      "mode: reference-only",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "workspace:",
-      "  activePlotId: plot-missing",
-      "  plots:",
-      "    - id: plot-1",
-      "      name: Plot 1",
-      "      xSignal: time",
-      "      axes:",
-      "        - id: y1",
-      "      traces: []"
+      "version: 3",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/ota.spice.csv",
+      "active_dataset: run-a",
+      "active_plot: plot-missing",
+      "plots:",
+      "  - id: plot-1",
+      "    name: Plot 1",
+      "    x:",
+      "      dataset: run-a",
+      "      signal:",
+      "        base: time",
+      "    y:",
+      "      - id: lane-main",
+      "        signals: {}"
     ].join("\n");
 
     expect(() =>
@@ -118,34 +124,35 @@ describe("T-006 spec import errors", () => {
         yamlText,
         availableSignals: ["time"]
       })
-    ).toThrow("Active plot id plot-missing is missing from workspace.plots.");
+    ).toThrow("Active plot id plot-missing is missing from plots.");
   });
 
-  it("rejects legacy axis side fields with a migration error", () => {
+  it("rejects x.signal accessor refs with a migration error", () => {
     const yamlText = [
-      "version: 1",
-      "mode: reference-only",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "workspace:",
-      "  activePlotId: plot-1",
-      "  plots:",
-      "    - id: plot-1",
-      "      name: Plot 1",
-      "      xSignal: time",
-      "      axes:",
-      "        - id: y1",
-      "          side: left",
-      "      traces: []"
+      "version: 3",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/tb.spice.h5",
+      "active_dataset: run-a",
+      "active_plot: plot-1",
+      "plots:",
+      "  - id: plot-1",
+      "    name: AC",
+      "    x:",
+      "      dataset: run-a",
+      "      signal:",
+      "        base: FREQ",
+      "        accessor: db20",
+      "    y:",
+      "      - id: lane-main",
+      "        signals: {}"
     ].join("\n");
 
     expect(() =>
       importPlotSpecV1({
         yamlText,
-        availableSignals: ["time"]
+        availableSignals: ["FREQ"]
       })
-    ).toThrow(
-      "Plot plot-1 axis y1 uses legacy field side. Re-export this workspace with the current Wave Viewer version."
-    );
+    ).toThrow("Plot plot-1 x.signal.accessor is not allowed for x.signal.");
   });
 });

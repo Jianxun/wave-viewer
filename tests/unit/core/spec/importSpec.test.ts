@@ -9,7 +9,7 @@ import {
 
 function createSpecYaml(datasetPath: string): string {
   return [
-    "version: 2",
+    "version: 3",
     "datasets:",
     "  - id: run-a",
     `    path: ${datasetPath}`,
@@ -20,18 +20,20 @@ function createSpecYaml(datasetPath: string): string {
     "    name: Plot 1",
     "    x:",
     "      dataset: run-a",
-    "      signal: time",
+    "      signal:",
+    "        base: time",
     "    y:",
     "      - id: lane-main",
     "        signals:",
     "          trace-1:",
     "            dataset: run-a",
-    "            signal: vin"
+    "            signal:",
+    "              base: vin"
   ].join("\n");
 }
 
-describe("T-050 import spec v2 path resolution", () => {
-  it("accepts v2 specs that omit mode", () => {
+describe("T-067 import spec v3 path resolution", () => {
+  it("accepts v3 specs and reconstructs runtime trace identity", () => {
     const yamlText = createSpecYaml("/workspace/examples/simulations/ota.spice.csv");
 
     const parsed = importPlotSpecV1({
@@ -53,6 +55,47 @@ describe("T-050 import spec v2 path resolution", () => {
     expect(parsed.xDatasetPathByPlotId).toEqual({
       "plot-1": "/workspace/examples/simulations/ota.spice.csv"
     });
+  });
+
+  it("roundtrips accessor-bearing y traces into runtime `<base>.<accessor>` signals", () => {
+    const yamlText = [
+      "version: 3",
+      "datasets:",
+      "  - id: run-a",
+      "    path: /workspace/examples/simulations/tb.spice.h5",
+      "active_plot: plot-1",
+      "active_dataset: run-a",
+      "plots:",
+      "  - id: plot-1",
+      "    name: AC",
+      "    x:",
+      "      dataset: run-a",
+      "      signal:",
+      "        base: FREQ",
+      "    y:",
+      "      - id: lane-mag",
+      "        signals:",
+      "          vout-db:",
+      "            dataset: run-a",
+      "            signal:",
+      "              base: XOTA/V(OUT)",
+      "              accessor: db20"
+    ].join("\n");
+
+    const parsed = importPlotSpecV1({
+      yamlText,
+      availableSignals: ["FREQ", "XOTA/V(OUT).db20"]
+    });
+
+    expect(parsed.workspace.plots[0]?.traces).toEqual([
+      {
+        id: "vout-db",
+        signal: "XOTA/V(OUT).db20",
+        sourceId: "/workspace/examples/simulations/tb.spice.h5::XOTA/V(OUT).db20",
+        axisId: "y1",
+        visible: true
+      }
+    ]);
   });
 
   it("resolves relative dataset.path against layout file location", () => {
@@ -91,7 +134,7 @@ describe("T-050 import spec v2 path resolution", () => {
   it("reads all dataset references for dataset-qualified signal validation", () => {
     const layoutPath = path.resolve("/workspace/layouts/lab.wave-viewer.yaml");
     const yamlText = [
-      "version: 2",
+      "version: 3",
       "datasets:",
       "  - id: run-a",
       "    path: ../examples/run-a.csv",
@@ -104,13 +147,15 @@ describe("T-050 import spec v2 path resolution", () => {
       "    name: Plot 1",
       "    x:",
       "      dataset: run-a",
-      "      signal: time",
+      "      signal:",
+      "        base: time",
       "    y:",
       "      - id: lane-main",
       "        signals:",
       "          trace-b:",
       "            dataset: run-b",
-      "            signal: ib"
+      "            signal:",
+      "              base: ib"
     ].join("\n");
 
     expect(readPlotSpecDatasetsV1(yamlText, layoutPath)).toEqual([
@@ -119,9 +164,9 @@ describe("T-050 import spec v2 path resolution", () => {
     ]);
   });
 
-  it("rejects unsupported v1 specs", () => {
+  it("rejects unsupported v2 specs", () => {
     const yamlText = [
-      "version: 1",
+      "version: 2",
       "datasets: []",
       "active_dataset: run-a",
       "active_plot: plot-1",
@@ -133,12 +178,12 @@ describe("T-050 import spec v2 path resolution", () => {
         yamlText,
         availableSignals: ["time"]
       })
-    ).toThrow("Unsupported plot spec version: 1. Supported version is 2.");
+    ).toThrow("Unsupported plot spec version: 2. Supported version is 3.");
   });
 
-  it("rejects v2 specs that include mode", () => {
+  it("rejects v3 specs that include mode", () => {
     const yamlText = [
-      "version: 2",
+      "version: 3",
       "mode: portable",
       "datasets:",
       "  - id: run-a",
@@ -150,7 +195,8 @@ describe("T-050 import spec v2 path resolution", () => {
       "    name: Plot 1",
       "    x:",
       "      dataset: run-a",
-      "      signal: time",
+      "      signal:",
+      "        base: time",
       "    y:",
       "      - id: lane-main",
       "        signals: {}"
@@ -161,37 +207,12 @@ describe("T-050 import spec v2 path resolution", () => {
         yamlText,
         availableSignals: ["time"]
       })
-    ).toThrow("Plot spec mode is not supported in v2 layout schema.");
-  });
-
-  it("rejects legacy single-dataset v2 payloads", () => {
-    const yamlText = [
-      "version: 2",
-      "dataset:",
-      "  path: /workspace/examples/simulations/ota.spice.csv",
-      "active_plot: plot-1",
-      "plots:",
-      "  - id: plot-1",
-      "    name: Plot 1",
-      "    x:",
-      "      signal: time",
-      "    y:",
-      "      - id: lane-main",
-      "        signals:",
-      "          trace-1: vin"
-    ].join("\n");
-
-    expect(() =>
-      importPlotSpecV1({
-        yamlText,
-        availableSignals: ["time", "vin"]
-      })
-    ).toThrow("Plot spec datasets must be a non-empty array.");
+    ).toThrow("Plot spec mode is not supported in v3 layout schema.");
   });
 
   it("keeps per-plot x.dataset identity for export replay", () => {
     const yamlText = [
-      "version: 2",
+      "version: 3",
       "datasets:",
       "  - id: run-a",
       "    path: /workspace/examples/run-a.csv",
@@ -204,13 +225,15 @@ describe("T-050 import spec v2 path resolution", () => {
       "    name: Plot 1",
       "    x:",
       "      dataset: run-b",
-      "      signal: time",
+      "      signal:",
+      "        base: time",
       "    y:",
       "      - id: lane-main",
       "        signals:",
       "          trace-a:",
       "            dataset: run-a",
-      "            signal: vin"
+      "            signal:",
+      "              base: vin"
     ].join("\n");
 
     const parsed = importPlotSpecV1({
@@ -229,7 +252,7 @@ describe("T-050 import spec v2 path resolution", () => {
 
   it("validates signals against dataset-specific availability maps", () => {
     const yamlText = [
-      "version: 2",
+      "version: 3",
       "datasets:",
       "  - id: run-a",
       "    path: /workspace/examples/run-a.csv",
@@ -242,16 +265,19 @@ describe("T-050 import spec v2 path resolution", () => {
       "    name: Plot 1",
       "    x:",
       "      dataset: run-b",
-      "      signal: time_b",
+      "      signal:",
+      "        base: time_b",
       "    y:",
       "      - id: lane-main",
       "        signals:",
       "          trace-a:",
       "            dataset: run-a",
-      "            signal: vin_a",
+      "            signal:",
+      "              base: vin_a",
       "          trace-b:",
       "            dataset: run-b",
-      "            signal: vin_b"
+      "            signal:",
+      "              base: vin_b"
     ].join("\n");
 
     expect(() =>

@@ -178,7 +178,7 @@ Manual QA expectation for reload:
 Capture enough state so importing the YAML reproduces the same plot workspace from the same referenced datasets.
 
 ### 7.2 Spec Requirements
-- Supported schema is `version: 2` only (MVP clean refactor).
+- Supported schema is `version: 3` only (MVP clean refactor).
 - Include:
   - `version`
   - `datasets[]` registry:
@@ -188,28 +188,31 @@ Capture enough state so importing the YAML reproduces the same plot workspace fr
   - `active_plot`
   - `plots[]` with per-plot `x` config:
     - required `x.dataset` (dataset id)
-    - required `x.signal`
+    - required `x.signal.base`
+    - `x.signal.accessor` must be omitted
     - optional `x.label`
     - optional `x.range`
   - `plots[].y[]` lane groups with:
     - required lane `id` (human-editable)
     - optional lane `label`, `scale`, `range`
     - `signals` map (`label -> { dataset, signal }`)
+      - `signal` persists as `{ base, accessor? }`
+      - accessor set is fixed: `re`, `im`, `mag`, `phase`, `db20`
 - Exclude:
   - transient UI-only state not affecting rendered output.
-  - `mode` field (not part of v2 schema).
+  - `mode` field (not part of v3 schema).
   - per-trace `visible` field (import defaults to visible).
 - Explicit `*.wave-viewer.yaml` files are the primary interactive persistence artifact.
 - `<csv>.wave-viewer.yaml` fallback identity remains supported when no explicit layout is bound.
 - When a layout file and CSV are colocated, exports should prefer relative dataset references (for example `./trace.csv`) to reduce machine-specific path coupling.
 - Frozen/exportable snapshots are produced as separate artifacts:
   - `<name>.<dataset-id>.frozen.csv` (one per referenced dataset id)
-  - `<name>.frozen.wave-viewer.yaml` (same v2 schema, referencing frozen dataset CSV paths)
+  - `<name>.frozen.wave-viewer.yaml` (same v3 schema, referencing frozen dataset CSV paths)
   - Frozen export must not rebind or overwrite the active interactive layout file.
 
 Example:
 ```yaml
-version: 2
+version: 3
 datasets:
   - id: run-a
     path: ./tb.run_a.spice.csv
@@ -222,7 +225,8 @@ plots:
     name: Inverter Chain Transient
     x:
       dataset: run-a
-      signal: TIME
+      signal:
+        base: TIME
       label: Time (s)
     y:
       - id: lane-io
@@ -230,15 +234,18 @@ plots:
         signals:
           V_IN_A:
             dataset: run-a
-            signal: V(IN)
+            signal:
+              base: V(IN)
           V_IN_B:
             dataset: run-b
-            signal: V(IN)
+            signal:
+              base: V(IN)
       - id: lane-a
         signals:
           V_OUT_A:
             dataset: run-a
-            signal: V(OUT)
+            signal:
+              base: V(OUT)
 ```
 
 ### 7.3 Determinism Guarantees
