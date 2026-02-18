@@ -24,7 +24,7 @@ T-070:
   pr: 86
   merged: true
 T-071:
-  status: ready
+  status: in_progress
   pr: null
   merged: false
 T-072:
