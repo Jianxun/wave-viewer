@@ -1,6 +1,6 @@
 schema_version: 2
 T-065:
-  status: ready_for_review
+  status: review_clean
   pr: 81
   merged: false
 T-066:
