@@ -131,6 +131,7 @@ function createDeps(overrides?: {
   panelFixture?: PanelFixture;
   buildHtml?: string;
   loadDatasetError?: string;
+  loadedDataset?: LoadedDatasetRecord;
   initialWorkspace?: WorkspaceState;
   onDatasetLoaded?: ReturnType<typeof vi.fn>;
   resolveViewerSessionContext?: ReturnType<typeof vi.fn>;
@@ -180,7 +181,8 @@ function createDeps(overrides?: {
       if (overrides?.loadDatasetError) {
         throw new Error(overrides.loadDatasetError);
       }
-      return {
+      return (
+        overrides?.loadedDataset ?? {
         dataset: {
           path: datasetPath,
           rowCount: 3,
@@ -190,7 +192,7 @@ function createDeps(overrides?: {
           ]
         },
         defaultXSignal: "time"
-      };
+      });
     },
     createPanel: () => panelFixture.panel,
     onPanelCreated: () => "viewer-1",
@@ -250,7 +252,7 @@ function createLoadedDatasetFixture(
 
 function createReferenceOnlySpecYaml(datasetPath: string): string {
   return [
-    "version: 2",
+    "version: 3",
     "datasets:",
     "  - id: ds-1",
     `    path: ${datasetPath}`,
@@ -261,7 +263,8 @@ function createReferenceOnlySpecYaml(datasetPath: string): string {
     "    name: Plot 1",
     "    x:",
     "      dataset: ds-1",
-    "      signal: time",
+    "      signal:",
+    "        base: time",
     "    y:",
     "      - id: lane-main",
     "        signals: {}"
@@ -270,7 +273,7 @@ function createReferenceOnlySpecYaml(datasetPath: string): string {
 
 function createMultiDatasetSpecYaml(primaryDatasetPath: string, secondaryDatasetPath: string): string {
   return [
-    "version: 2",
+    "version: 3",
     "datasets:",
     "  - id: ds-a",
     `    path: ${primaryDatasetPath}`,
@@ -283,13 +286,15 @@ function createMultiDatasetSpecYaml(primaryDatasetPath: string, secondaryDataset
     "    name: Plot 1",
     "    x:",
     "      dataset: ds-a",
-    "      signal: time",
+    "      signal:",
+    "        base: time",
     "    y:",
     "      - id: lane-main",
     "        signals:",
     "          vin:",
     "            dataset: ds-b",
-    "            signal: vin"
+    "            signal:",
+    "              base: vin"
   ].join("\n");
 }
 
@@ -298,7 +303,7 @@ function createDatasetQualifiedReplaySpecYaml(
   secondaryDatasetPath: string
 ): string {
   return [
-    "version: 2",
+    "version: 3",
     "datasets:",
     "  - id: ds-a",
     `    path: ${primaryDatasetPath}`,
@@ -311,13 +316,15 @@ function createDatasetQualifiedReplaySpecYaml(
     "    name: Plot 1",
     "    x:",
     "      dataset: ds-a",
-    "      signal: time",
+    "      signal:",
+    "        base: time",
     "    y:",
     "      - id: lane-main",
     "        signals:",
     "          ib-trace:",
     "            dataset: ds-b",
-    "            signal: ib"
+    "            signal:",
+    "              base: ib"
   ].join("\n");
 }
 
@@ -1013,7 +1020,7 @@ describe("T-046 explicit layout commands", () => {
     await command();
 
     expect(showError).toHaveBeenCalledWith(
-      "Unsupported plot spec version: nope. Supported version is 2."
+      "Unsupported plot spec version: nope. Supported version is 3."
     );
   });
 
@@ -1896,7 +1903,7 @@ describe("T-048 external layout edit reloads", () => {
     const panelFixture = createPanelFixture();
     const readTextFile = vi.fn(() =>
       [
-        "version: 2",
+        "version: 3",
         "datasets:",
         "  - id: ds-1",
         "    path: /workspace/examples/simulations/ota.spice.csv",
@@ -1907,7 +1914,8 @@ describe("T-048 external layout edit reloads", () => {
         "    name: Plot 1",
         "    x:",
         "      dataset: ds-1",
-        "      signal: time",
+        "      signal:",
+        "        base: time",
         "    y:",
         "      - id: lane-main",
         "        signals: {}",
@@ -1915,7 +1923,8 @@ describe("T-048 external layout edit reloads", () => {
         "        signals:",
         "          trace-1:",
         "            dataset: ds-1",
-        "            signal: vin"
+        "            signal:",
+        "              base: vin"
       ].join("\n")
     );
     const loadDataset = vi.fn(() => createLoadedDatasetFixture());
@@ -2088,7 +2097,7 @@ describe("T-048 external layout edit reloads", () => {
     expect(applyImportedWorkspace).not.toHaveBeenCalled();
     expect(panelFixture.sentMessages).toEqual([]);
     expect(showError).toHaveBeenCalledWith(
-      "Wave Viewer layout reload failed for /workspace/layouts/lab.wave-viewer.yaml: Unsupported plot spec version: nope. Supported version is 2."
+      "Wave Viewer layout reload failed for /workspace/layouts/lab.wave-viewer.yaml: Unsupported plot spec version: nope. Supported version is 3."
     );
 
     controller.dispose();
@@ -2469,7 +2478,7 @@ describe("T-021 explorer load/reload actions", () => {
     expect(showError).not.toHaveBeenCalled();
     expect(writeTextFile).toHaveBeenCalledWith(
       "/workspace/examples/new.csv.wave-viewer.yaml",
-      expect.stringContaining("version: 2")
+      expect.stringContaining("version: 3")
     );
     expect(writeTextFile).toHaveBeenCalledWith(
       "/workspace/examples/new.csv.wave-viewer.yaml",
@@ -2986,6 +2995,95 @@ describe("T-018 normalized protocol handling", () => {
         }
       }
     ]);
+  });
+
+  it("handles validated updatePlotXAxis intent via host transaction and posts statePatch", async () => {
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace: createWorkspaceFixture()
+    });
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: {
+          scale: "log",
+          range: [1, 2]
+        },
+        requestId: "req-update-x-axis-1"
+      })
+    );
+
+    expect(panelFixture.sentMessages).toEqual([
+      {
+        version: PROTOCOL_VERSION,
+        type: "host/statePatch",
+        payload: {
+          revision: 1,
+          workspace: {
+            activePlotId: "plot-1",
+            plots: [
+              {
+                id: "plot-1",
+                name: "Plot 1",
+                xSignal: "time",
+                xScale: "log",
+                xRange: [1, 2],
+                axes: [{ id: "y1" }],
+                traces: [],
+                nextAxisNumber: 2
+              }
+            ]
+          },
+          viewerState: {
+            activePlotId: "plot-1",
+            activeAxisByPlotId: {
+              "plot-1": "y1"
+            }
+          },
+          reason: "updatePlotXAxis:plot-controls"
+        }
+      }
+    ]);
+  });
+
+  it("rejects updatePlotXAxis log toggles when plot x values are not positive finite", async () => {
+    const showError = vi.fn();
+    const { deps, panelFixture } = createDeps({
+      initialWorkspace: createWorkspaceFixture(),
+      loadedDataset: {
+        dataset: {
+          path: "/workspace/examples/simulations/ota.spice.csv",
+          rowCount: 3,
+          columns: [
+            { name: "time", values: [0, -1, -2] },
+            { name: "vin", values: [1, 2, 3] }
+          ]
+        },
+        defaultXSignal: "time"
+      }
+    });
+    deps.showError = showError;
+
+    await createOpenViewerCommand(deps)();
+
+    panelFixture.emitMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: {
+          scale: "log"
+        },
+        requestId: "req-update-x-axis-invalid-log"
+      })
+    );
+
+    expect(showError).toHaveBeenCalledWith(
+      "Cannot set X-axis to log scale: plot has no positive finite X samples."
+    );
+    expect(panelFixture.sentMessages).toEqual([]);
   });
 
   it("handles validated setTraceAxis intent via host transaction and persists lane reassignment", async () => {

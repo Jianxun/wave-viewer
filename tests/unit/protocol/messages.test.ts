@@ -434,6 +434,34 @@ describe("protocol envelope validators", () => {
     });
   });
 
+  it("accepts webview intent updatePlotXAxis payloads", () => {
+    const parsed = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: {
+          scale: "log",
+          range: [1, 10]
+        },
+        requestId: "req-x-axis-1"
+      })
+    );
+
+    expect(parsed).toEqual({
+      version: PROTOCOL_VERSION,
+      type: "webview/intent/updatePlotXAxis",
+      payload: {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: {
+          scale: "log",
+          range: [1, 10]
+        },
+        requestId: "req-x-axis-1"
+      }
+    });
+  });
+
   it("accepts webview intent renamePlot payloads", () => {
     const parsed = parseWebviewToHostMessage(
       createProtocolEnvelope("webview/intent/renamePlot", {
@@ -655,6 +683,47 @@ describe("protocol envelope validators", () => {
       })
     );
     expect(parsed).toBeUndefined();
+  });
+
+  it("rejects malformed webview intent updatePlotXAxis payloads", () => {
+    const missingPatch = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        requestId: "req-x-axis-1"
+      })
+    );
+    expect(missingPatch).toBeUndefined();
+
+    const emptyPatch = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: {},
+        requestId: "req-x-axis-2"
+      })
+    );
+    expect(emptyPatch).toBeUndefined();
+
+    const invalidScale = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: { scale: "symlog" },
+        requestId: "req-x-axis-3"
+      })
+    );
+    expect(invalidScale).toBeUndefined();
+
+    const invalidRange = parseWebviewToHostMessage(
+      createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+        viewerId: "viewer-1",
+        plotId: "plot-1",
+        patch: { range: [0, Number.NaN] },
+        requestId: "req-x-axis-4"
+      })
+    );
+    expect(invalidRange).toBeUndefined();
   });
 
   it("rejects malformed webview intent setTraceAxis payloads", () => {
