@@ -4627,3 +4627,12 @@ describe("T-043 plot rename host intent", () => {
     expect(source).not.toContain('dispatch({ type: "plot/rename"');
   });
 });
+
+describe("T-071 X-scale intent UI synchronization", () => {
+  it("restores x-scale select value to authoritative workspace state after posting update intent", () => {
+    const source = fs.readFileSync(path.resolve("src/webview/main.ts"), "utf8");
+
+    expect(source).toContain("const currentScale = getXAxisScale(activePlot.xScale);");
+    expect(source).toContain("xScaleSelectEl.value = currentScale;");
+  });
+});

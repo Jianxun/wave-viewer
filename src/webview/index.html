@@ -33,6 +33,13 @@
       <main id="plot-pane" class="pane plot-pane" aria-label="Plot Pane">
         <div class="plot-header">
           <h1 id="active-plot-title">Plot 1</h1>
+          <div class="plot-header-scale">
+            <label for="x-scale-select">X Scale</label>
+            <select id="x-scale-select" class="chip-select" aria-label="X-axis scale">
+              <option value="linear">Linear</option>
+              <option value="log">Log</option>
+            </select>
+          </div>
           <div class="plot-header-actions">
             <button id="refresh-signals-button" type="button" class="chip-button">Refresh</button>
             <button id="clear-plot-button" type="button" class="chip-button">Clear Plot</button>

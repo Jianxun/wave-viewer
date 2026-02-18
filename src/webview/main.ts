@@ -10,6 +10,7 @@ import { renderSignalList } from "./components/SignalList";
 import { renderTabs } from "./components/Tabs";
 import {
   getAxisLaneDomains,
+  getXAxisScale,
   getPlotXBounds,
   mapLaneIndexToPlotly,
   parseRelayoutRanges,
@@ -85,6 +86,7 @@ const tabsEl = getRequiredElement("plot-tabs");
 const activePlotTitleEl = getRequiredElement("active-plot-title");
 const refreshSignalsButtonEl = getRequiredElement<HTMLButtonElement>("refresh-signals-button");
 const clearPlotButtonEl = getRequiredElement<HTMLButtonElement>("clear-plot-button");
+const xScaleSelectEl = getRequiredElement<HTMLSelectElement>("x-scale-select");
 const bridgeStatusEl = getRequiredElement("bridge-status");
 const datasetStatusEl = getRequiredElement("dataset-status");
 const signalListEl = getRequiredElement("signal-list");
@@ -106,7 +108,8 @@ const plotRenderer = createPlotRenderer({
     }
 
     const activePlot = getActivePlot(workspace);
-    const updates = parseRelayoutRanges(eventData, activePlot.axes);
+    const xScale = getXAxisScale(activePlot.xScale);
+    const updates = parseRelayoutRanges(eventData, activePlot.axes, xScale);
     if (!updates.hasChanges) {
       return;
     }
@@ -149,7 +152,8 @@ const plotRenderer = createPlotRenderer({
       void plotRenderer
         .setXViewport({
           activeRange: normalizedXRange,
-          boundRange: xBounds
+          boundRange: xBounds,
+          xScale
         })
         .finally(() => {
           suppressViewportNormalization = false;
@@ -398,6 +402,20 @@ function postRefreshSignals(): void {
   );
 }
 
+function postUpdatePlotXAxis(payload: {
+  plotId: string;
+  patch: { scale?: "linear" | "log"; range?: [number, number] };
+}): void {
+  vscode.postMessage(
+    createProtocolEnvelope("webview/intent/updatePlotXAxis", {
+      viewerId,
+      plotId: payload.plotId,
+      patch: payload.patch,
+      requestId: `${viewerId}:intent:${nextRequestId++}`
+    })
+  );
+}
+
 function renderCanvasDropOverlay(axes: ReadonlyArray<{ id: AxisId }>): void {
   plotDropOverlayEl.replaceChildren();
   const laneDomains = getAxisLaneDomains(axes);
@@ -450,6 +468,7 @@ async function renderWorkspace(): Promise<void> {
 
   const activePlot = getActivePlot(workspace);
   activePlotTitleEl.textContent = activePlot.name;
+  xScaleSelectEl.value = getXAxisScale(activePlot.xScale);
 
   renderTabs({
     container: tabsEl,
@@ -628,6 +647,23 @@ clearPlotButtonEl.addEventListener("click", () => {
 
 refreshSignalsButtonEl.addEventListener("click", () => {
   postRefreshSignals();
+});
+
+xScaleSelectEl.addEventListener("change", () => {
+  if (!workspace) {
+    return;
+  }
+  const activePlot = getActivePlot(workspace);
+  const currentScale = getXAxisScale(activePlot.xScale);
+  const nextScale = xScaleSelectEl.value === "log" ? "log" : "linear";
+  if (nextScale === currentScale) {
+    return;
+  }
+  postUpdatePlotXAxis({
+    plotId: activePlot.id,
+    patch: { scale: nextScale }
+  });
+  xScaleSelectEl.value = currentScale;
 });
 
 const viewportShortcutHandler = (event: KeyboardEvent) => {
@@ -812,7 +848,11 @@ async function resetActivePlotViewportAndAxes(): Promise<void> {
   });
   suppressViewportNormalization = true;
   try {
-    await plotRenderer.resetAxes({ yAxisLayoutKeys, xRange: xBounds });
+    await plotRenderer.resetAxes({
+      yAxisLayoutKeys,
+      xRange: xBounds,
+      xScale: getXAxisScale(activePlot.xScale)
+    });
   } finally {
     suppressViewportNormalization = false;
   }
@@ -841,7 +881,8 @@ async function panViewportOrInitialize(payload: {
     try {
       await plotRenderer.setXViewport({
         activeRange: xBounds,
-        boundRange: xBounds
+        boundRange: xBounds,
+        xScale: getXAxisScale(activePlot.xScale)
       });
     } finally {
       suppressViewportNormalization = false;

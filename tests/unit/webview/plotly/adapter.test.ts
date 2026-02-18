@@ -166,6 +166,22 @@ describe("plotly adapter", () => {
     expect(figure.layout.yaxis2).toMatchObject({ range: [0, 5] });
   });
 
+  it("maps persisted raw x-range to plotly log units when x-scale is log", () => {
+    const figure = buildPlotlyFigure({
+      plot: createPlot({
+        xScale: "log",
+        xRange: [1, 1000]
+      }),
+      traceTuplesBySourceId
+    });
+
+    expect(figure.layout.xaxis).toMatchObject({
+      type: "log",
+      autorange: false,
+      range: [0, 3]
+    });
+  });
+
   it("uses axis order as top-to-bottom lane order for domains", () => {
     const figure = buildPlotlyFigure({
       plot: createPlot({
@@ -329,6 +345,25 @@ describe("plotly adapter", () => {
       hasChanges: true,
       xRange: undefined,
       axisRanges: [{ axisId: "y1", range: undefined }]
+    });
+  });
+
+  it("converts relayout x-range from plotly log units back to raw units", () => {
+    const axisIds: AxisState[] = [{ id: "y1" }];
+
+    const update = parseRelayoutRanges(
+      {
+        "xaxis.range[0]": 1,
+        "xaxis.range[1]": 3
+      },
+      axisIds,
+      "log"
+    );
+
+    expect(update).toEqual({
+      hasChanges: true,
+      xRange: [10, 1000],
+      axisRanges: []
     });
   });
 
