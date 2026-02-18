@@ -977,7 +977,7 @@ export function createRemoveLoadedFileCommand(
   return (item?: unknown) => {
     const datasetPath = resolveDatasetPathFromCommandArgument(item);
     if (!datasetPath) {
-      deps.showError("Select a loaded CSV file in the Wave Viewer side panel.");
+      deps.showError("Select a loaded dataset file in the Wave Viewer side panel.");
       return;
     }
 
@@ -1002,7 +1002,7 @@ export function createExportSpecCommand(deps: ExportSpecCommandDeps): () => Prom
   return async () => {
     const activeDocument = deps.getActiveDocument();
     if (!activeDocument) {
-      deps.showError("Open a CSV file in the editor before exporting a Wave Viewer spec.");
+      deps.showError("Open a dataset file in the editor before exporting a Wave Viewer spec.");
       return;
     }
 
@@ -1044,7 +1044,7 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
   return async () => {
     const activeDocument = deps.getActiveDocument();
     if (!activeDocument) {
-      deps.showError("Open a CSV file in the editor before importing a Wave Viewer spec.");
+      deps.showError("Open a dataset file in the editor before importing a Wave Viewer spec.");
       return;
     }
 
@@ -1080,7 +1080,7 @@ export function createImportSpecCommand(deps: ImportSpecCommandDeps): () => Prom
 
     if (!isSameDatasetReference(parsed.datasetPath, activeDocument.uri.fsPath)) {
       deps.showError(
-        `Wave Viewer reference-only spec points to '${parsed.datasetPath}', but the active CSV is '${activeDocument.uri.fsPath}'. Open the referenced CSV or re-export the spec from the current file.`
+        `Wave Viewer reference-only spec points to '${parsed.datasetPath}', but the active dataset is '${activeDocument.uri.fsPath}'. Open the referenced dataset file or re-export the spec from the current file.`
       );
       return;
     }
@@ -1626,7 +1626,7 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
-  return "Failed to load CSV dataset.";
+  return "Failed to load dataset.";
 }
 
 function cloneLaneIdMap(source: LayoutAxisLaneIdMap): LayoutAxisLaneIdMap {

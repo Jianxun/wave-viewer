@@ -1,7 +1,7 @@
 {
   "name": "wave-viewer",
   "displayName": "Wave Viewer",
-  "description": "CSV waveform viewer for VS Code",
+  "description": "CSV/HDF5 waveform viewer for VS Code",
   "version": "0.0.1",
   "private": true,
   "publisher": "local",
@@ -63,7 +63,7 @@
       },
       {
         "command": "waveViewer.signalBrowser.loadCsvFiles",
-        "title": "Wave Viewer: Load CSV File...",
+        "title": "Wave Viewer: Load Waveform File...",
         "icon": "$(folder-opened)"
       },
       {

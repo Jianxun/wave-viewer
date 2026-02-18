@@ -1,14 +1,14 @@
 # Wave Viewer
 
-Wave Viewer is a VS Code extension for plotting numeric signals from local CSV files in a tabbed, multi-axis Plotly workspace.
+Wave Viewer is a VS Code extension for plotting numeric signals from local CSV and HDF5 files in a tabbed, multi-axis Plotly workspace.
 
 ## Usage Workflow
 
 ### 1) Load Data and Open a Viewer
 
-1. Run `Wave Viewer: Load CSV File...` from the side-panel title actions.
-2. Select one or more CSV files.
-3. Wave Viewer resolves `<csv>.wave-viewer.yaml` for each loaded dataset:
+1. Run `Wave Viewer: Load Waveform File...` from the side-panel title actions.
+2. Select one or more waveform files (`.csv` or `.h5`).
+3. Wave Viewer resolves `<dataset>.wave-viewer.yaml` for each loaded dataset:
    - if present, it opens/binds a viewer to that layout;
    - if missing, it creates the layout from initial state and opens/binds a viewer.
 
@@ -39,7 +39,7 @@ Run `Wave Viewer: Export Frozen Bundle` to export immutable replay artifacts fro
 
 ### 5) Reload Behavior (Manual QA)
 
-- Run `Wave Viewer: Reload All Files` after editing a loaded CSV file.
+- Run `Wave Viewer: Reload All Files` after editing a loaded CSV/HDF5 file.
 - Expected:
   - Existing plotted traces refresh immediately without adding/dropping any new signal.
   - Reload uses one atomic replay update (`host/replaySnapshot`) per impacted viewer.
@@ -49,7 +49,7 @@ Run `Wave Viewer: Export Frozen Bundle` to export immutable replay artifacts fro
 
 - Lane height and spacing are deterministic/fixed for now.
 - Large-dataset performance optimizations (for example decimation) are deferred.
-- Local/offline CSV workflows only (no remote connectors).
+- Local/offline CSV/HDF5 workflows only (no remote connectors).
 
 ## Verification
 

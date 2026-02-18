@@ -1,14 +1,13 @@
 import { execFileSync } from "node:child_process";
+import * as path from "node:path";
 
 import type { Dataset } from "../dataset/types";
 
 export type LoadedNormalizedHdf5Dataset = {
   dataset: Dataset;
-  runId: string;
 };
 
 type NormalizedHdf5LoaderOutput = {
-  runId: string;
   rowCount: number;
   columns: Array<{ name: string; values: number[] }>;
 };
@@ -34,105 +33,65 @@ const HDF5_LOADER_SCRIPT = String.raw`
 
   const file = new h5wasm.File(filePath, "r");
   try {
-    const requiredFileAttrs = ["created_by", "source_simulator", "source_file"];
-    const format = file.attrs.format?.value;
-    if (format !== "wave_viewer_hdf5") {
-      fail("expected file attribute 'format' to equal 'wave_viewer_hdf5'.");
-    }
-
-    const formatVersion = file.attrs.format_version?.value;
-    if (Number(formatVersion) !== 1) {
-      fail("expected file attribute 'format_version' to equal 1.");
-    }
-
-    for (const requiredAttr of requiredFileAttrs) {
-      if (file.attrs[requiredAttr]?.value === undefined) {
-        fail("missing required file attribute '" + requiredAttr + "'.");
-      }
-    }
-
-    const requiredNode = (nodePath) => {
+    const requiredNode = (nodePath, message) => {
       try {
         const node = file.get(nodePath);
         if (!node) {
-          fail("missing required dataset '" + nodePath + "'.");
+          fail(message ?? "missing required dataset '" + nodePath + "'.");
         }
         return node;
       } catch {
-        fail("missing required dataset '" + nodePath + "'.");
+        fail(message ?? "missing required dataset '" + nodePath + "'.");
       }
     };
 
-    requiredNode("/runs");
-    requiredNode("/catalog");
-    const catalogRuns = requiredNode("/catalog/runs");
-    const catalogRows = catalogRuns.to_array();
+    const readAttr = (attrsOwner, key) => attrsOwner?.attrs?.[key]?.value;
 
-    if (!Array.isArray(catalogRows) || catalogRows.length === 0) {
-      fail("'/catalog/runs' must contain at least one run descriptor.");
+    const vectorsPath = "/vectors";
+    const vectorNamesPath = "/vector_names";
+
+    requiredNode("/indep_var");
+    requiredNode("/signals");
+    const vectorsDataset = requiredNode(vectorsPath);
+    const vectorNamesDataset = requiredNode(vectorNamesPath);
+
+    const indepVarNameRaw = readAttr(file, "indep_var_name");
+    const indepVarName =
+      typeof indepVarNameRaw === "string" ? indepVarNameRaw.trim() : String(indepVarNameRaw ?? "").trim();
+    if (indepVarName.length === 0) {
+      fail("missing required file attribute 'indep_var_name'.");
+    }
+    requiredNode("/indep_var/" + indepVarName, "missing required dataset '/indep_var/" + indepVarName + "'.");
+
+    const indepVarIndex = Number(readAttr(file, "indep_var_index"));
+    if (!Number.isInteger(indepVarIndex) || indepVarIndex < 0) {
+      fail("file attribute 'indep_var_index' must be a non-negative integer.");
     }
 
-    const firstRow = catalogRows[0];
-    let runId;
-    if (typeof firstRow === "string") {
-      runId = firstRow;
-    } else if (Array.isArray(firstRow)) {
-      const members = catalogRuns.dtype?.compound_type?.members;
-      const runIdIndex = Array.isArray(members)
-        ? members.findIndex((member) => member?.name === "run_id")
-        : -1;
-      if (runIdIndex < 0) {
-        fail("'/catalog/runs' compound records must include required field 'run_id'.");
-      }
-      runId = firstRow[runIdIndex];
-    } else if (firstRow && typeof firstRow === "object" && "run_id" in firstRow) {
-      runId = firstRow.run_id;
+    const declaredNumPoints = Number(readAttr(file, "num_points"));
+    if (!Number.isInteger(declaredNumPoints) || declaredNumPoints < 0) {
+      fail("file attribute 'num_points' must be a non-negative integer.");
     }
 
-    if (typeof runId !== "string" || runId.trim().length === 0) {
-      fail("first '/catalog/runs' entry must include a non-empty string 'run_id'.");
+    const declaredNumVariables = Number(readAttr(file, "num_variables"));
+    if (!Number.isInteger(declaredNumVariables) || declaredNumVariables < 0) {
+      fail("file attribute 'num_variables' must be a non-negative integer.");
     }
-
-    const selectedRunId = runId.trim();
-    const runPrefix = "/runs/" + selectedRunId;
-    const runAttrs = requiredNode(runPrefix + "/attrs");
-
-    const requiredRunAttrs = ["analysis_type", "point_count", "is_complex", "indep_name"];
-    for (const requiredAttr of requiredRunAttrs) {
-      if (runAttrs.attrs[requiredAttr]?.value === undefined) {
-        fail("missing required attribute '/runs/" + selectedRunId + "/attrs:" + requiredAttr + "'.");
-      }
-    }
-
-    if (Boolean(runAttrs.attrs.is_complex.value)) {
-      fail("'/runs/" + selectedRunId + "/attrs:is_complex' true is not supported yet.");
-    }
-
-    const vectorsDataset = requiredNode(runPrefix + "/vectors");
-    const vectorNamesDataset = requiredNode(runPrefix + "/vector_names");
 
     const vectors = vectorsDataset.to_array();
     const vectorNames = vectorNamesDataset.to_array();
 
     if (!Array.isArray(vectors)) {
-      fail("'" + runPrefix + "/vectors' must be a 2D numeric dataset.");
+      fail("'" + vectorsPath + "' must be a 2D numeric dataset.");
     }
     if (!Array.isArray(vectorNames)) {
-      fail("'" + runPrefix + "/vector_names' must be a 1D string dataset.");
+      fail("'" + vectorNamesPath + "' must be a 1D string dataset.");
     }
 
     const rowCount = vectors.length;
-    const declaredPointCount = Number(runAttrs.attrs.point_count.value);
-    if (!Number.isFinite(declaredPointCount) || declaredPointCount < 0) {
-      fail("'/runs/" + selectedRunId + "/attrs:point_count' must be a non-negative integer.");
-    }
-    if (rowCount !== declaredPointCount) {
+    if (rowCount !== declaredNumPoints) {
       fail(
-        "'" + runPrefix + "/attrs:point_count' (" + declaredPointCount + ") must match '/runs/" +
-          selectedRunId +
-          "/vectors' row count (" +
-          rowCount +
-          ")."
+        "file attribute 'num_points' (" + declaredNumPoints + ") must match '" + vectorsPath + "' row count (" + rowCount + ")."
       );
     }
 
@@ -140,43 +99,64 @@ const HDF5_LOADER_SCRIPT = String.raw`
     for (let rowIndex = 0; rowIndex < vectors.length; rowIndex += 1) {
       const row = vectors[rowIndex];
       if (!Array.isArray(row)) {
-        fail("'" + runPrefix + "/vectors' must be a 2D numeric dataset.");
+        fail("'" + vectorsPath + "' must be a 2D numeric dataset.");
       }
       if (rowIndex === 0) {
         columnCount = row.length;
       } else if (row.length !== columnCount) {
-        fail("'" + runPrefix + "/vectors' rows must all have equal column count.");
+        fail("'" + vectorsPath + "' rows must all have equal column count.");
       }
     }
 
-    if (vectorNames.length !== columnCount) {
+    if (columnCount !== declaredNumVariables) {
       fail(
-        "'" + runPrefix +
-          "/vector_names' length (" +
-          vectorNames.length +
+        "file attribute 'num_variables' (" +
+          declaredNumVariables +
           ") must match '" +
-          runPrefix +
-          "/vectors' column count (" +
+          vectorsPath +
+          "' column count (" +
           columnCount +
           ")."
       );
     }
 
-    const columns = vectorNames.map((rawName, columnIndex) => {
+    if (vectorNames.length !== columnCount) {
+      fail(
+        "'" +
+          vectorNamesPath +
+          "' length (" +
+          vectorNames.length +
+          ") must match '" +
+          vectorsPath +
+          "' column count (" +
+          columnCount +
+          ")."
+      );
+    }
+
+    if (indepVarIndex >= columnCount) {
+      fail("file attribute 'indep_var_index' is out of range for '" + vectorsPath + "' columns.");
+    }
+
+    const columnNames = vectorNames.map((rawName) => {
       if (typeof rawName !== "string" || rawName.trim().length === 0) {
-        fail("'" + runPrefix + "/vector_names' entries must be non-empty strings.");
+        fail("'" + vectorNamesPath + "' entries must be non-empty strings.");
       }
-      const name = rawName.trim();
+      return rawName.trim();
+    });
+
+    if (columnNames[indepVarIndex] !== indepVarName) {
+      fail(
+        "file attributes 'indep_var_name' and 'indep_var_index' must reference the same vector name."
+      );
+    }
+
+    const columns = columnNames.map((name, columnIndex) => {
       const values = vectors.map((row, rowIndex) => {
         const value = Number(row[columnIndex]);
         if (!Number.isFinite(value)) {
           fail(
-            "'" + runPrefix +
-              "/vectors' contains non-numeric value at row " +
-              rowIndex +
-              ", column " +
-              columnIndex +
-              "."
+            "'" + vectorsPath + "' contains non-numeric value at row " + rowIndex + ", column " + columnIndex + "."
           );
         }
         return value;
@@ -186,7 +166,6 @@ const HDF5_LOADER_SCRIPT = String.raw`
 
     console.log(
       JSON.stringify({
-        runId: selectedRunId,
         rowCount,
         columns
       })
@@ -210,6 +189,9 @@ export function loadNormalizedHdf5Dataset(filePath: string): LoadedNormalizedHdf
   try {
     stdout = execFileSync(process.execPath, ["-e", HDF5_LOADER_SCRIPT, filePath], {
       encoding: "utf8",
+      // Ensure bare specifier resolution (for example "h5wasm/node") runs from extension root,
+      // not the user's currently opened workspace folder.
+      cwd: path.resolve(__dirname, ".."),
       maxBuffer: 32 * 1024 * 1024
     });
   } catch (error) {
@@ -228,15 +210,9 @@ export function loadNormalizedHdf5Dataset(filePath: string): LoadedNormalizedHdf
     throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing columns.`);
   }
 
-  const runId = typeof parsed.runId === "string" ? parsed.runId : "";
-  if (runId.trim().length === 0) {
-    throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing run_id.`);
-  }
-
   return {
-    runId,
     dataset: {
-      path: `${filePath}#${runId}`,
+      path: filePath,
       rowCount: parsed.rowCount,
       columns: parsed.columns
     }
