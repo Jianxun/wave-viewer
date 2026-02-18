@@ -16,7 +16,7 @@ Adopt host-side complex support with lazy real-valued projection and structured 
 4. Derived accessor set and order are fixed: `re`, `im`, `mag`, `phase`, `db20`.
 5. Derived signal identity at runtime is string-based (`<base>.<accessor>`), but layout persistence uses structured signal refs:
    - `{ base: string, accessor?: "re"|"im"|"mag"|"phase"|"db20" }`
-6. Frequency (independent variable) must be real-valued. If frequency samples are complex-encoded, import fails with an actionable error.
+6. Frequency (independent variable) plotting values always use the real part. If complex-encoded frequency has significant imaginary content beyond a practical sanity tolerance, import fails with an actionable error.
 7. `db20` projection uses fixed floor policy with `eps = 1e-30` (approximately `-600 dB`) to guarantee finite output.
 
 Projection math for each complex sample `(re, im)`:
