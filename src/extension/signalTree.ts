@@ -294,20 +294,6 @@ function toSignalPath(signal: string): string[] {
     return [signal];
   }
 
-  const wrappedMatch = /^([A-Za-z_][A-Za-z0-9_]*)\((.+)\)$/.exec(trimmedSignal);
-  if (wrappedMatch) {
-    const signalType = wrappedMatch[1];
-    const rawBody = wrappedMatch[2];
-    const bodySegments = rawBody
-      .split(":")
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0);
-    if (bodySegments.length > 1) {
-      const leaf = `${signalType}(${bodySegments[bodySegments.length - 1]})`;
-      return [...bodySegments.slice(0, -1), leaf];
-    }
-  }
-
   if (trimmedSignal.includes("/")) {
     const pathSegments = trimmedSignal
       .split("/")

@@ -2786,6 +2786,40 @@ describe("T-022 follow-up signal actions after remove", () => {
       "CSV file 'removed.csv' was removed from loaded files. Load it again before using side-panel signal actions."
     );
   });
+
+  it("normalizes HDF5 canonical alias signal selections to VDS path signals", () => {
+    const showError = vi.fn();
+    const showWarning = vi.fn();
+    const selection = resolveSidePanelSelection({
+      selection: { signal: "V(XOTA:D)", datasetPath: "/workspace/examples/tb.spice.h5" },
+      getLoadedDataset: () => ({
+        dataset: {
+          path: "/workspace/examples/tb.spice.h5",
+          rowCount: 2,
+          columns: [
+            { name: "sweep", values: [0, 1] },
+            { name: "XOTA/V(D)", values: [1, 2] }
+          ]
+        },
+        defaultXSignal: "sweep",
+        explorerSignals: ["XOTA/V(D)"],
+        signalAliasLookup: {
+          "V(XOTA:D)": "XOTA/V(D)"
+        }
+      }),
+      getSingleLoadedDatasetPath: () => undefined,
+      wasDatasetRemoved: () => false,
+      showError,
+      showWarning
+    });
+
+    expect(showError).not.toHaveBeenCalled();
+    expect(showWarning).not.toHaveBeenCalled();
+    expect(selection).toMatchObject({
+      documentPath: "/workspace/examples/tb.spice.h5",
+      signal: "XOTA/V(D)"
+    });
+  });
 });
 
 describe("T-018 normalized protocol handling", () => {

@@ -119,14 +119,14 @@ describe("signal tree dataset registry entries", () => {
     ]);
   });
 
-  it("renders colon-delimited wrapped signal names as hierarchical groups", async () => {
+  it("renders slash-delimited signal names as hierarchical groups", async () => {
     const provider = createSignalTreeDataProvider(createVscodeShim() as never);
 
     provider.setLoadedDatasets([
       {
         datasetPath: "/workspace/examples/tb.spice.h5",
         fileName: "tb.spice.h5",
-        signals: ["sweep", "V(XOTA:D)", "V(XOTA:TAIL)", "V(OUT)"]
+        signals: ["sweep", "XOTA/V(D)", "XOTA/V(TAIL)", "V(OUT)"]
       }
     ]);
 
@@ -162,14 +162,14 @@ describe("signal tree dataset registry entries", () => {
     expect(level2).toEqual([
       {
         kind: "signal",
-        signal: "V(XOTA:D)",
+        signal: "XOTA/V(D)",
         label: "V(D)",
         datasetPath: "/workspace/examples/tb.spice.h5",
         fileName: "tb.spice.h5"
       },
       {
         kind: "signal",
-        signal: "V(XOTA:TAIL)",
+        signal: "XOTA/V(TAIL)",
         label: "V(TAIL)",
         datasetPath: "/workspace/examples/tb.spice.h5",
         fileName: "tb.spice.h5"

@@ -307,7 +307,7 @@ export type LayoutExternalEditControllerDeps = {
   readTextFile(layoutUri: string): string;
   readFileStats(layoutUri: string): { mtimeMs: number; sizeBytes: number } | undefined;
   resolveBindingsForLayout(layoutUri: string): LayoutBindingTarget[];
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   applyImportedWorkspace(datasetPath: string, workspace: WorkspaceState): HostStateSnapshot;
   recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
   recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
@@ -348,8 +348,8 @@ export type CommandDeps = {
   extensionUri: unknown;
   getActiveDocument(): ActiveDocumentLike | undefined;
   getPreferredDatasetPath?(): string | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
-  onDatasetLoaded?(documentPath: string, loaded: { dataset: Dataset; defaultXSignal: string }): void;
+  loadDataset(documentPath: string): LoadedDatasetRecord;
+  onDatasetLoaded?(documentPath: string, loaded: LoadedDatasetRecord): void;
   resolveViewerSessionContext?(viewerId: string): ViewerSessionContext | undefined;
   getCachedWorkspace?(documentPath: string): WorkspaceState | undefined;
   setCachedWorkspace?(documentPath: string, workspace: WorkspaceState): void;
@@ -367,11 +367,8 @@ export type CommandDeps = {
 
 export type LoadCsvFilesCommandDeps = {
   showOpenDialog(): Promise<string[] | undefined>;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
-  registerLoadedDataset(
-    documentPath: string,
-    loaded: { dataset: Dataset; defaultXSignal: string }
-  ): void;
+  loadDataset(documentPath: string): LoadedDatasetRecord;
+  registerLoadedDataset(documentPath: string, loaded: LoadedDatasetRecord): void;
   fileExists?(filePath: string): boolean;
   readTextFile?(filePath: string): string;
   writeTextFile?(filePath: string, text: string): void;
@@ -383,15 +380,17 @@ export type LoadCsvFilesCommandDeps = {
   showError(message: string): void;
 };
 
-export type LoadedDatasetRecord = { dataset: Dataset; defaultXSignal: string };
+export type LoadedDatasetRecord = {
+  dataset: Dataset;
+  defaultXSignal: string;
+  explorerSignals?: string[];
+  signalAliasLookup?: Record<string, string>;
+};
 
 export type ReloadAllLoadedFilesCommandDeps = {
   getLoadedDatasetPaths(): readonly string[];
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
-  registerLoadedDataset(
-    documentPath: string,
-    loaded: { dataset: Dataset; defaultXSignal: string }
-  ): void;
+  loadDataset(documentPath: string): LoadedDatasetRecord;
+  registerLoadedDataset(documentPath: string, loaded: LoadedDatasetRecord): void;
   onReloadCompleted?(reloadedDatasetPaths: readonly string[]): PromiseLike<void> | void;
   showError(message: string): void;
 };
@@ -441,7 +440,7 @@ export type RunResolvedSidePanelQuickAddDeps = {
 
 export type ExportSpecCommandDeps = {
   getActiveDocument(): ActiveDocumentLike | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   showError(message: string): void;
   showInformation(message: string): void;
@@ -451,7 +450,7 @@ export type ExportSpecCommandDeps = {
 
 export type ImportSpecCommandDeps = {
   getActiveDocument(): ActiveDocumentLike | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   setCachedWorkspace(documentPath: string, workspace: WorkspaceState): void;
   showError(message: string): void;
   showInformation(message: string): void;
@@ -463,14 +462,11 @@ export type OpenLayoutCommandDeps = {
   getActiveViewerId(): string | undefined;
   showOpenDialog(): Promise<string | undefined>;
   readTextFile(filePath: string): string;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   setCachedWorkspace(documentPath: string, workspace: WorkspaceState): HostStateSnapshot;
   bindViewerToLayout(viewerId: string, layoutUri: string, datasetPath: string): void;
   ensureViewerForDataset?(datasetPath: string): Promise<string | undefined>;
-  registerLoadedDataset?(
-    documentPath: string,
-    loaded: { dataset: Dataset; defaultXSignal: string }
-  ): void;
+  registerLoadedDataset?(documentPath: string, loaded: LoadedDatasetRecord): void;
   recordLayoutAxisLaneIdMap?(layoutUri: string, mapping: LayoutAxisLaneIdMap): void;
   recordLayoutXDatasetPathMap?(layoutUri: string, mapping: LayoutPlotXDatasetPathMap): void;
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
@@ -482,7 +478,7 @@ export type OpenLayoutCommandDeps = {
 export type SaveLayoutCommandDeps = {
   getActiveViewerId(): string | undefined;
   resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
   resolveLayoutXDatasetPathMap?(layoutUri: string): LayoutPlotXDatasetPathMap | undefined;
@@ -494,7 +490,7 @@ export type SaveLayoutCommandDeps = {
 export type ClearLayoutCommandDeps = {
   getActiveViewerId(): string | undefined;
   resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   commitHostStateTransaction(transaction: HostStateTransaction): HostStateTransactionResult;
   getPanelForViewer(viewerId: string): WebviewPanelLike | undefined;
   showWarning(message: string): PromiseLike<string | undefined>;
@@ -504,7 +500,7 @@ export type ClearLayoutCommandDeps = {
 export type SaveLayoutAsCommandDeps = {
   getActiveViewerId(): string | undefined;
   resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
   resolveLayoutXDatasetPathMap?(layoutUri: string): LayoutPlotXDatasetPathMap | undefined;
@@ -520,7 +516,7 @@ export type SaveLayoutAsCommandDeps = {
 export type ExportFrozenBundleCommandDeps = {
   getActiveViewerId(): string | undefined;
   resolveViewerSessionContext(viewerId: string): ViewerSessionContext | undefined;
-  loadDataset(documentPath: string): { dataset: Dataset; defaultXSignal: string };
+  loadDataset(documentPath: string): LoadedDatasetRecord;
   getCachedWorkspace(documentPath: string): WorkspaceState | undefined;
   resolveLayoutAxisLaneIdMap?(layoutUri: string): LayoutAxisLaneIdMap | undefined;
   resolveLayoutXDatasetPathMap?(layoutUri: string): LayoutPlotXDatasetPathMap | undefined;
