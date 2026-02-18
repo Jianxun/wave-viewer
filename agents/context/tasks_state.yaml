@@ -20,14 +20,14 @@ T-069:
   pr: 85
   merged: true
 T-070:
-  status: backlog
+  status: ready
   pr: null
   merged: false
 T-071:
-  status: backlog
+  status: ready
   pr: null
   merged: false
 T-072:
-  status: backlog
+  status: ready
   pr: null
   merged: false
