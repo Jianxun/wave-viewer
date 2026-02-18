@@ -24,9 +24,9 @@ T-070:
   pr: 86
   merged: true
 T-071:
-  status: review_clean
+  status: done
   pr: 87
-  merged: false
+  merged: true
 T-072:
   status: ready
   pr: null
