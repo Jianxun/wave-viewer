@@ -1,12 +1,28 @@
 import { execFileSync } from "node:child_process";
 import * as path from "node:path";
 
-import type { Dataset } from "../dataset/types";
+import {
+  COMPLEX_SIGNAL_ACCESSORS,
+  parseComplexSignalReference,
+  type ComplexSignalAccessor,
+  type Dataset
+} from "../dataset/types";
+
+export type Hdf5SignalValueProjection = {
+  kind: "real";
+  values: number[];
+} | {
+  kind: "complex";
+  re: number[];
+  im: number[];
+};
 
 export type LoadedNormalizedHdf5Dataset = {
   dataset: Dataset;
   signalPaths: string[];
   signalAliasLookup: Record<string, string>;
+  complexSignalPaths: string[];
+  resolveSignalValues(signal: string): number[] | undefined;
 };
 
 type NormalizedHdf5LoaderOutput = {
@@ -14,7 +30,11 @@ type NormalizedHdf5LoaderOutput = {
   columns: Array<{ name: string; values: number[] }>;
   signalPaths: string[];
   signalAliasLookup: Record<string, string>;
+  complexSignalPaths: string[];
+  signalDataByPath: Record<string, Hdf5SignalValueProjection>;
 };
+
+const DB20_EPS = 1e-30;
 
 const HDF5_LOADER_SCRIPT = String.raw`
 (async () => {
@@ -162,16 +182,96 @@ const HDF5_LOADER_SCRIPT = String.raw`
       fail("'/signals' must be an HDF5 group.");
     }
 
-    const readColumnValues = (columnIndex) =>
-      vectors.map((row, rowIndex) => {
-        const value = Number(row[columnIndex]);
-        if (!Number.isFinite(value)) {
+    const decodeSample = (sample, rowIndex, columnIndex) => {
+      if (typeof sample === "number" && Number.isFinite(sample)) {
+        return { kind: "real", value: sample };
+      }
+
+      if (Array.isArray(sample)) {
+        if (
+          sample.length === 1 &&
+          typeof sample[0] === "number" &&
+          Number.isFinite(sample[0])
+        ) {
+          return { kind: "real", value: sample[0] };
+        }
+
+        if (
+          sample.length === 2 &&
+          typeof sample[0] === "number" &&
+          typeof sample[1] === "number" &&
+          Number.isFinite(sample[0]) &&
+          Number.isFinite(sample[1])
+        ) {
+          return {
+            kind: "complex",
+            re: sample[0],
+            im: sample[1]
+          };
+        }
+      }
+
+      fail(
+        "'" +
+          vectorsPath +
+          "' contains unsupported sample encoding at row " +
+          rowIndex +
+          ", column " +
+          columnIndex +
+          ". Expected finite scalar or complex pair [re, im]."
+      );
+    };
+
+    const decodedColumnCache = new Map();
+    const decodeColumn = (columnIndex) => {
+      if (decodedColumnCache.has(columnIndex)) {
+        return decodedColumnCache.get(columnIndex);
+      }
+
+      let columnKind = null;
+      const values = [];
+      const re = [];
+      const im = [];
+      for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+        const sample = decodeSample(vectors[rowIndex][columnIndex], rowIndex, columnIndex);
+        if (columnKind === null) {
+          columnKind = sample.kind;
+        }
+        if (sample.kind !== columnKind) {
           fail(
-            "'" + vectorsPath + "' contains non-numeric value at row " + rowIndex + ", column " + columnIndex + "."
+            "'" +
+              vectorsPath +
+              "' column " +
+              columnIndex +
+              " mixes scalar and complex sample encodings."
           );
         }
-        return value;
-      });
+        if (sample.kind === "real") {
+          values.push(sample.value);
+        } else {
+          re.push(sample.re);
+          im.push(sample.im);
+        }
+      }
+
+      const decoded =
+        columnKind === "complex"
+          ? { kind: "complex", re, im }
+          : { kind: "real", values };
+      decodedColumnCache.set(columnIndex, decoded);
+      return decoded;
+    };
+
+    const indepDecoded = decodeColumn(indepVarIndex);
+    if (indepDecoded.kind !== "real") {
+      fail(
+        "independent variable '" +
+          indepVarName +
+          "' is complex-encoded in '/vectors' column " +
+          indepVarIndex +
+          ". Independent variable samples must be real scalars."
+      );
+    }
 
     const signalLeaves = [];
     const collectSignalLeaves = (groupNode, groupPathSegments) => {
@@ -236,11 +336,13 @@ const HDF5_LOADER_SCRIPT = String.raw`
     const columns = [
       {
         name: indepVarName,
-        values: readColumnValues(indepVarIndex)
+        values: indepDecoded.values
       }
     ];
     const signalPaths = [];
     const signalAliasLookup = {};
+    const complexSignalPaths = [];
+    const signalDataByPath = {};
 
     for (const leaf of signalLeaves) {
       if (typeof leaf.signalPath !== "string" || leaf.signalPath.trim().length === 0) {
@@ -252,10 +354,26 @@ const HDF5_LOADER_SCRIPT = String.raw`
       }
       seenSignalNames.add(signalPath);
       signalPaths.push(signalPath);
-      columns.push({
-        name: signalPath,
-        values: readColumnValues(leaf.columnIndex)
-      });
+
+      const decoded = decodeColumn(leaf.columnIndex);
+      if (decoded.kind === "real") {
+        columns.push({
+          name: signalPath,
+          values: decoded.values
+        });
+        signalDataByPath[signalPath] = {
+          kind: "real",
+          values: decoded.values
+        };
+      } else {
+        complexSignalPaths.push(signalPath);
+        signalDataByPath[signalPath] = {
+          kind: "complex",
+          re: decoded.re,
+          im: decoded.im
+        };
+      }
+
       const alias = typeof leaf.canonicalName === "string" ? leaf.canonicalName.trim() : "";
       if (alias.length > 0 && alias !== signalPath) {
         signalAliasLookup[alias] = signalPath;
@@ -267,28 +385,6 @@ const HDF5_LOADER_SCRIPT = String.raw`
         "independent variable name '" +
           indepVarName +
           "' conflicts with a '/signals' path."
-      );
-    }
-
-    if (columns.length !== declaredNumVariables) {
-      fail(
-        "resolved columns count (" +
-          columns.length +
-          ") must match file attribute 'num_variables' (" +
-          declaredNumVariables +
-          ")."
-      );
-    }
-
-    if (columns.length !== vectorNames.length) {
-      fail(
-        "resolved columns count (" +
-          columns.length +
-          ") must match '" +
-          vectorNamesPath +
-          "' length (" +
-          vectorNames.length +
-          ")."
       );
     }
 
@@ -311,7 +407,9 @@ const HDF5_LOADER_SCRIPT = String.raw`
         rowCount,
         columns,
         signalPaths,
-        signalAliasLookup
+        signalAliasLookup,
+        complexSignalPaths,
+        signalDataByPath
       })
     );
   } finally {
@@ -363,6 +461,20 @@ export function loadNormalizedHdf5Dataset(filePath: string): LoadedNormalizedHdf
   ) {
     throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing signalAliasLookup.`);
   }
+  if (!Array.isArray(parsed.complexSignalPaths)) {
+    throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing complexSignalPaths.`);
+  }
+  if (!isRecord(parsed.signalDataByPath)) {
+    throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': missing signalDataByPath.`);
+  }
+
+  for (const column of parsed.columns) {
+    if (!isRecord(column) || typeof column.name !== "string" || !isFiniteNumericArray(column.values)) {
+      throw new Error(`Invalid normalized HDF5 loader output for '${filePath}': invalid runtime column values.`);
+    }
+  }
+
+  const signalDataByPath = validateSignalDataByPath(parsed.signalDataByPath, parsed.rowCount, filePath);
 
   return {
     dataset: {
@@ -371,8 +483,137 @@ export function loadNormalizedHdf5Dataset(filePath: string): LoadedNormalizedHdf
       columns: parsed.columns
     },
     signalPaths: parsed.signalPaths,
-    signalAliasLookup: parsed.signalAliasLookup
+    signalAliasLookup: parsed.signalAliasLookup,
+    complexSignalPaths: parsed.complexSignalPaths,
+    resolveSignalValues: (signal) => resolveSignalValues(signal, signalDataByPath)
   };
+}
+
+function validateSignalDataByPath(
+  value: Record<string, unknown>,
+  rowCount: number,
+  filePath: string
+): Record<string, Hdf5SignalValueProjection> {
+  const validated: Record<string, Hdf5SignalValueProjection> = {};
+
+  for (const [signalPath, rawSignalData] of Object.entries(value)) {
+    if (!isRecord(rawSignalData)) {
+      throw new Error(
+        `Invalid normalized HDF5 loader output for '${filePath}': invalid signal data for '${signalPath}'.`
+      );
+    }
+
+    if (rawSignalData.kind === "real") {
+      if (!isFiniteNumericArray(rawSignalData.values) || rawSignalData.values.length !== rowCount) {
+        throw new Error(
+          `Invalid normalized HDF5 loader output for '${filePath}': invalid real signal values for '${signalPath}'.`
+        );
+      }
+      validated[signalPath] = {
+        kind: "real",
+        values: rawSignalData.values
+      };
+      continue;
+    }
+
+    if (rawSignalData.kind === "complex") {
+      if (
+        !isFiniteNumericArray(rawSignalData.re) ||
+        !isFiniteNumericArray(rawSignalData.im) ||
+        rawSignalData.re.length !== rowCount ||
+        rawSignalData.im.length !== rowCount
+      ) {
+        throw new Error(
+          `Invalid normalized HDF5 loader output for '${filePath}': invalid complex signal values for '${signalPath}'.`
+        );
+      }
+      validated[signalPath] = {
+        kind: "complex",
+        re: rawSignalData.re,
+        im: rawSignalData.im
+      };
+      continue;
+    }
+
+    throw new Error(
+      `Invalid normalized HDF5 loader output for '${filePath}': unknown signal kind for '${signalPath}'.`
+    );
+  }
+
+  return validated;
+}
+
+function resolveSignalValues(
+  signal: string,
+  signalDataByPath: Record<string, Hdf5SignalValueProjection>
+): number[] | undefined {
+  const { base, accessor } = parseComplexSignalReference(signal);
+  if (base.length === 0) {
+    return undefined;
+  }
+
+  const signalData = signalDataByPath[base];
+  if (!signalData) {
+    return undefined;
+  }
+
+  if (!accessor) {
+    if (signalData.kind === "real") {
+      return signalData.values;
+    }
+    throw new Error(
+      `Cannot project complex signal '${base}' without accessor. Use one of: ${COMPLEX_SIGNAL_ACCESSORS.map((next) => `.${next}`).join(", ")}.`
+    );
+  }
+
+  if (signalData.kind === "real") {
+    throw new Error(
+      `Signal '${base}' is real-valued and does not support accessor '.${accessor}'.`
+    );
+  }
+
+  return projectComplexSignalAccessor(base, accessor, signalData.re, signalData.im);
+}
+
+function projectComplexSignalAccessor(
+  baseSignal: string,
+  accessor: ComplexSignalAccessor,
+  reValues: number[],
+  imValues: number[]
+): number[] {
+  if (reValues.length !== imValues.length) {
+    throw new Error(`Complex projection failed for '${baseSignal}.${accessor}': mismatched re/im lengths.`);
+  }
+
+  const projected = new Array<number>(reValues.length);
+  for (let index = 0; index < reValues.length; index += 1) {
+    const re = reValues[index];
+    const im = imValues[index];
+    let value = 0;
+
+    if (accessor === "re") {
+      value = re;
+    } else if (accessor === "im") {
+      value = im;
+    } else if (accessor === "mag") {
+      value = Math.hypot(re, im);
+    } else if (accessor === "phase") {
+      value = (Math.atan2(im, re) * 180) / Math.PI;
+    } else {
+      const magnitude = Math.hypot(re, im);
+      value = 20 * Math.log10(Math.max(magnitude, DB20_EPS));
+    }
+
+    if (!Number.isFinite(value)) {
+      throw new Error(
+        `Complex projection failed for '${baseSignal}.${accessor}' at sample ${index}: non-finite result.`
+      );
+    }
+
+    projected[index] = value;
+  }
+
+  return projected;
 }
 
 function extractExecErrorMessage(error: unknown): string {
@@ -407,4 +648,12 @@ function extractExecErrorMessage(error: unknown): string {
   }
 
   return "Failed to load normalized HDF5 dataset.";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFiniteNumericArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
 }

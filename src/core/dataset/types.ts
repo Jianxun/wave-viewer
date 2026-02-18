@@ -15,6 +15,26 @@ export type DatasetMetadata = {
   columns: Array<{ name: string }>;
 };
 
+export const COMPLEX_SIGNAL_ACCESSORS = ["re", "im", "mag", "phase", "db20"] as const;
+export type ComplexSignalAccessor = (typeof COMPLEX_SIGNAL_ACCESSORS)[number];
+
+export function parseComplexSignalReference(signal: string): {
+  base: string;
+  accessor?: ComplexSignalAccessor;
+} {
+  const trimmed = signal.trim();
+  for (const accessor of COMPLEX_SIGNAL_ACCESSORS) {
+    const suffix = `.${accessor}`;
+    if (trimmed.length > suffix.length && trimmed.endsWith(suffix)) {
+      return {
+        base: trimmed.slice(0, -suffix.length),
+        accessor
+      };
+    }
+  }
+  return { base: trimmed };
+}
+
 export type SidePanelTraceTuplePayload = {
   traceId: string;
   sourceId: string;
