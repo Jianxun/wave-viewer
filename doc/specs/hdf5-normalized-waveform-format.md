@@ -1,104 +1,53 @@
-# Normalized HDF5 Waveform Format (Draft v1)
+# Normalized HDF5 Waveform Format (Single-Run v1)
 
-## 1. Purpose
+## Purpose
 
-Define a simulator-agnostic waveform container so `wave-viewer` can ingest one stable format instead of simulator-specific raw quirks (`ngspice`, `Xyce`, Spectre, etc.).
+Define the one HDF5 schema Wave Viewer currently supports for SPICE-like waveforms.
 
-This format is intentionally run-centric to support:
-- multi-dimensional sweeps,
-- adaptive transient timesteps,
-- simulator-specific signal naming and hierarchy.
+This is intentionally **single-run only** for now. Multi-run/multi-corner schema is deferred.
 
-## 2. Design goals
+## Required file attributes
 
-- One canonical numeric contract for viewer ingestion.
-- No required global rectangular sweep cube.
-- Preserve source signal names and hierarchical names.
-- Keep interpolation/resampling out of canonical data.
-- Allow optional convenience aliases via HDF5 VDS.
+- `format` (informational, expected `xyce_raw`)
+- `num_points` (non-negative integer)
+- `num_variables` (non-negative integer)
+- `indep_var_name` (non-empty string)
+- `indep_var_index` (non-negative integer)
+- `source_file` (informational string)
 
-## 3. File-level contract
+## Required nodes
 
-Top-level file attributes (required):
-- `format = "wave_viewer_hdf5"`
-- `format_version = 1`
-- `created_by` (tool + version string)
-- `source_simulator` (for example: `xyce`, `ngspice`, `spectre`)
-- `source_file` (original raw file path string, informational)
+- `/vectors`
+  - 2D numeric dataset, shape `(num_points, num_variables)`
+- `/vector_names`
+  - 1D string dataset, length `num_variables`
+- `/indep_var`
+  - group
+- `/indep_var/<indep_var_name>`
+  - 1D dataset, length `num_points` (typically VDS view into `/vectors[:, indep_var_index]`)
+- `/signals`
+  - group containing hierarchical signal datasets (typically VDS views into `/vectors`)
 
-Top-level groups (required):
-- `/runs`
-- `/catalog`
+## Validation rules
 
-## 4. Run-centric data model
+- `/vectors` must be rectangular 2D numeric data.
+- `/vector_names` length must equal `/vectors` column count.
+- `num_points` must match `/vectors` row count.
+- `num_variables` must match `/vectors` column count.
+- `indep_var_index` must be in range of `/vectors` columns.
+- `vector_names[indep_var_index]` must equal `indep_var_name`.
 
-Each physical simulation run/sweep point is represented as one run group:
+## Wave Viewer mapping
 
-- `/runs/<run_id>/attrs`
-  - `analysis_type`: `dc | tran | ac | op | noise | custom`
-  - `point_count`: integer
-  - `is_complex`: boolean
-  - `indep_name`: string (for example `time`, `freq`, `sweep`)
-- `/runs/<run_id>/vectors`
-  - shape: `(point_count, variable_count)`
-  - dtype: `float64` for real-valued runs
-  - dtype: compound `{re: float64, im: float64}` for complex-valued runs (AC)
-- `/runs/<run_id>/vector_names`
-  - shape: `(variable_count,)`
-  - dtype: UTF-8 strings
-- `/runs/<run_id>/indep`
-  - 1D array, length `point_count`
-  - VDS alias to the independent-variable column in `/runs/<run_id>/vectors`
-- `/runs/<run_id>/signals/...`
-  - hierarchical signal datasets as VDS aliases to columns in `/runs/<run_id>/vectors`
-  - each signal dataset attrs:
-    - `index` (column index in `vectors`)
-    - `original_name` (simulator-native name)
-    - `unit` (optional; for example `V`, `A`, `Hz`, `s`)
+- Loader source of truth is `/vectors` + `/vector_names`.
+- Output dataset identity is the file path itself (no run suffix).
+- In-memory mapping:
+  - `Dataset.path = <h5-file-path>`
+  - `Dataset.rowCount = num_points`
+  - `Dataset.columns = vector_names[i] -> vectors[:, i]`
 
-Notes:
-- `run_id` is a stable opaque identifier (for example `run-000001`).
-- Canonical numeric storage is `vectors`; `indep` and `/signals/*` are aliases (VDS), not duplicated payloads.
+## Non-goals (current)
 
-## 5. Sweep and corner metadata
-
-`/catalog/runs` stores run descriptors (table-like records):
-- `run_id` (string, required)
-- `analysis_type` (string, required)
-- `sweep_params` (JSON string, optional): key-value map for dimensions such as `TEMP`, `VDD`, Monte Carlo seed, process corner.
-- `title` (optional)
-
-Rationale:
-- multi-dimensional sweeps become a set of tagged runs instead of one forced N-D numeric cube.
-- adaptive timestep transients naturally keep per-run independent variable arrays.
-
-## 6. Rules and invariants
-
-- Canonical data MUST NOT require interpolation to be valid.
-- A run’s signals MUST align only with that run’s `indep` array.
-- `vector_names[index]` MUST match each signal alias `index`.
-- Missing samples MUST be encoded as `NaN` (real) or `{re: NaN, im: NaN}` (complex), never by row deletion.
-- Importers MUST treat unknown attributes/extra groups as non-fatal.
-
-## 7. Wave Viewer ingestion mapping
-
-Given one selected `run_id`, loader emits current in-memory `Dataset`:
-- `Dataset.path = "<file>#<run_id>"`
-- `rowCount = point_count`
-- `columns = [{ name, values[] }]` from `vector_names` + `vectors` columns
-
-Run selection policy (initial):
-- default to first run in `/catalog/runs`;
-- expose explicit run selection later in side panel and layout schema.
-
-## 8. Non-goals for v1
-
-- Cross-run interpolation/resampling.
-- Canonical N-D gridded representation.
-- Persisting viewer UI state in HDF5.
-
-## 9. Compatibility and migration
-
-- Existing CSV ingestion remains supported.
-- Raw-to-HDF5 normalization can be done by external converters.
-- Future loaders can add simulator-specific metadata under namespaced groups without breaking core ingestion.
+- Multi-run catalogs (`/runs`, `/catalog/runs`)
+- Cross-run selection
+- Implicit interpolation/resampling

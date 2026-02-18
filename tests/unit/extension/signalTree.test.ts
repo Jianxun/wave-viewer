@@ -105,14 +105,74 @@ describe("signal tree dataset registry entries", () => {
       {
         kind: "signal",
         signal: "time",
+        label: "time",
         datasetPath: "/workspace/examples/a.csv",
         fileName: "a.csv"
       },
       {
         kind: "signal",
         signal: "vin",
+        label: "vin",
         datasetPath: "/workspace/examples/a.csv",
         fileName: "a.csv"
+      }
+    ]);
+  });
+
+  it("renders colon-delimited wrapped signal names as hierarchical groups", async () => {
+    const provider = createSignalTreeDataProvider(createVscodeShim() as never);
+
+    provider.setLoadedDatasets([
+      {
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5",
+        signals: ["sweep", "V(XOTA:D)", "V(XOTA:TAIL)", "V(OUT)"]
+      }
+    ]);
+
+    const roots = (await provider.getChildren()) ?? [];
+    const datasetEntry = roots[0];
+    const level1 = (await provider.getChildren(datasetEntry)) ?? [];
+    expect(level1).toEqual([
+      {
+        kind: "group",
+        name: "XOTA",
+        path: ["XOTA"],
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5"
+      },
+      {
+        kind: "signal",
+        signal: "sweep",
+        label: "sweep",
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5"
+      },
+      {
+        kind: "signal",
+        signal: "V(OUT)",
+        label: "V(OUT)",
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5"
+      }
+    ]);
+
+    const xotaEntry = level1[0];
+    const level2 = (await provider.getChildren(xotaEntry)) ?? [];
+    expect(level2).toEqual([
+      {
+        kind: "signal",
+        signal: "V(XOTA:D)",
+        label: "V(D)",
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5"
+      },
+      {
+        kind: "signal",
+        signal: "V(XOTA:TAIL)",
+        label: "V(TAIL)",
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5"
       }
     ]);
   });

@@ -3,6 +3,7 @@ import type * as VSCode from "vscode";
 export const SIGNAL_BROWSER_VIEW_ID = "waveViewer.signalBrowser";
 export const SIGNAL_BROWSER_ITEM_CONTEXT = "waveViewer.signal";
 export const SIGNAL_BROWSER_DATASET_CONTEXT = "waveViewer.dataset";
+export const SIGNAL_BROWSER_GROUP_CONTEXT = "waveViewer.signalGroup";
 export const SIGNAL_BROWSER_TREE_DRAG_MIME = "application/vnd.code.tree.waveViewer.signalBrowser";
 
 export const SIGNAL_BROWSER_ADD_TO_PLOT_COMMAND = "waveViewer.signalBrowser.addToPlot";
@@ -25,11 +26,20 @@ export type SignalTreeDatasetEntry = SignalTreeDataset & {
 export type SignalTreeSignalEntry = {
   kind: "signal";
   signal: string;
+  label: string;
   datasetPath: string;
   fileName: string;
 };
 
-export type SignalTreeEntry = SignalTreeDatasetEntry | SignalTreeSignalEntry;
+export type SignalTreeGroupEntry = {
+  kind: "group";
+  name: string;
+  path: readonly string[];
+  datasetPath: string;
+  fileName: string;
+};
+
+export type SignalTreeEntry = SignalTreeDatasetEntry | SignalTreeGroupEntry | SignalTreeSignalEntry;
 
 export type SignalTreeDataProvider = VSCode.TreeDataProvider<SignalTreeEntry> & {
   setLoadedDatasets(datasets: readonly SignalTreeDataset[]): void;
@@ -135,8 +145,17 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
         } satisfies VSCode.TreeItem;
       }
 
+      if (entry.kind === "group") {
+        return {
+          label: entry.name,
+          collapsibleState: vscode.TreeItemCollapsibleState.Collapsed,
+          contextValue: SIGNAL_BROWSER_GROUP_CONTEXT,
+          tooltip: `${entry.path.join("/")}`
+        } satisfies VSCode.TreeItem;
+      }
+
       return {
-        label: entry.signal,
+        label: entry.label,
         collapsibleState: vscode.TreeItemCollapsibleState.None,
         contextValue: SIGNAL_BROWSER_ITEM_CONTEXT,
         tooltip: `${entry.signal} (${entry.fileName})\nDouble-click to quick add to active/default lane`,
@@ -158,15 +177,13 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
       }
 
       if (entry.kind !== "dataset") {
+        if (entry.kind === "group") {
+          return buildSignalTreeChildren(entry, loadedDatasets);
+        }
         return [];
       }
 
-      return toDeterministicSignalOrder(entry.signals).map((signal) => ({
-        kind: "signal" as const,
-        signal,
-        datasetPath: entry.datasetPath,
-        fileName: entry.fileName
-      }));
+      return buildSignalTreeChildren(entry, loadedDatasets);
     },
     setLoadedDatasets: (datasets) => {
       const nextDatasets = toDeterministicDatasetOrder(datasets).map((dataset) => ({
@@ -205,6 +222,103 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
       emitter.fire(undefined);
     }
   };
+}
+
+function buildSignalTreeChildren(
+  entry: SignalTreeDatasetEntry | SignalTreeGroupEntry,
+  loadedDatasets: readonly SignalTreeDataset[]
+): SignalTreeEntry[] {
+  const dataset = loadedDatasets.find((candidate) => candidate.datasetPath === entry.datasetPath);
+  if (!dataset) {
+    return [];
+  }
+
+  const signalPaths = toDeterministicSignalOrder(dataset.signals).map((signal) => ({
+    signal,
+    path: toSignalPath(signal)
+  }));
+
+  const currentPath = entry.kind === "group" ? entry.path : [];
+  const groups: SignalTreeGroupEntry[] = [];
+  const groupSeen = new Set<string>();
+  const signals: SignalTreeSignalEntry[] = [];
+
+  for (const item of signalPaths) {
+    if (item.path.length <= currentPath.length) {
+      continue;
+    }
+    if (!startsWithPath(item.path, currentPath)) {
+      continue;
+    }
+    const nextSegment = item.path[currentPath.length];
+    if (item.path.length === currentPath.length + 1) {
+      signals.push({
+        kind: "signal",
+        signal: item.signal,
+        label: nextSegment,
+        datasetPath: dataset.datasetPath,
+        fileName: dataset.fileName
+      });
+      continue;
+    }
+    if (!groupSeen.has(nextSegment)) {
+      groupSeen.add(nextSegment);
+      groups.push({
+        kind: "group",
+        name: nextSegment,
+        path: [...currentPath, nextSegment],
+        datasetPath: dataset.datasetPath,
+        fileName: dataset.fileName
+      });
+    }
+  }
+
+  return [...groups, ...signals];
+}
+
+function startsWithPath(path: readonly string[], prefix: readonly string[]): boolean {
+  if (prefix.length > path.length) {
+    return false;
+  }
+  for (let index = 0; index < prefix.length; index += 1) {
+    if (path[index] !== prefix[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function toSignalPath(signal: string): string[] {
+  const trimmedSignal = signal.trim();
+  if (trimmedSignal.length === 0) {
+    return [signal];
+  }
+
+  const wrappedMatch = /^([A-Za-z_][A-Za-z0-9_]*)\((.+)\)$/.exec(trimmedSignal);
+  if (wrappedMatch) {
+    const signalType = wrappedMatch[1];
+    const rawBody = wrappedMatch[2];
+    const bodySegments = rawBody
+      .split(":")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+    if (bodySegments.length > 1) {
+      const leaf = `${signalType}(${bodySegments[bodySegments.length - 1]})`;
+      return [...bodySegments.slice(0, -1), leaf];
+    }
+  }
+
+  if (trimmedSignal.includes("/")) {
+    const pathSegments = trimmedSignal
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0);
+    if (pathSegments.length > 0) {
+      return pathSegments;
+    }
+  }
+
+  return [trimmedSignal];
 }
 
 export function createDoubleClickQuickAddResolver(options?: {
