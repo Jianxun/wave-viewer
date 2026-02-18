@@ -7,7 +7,13 @@ import {
   readPlotSpecDatasetPathV1,
   readPlotSpecDatasetsV1
 } from "../core/spec/importSpec";
-import { createProtocolEnvelope, parseWebviewToHostMessage, type Dataset } from "../core/dataset/types";
+import {
+  COMPLEX_SIGNAL_ACCESSORS,
+  createProtocolEnvelope,
+  parseComplexSignalReference,
+  parseWebviewToHostMessage,
+  type Dataset
+} from "../core/dataset/types";
 import { reduceWorkspaceState } from "../webview/state/reducer";
 import { createWorkspaceState, type WorkspaceState } from "../webview/state/workspaceState";
 import { applyDropSignalAction, applySetTraceAxisAction } from "./workspaceActions";
@@ -1566,6 +1572,24 @@ function collectAvailableSignalsForSpecImport(loaded: LoadedDatasetRecord): stri
   for (const alias of Object.keys(loaded.signalAliasLookup ?? {})) {
     add(alias);
   }
+  for (const complexSignalPath of loaded.complexSignalPaths ?? []) {
+    for (const accessor of loaded.complexSignalAccessors ?? COMPLEX_SIGNAL_ACCESSORS) {
+      add(`${complexSignalPath}.${accessor}`);
+    }
+  }
+  for (const [alias, mapped] of Object.entries(loaded.signalAliasLookup ?? {})) {
+    const mappedTrimmed = mapped.trim();
+    if (mappedTrimmed.length === 0) {
+      continue;
+    }
+    const isComplexSignal = (loaded.complexSignalPaths ?? []).includes(mappedTrimmed);
+    if (!isComplexSignal) {
+      continue;
+    }
+    for (const accessor of loaded.complexSignalAccessors ?? COMPLEX_SIGNAL_ACCESSORS) {
+      add(`${alias}.${accessor}`);
+    }
+  }
 
   return ordered;
 }
@@ -1575,8 +1599,23 @@ function normalizeSignalForDataset(signal: string, loadedDataset: LoadedDatasetR
   if (trimmed.length === 0) {
     return signal;
   }
+
   const mapped = loadedDataset?.signalAliasLookup?.[trimmed];
-  return typeof mapped === "string" && mapped.trim().length > 0 ? mapped.trim() : trimmed;
+  if (typeof mapped === "string" && mapped.trim().length > 0) {
+    return mapped.trim();
+  }
+
+  const { base, accessor } = parseComplexSignalReference(trimmed);
+  if (!accessor) {
+    return trimmed;
+  }
+
+  const mappedBase = loadedDataset?.signalAliasLookup?.[base];
+  if (typeof mappedBase !== "string" || mappedBase.trim().length === 0) {
+    return trimmed;
+  }
+
+  return `${mappedBase.trim()}.${accessor}`;
 }
 
 function rewriteSourceIdSignal(sourceId: string | undefined, signal: string): string | undefined {

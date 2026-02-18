@@ -1,6 +1,7 @@
 import type * as VSCode from "vscode";
 
 import type {
+  ComplexSignalAccessor,
   Dataset,
   ProtocolEnvelope,
   SidePanelTraceTuplePayload
@@ -385,6 +386,9 @@ export type LoadedDatasetRecord = {
   defaultXSignal: string;
   explorerSignals?: string[];
   signalAliasLookup?: Record<string, string>;
+  complexSignalPaths?: string[];
+  complexSignalAccessors?: readonly ComplexSignalAccessor[];
+  resolveSignalValues?(signal: string): number[] | undefined;
 };
 
 export type ReloadAllLoadedFilesCommandDeps = {

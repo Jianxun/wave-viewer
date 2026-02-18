@@ -3,7 +3,11 @@ import * as path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type * as VSCode from "vscode";
 
-import { createProtocolEnvelope, type Dataset } from "./core/dataset/types";
+import {
+  COMPLEX_SIGNAL_ACCESSORS,
+  createProtocolEnvelope,
+  type Dataset
+} from "./core/dataset/types";
 import { exportPlotSpecV1 } from "./core/spec/exportSpec";
 import { importPlotSpecV1 } from "./core/spec/importSpec";
 import { parseCsv } from "./core/csv/parseCsv";
@@ -599,7 +603,10 @@ export function activate(context: VSCode.ExtensionContext): void {
         dataset: loaded.dataset,
         defaultXSignal: selectDefaultX(loaded.dataset),
         explorerSignals: loaded.signalPaths,
-        signalAliasLookup: loaded.signalAliasLookup
+        signalAliasLookup: loaded.signalAliasLookup,
+        complexSignalPaths: loaded.complexSignalPaths,
+        complexSignalAccessors: COMPLEX_SIGNAL_ACCESSORS,
+        resolveSignalValues: loaded.resolveSignalValues
       };
     }
 
