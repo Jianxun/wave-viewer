@@ -24,7 +24,7 @@ T-070:
   pr: 86
   merged: true
 T-071:
-  status: ready_for_review
+  status: request_changes
   pr: 87
   merged: false
 T-072:
