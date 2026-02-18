@@ -1,4 +1,5 @@
 import type * as VSCode from "vscode";
+import { COMPLEX_SIGNAL_ACCESSORS, type ComplexSignalAccessor } from "../core/dataset/types";
 
 export const SIGNAL_BROWSER_VIEW_ID = "waveViewer.signalBrowser";
 export const SIGNAL_BROWSER_ITEM_CONTEXT = "waveViewer.signal";
@@ -17,6 +18,8 @@ export type SignalTreeDataset = {
   datasetPath: string;
   fileName: string;
   signals: readonly string[];
+  complexSignalPaths?: readonly string[];
+  complexSignalAccessors?: readonly ComplexSignalAccessor[];
 };
 
 export type SignalTreeDatasetEntry = SignalTreeDataset & {
@@ -29,6 +32,7 @@ export type SignalTreeSignalEntry = {
   label: string;
   datasetPath: string;
   fileName: string;
+  isComplexBase?: boolean;
 };
 
 export type SignalTreeGroupEntry = {
@@ -156,7 +160,9 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
 
       return {
         label: entry.label,
-        collapsibleState: vscode.TreeItemCollapsibleState.None,
+        collapsibleState: entry.isComplexBase
+          ? vscode.TreeItemCollapsibleState.Collapsed
+          : vscode.TreeItemCollapsibleState.None,
         contextValue: SIGNAL_BROWSER_ITEM_CONTEXT,
         tooltip: `${entry.signal} (${entry.fileName})\nDouble-click to quick add to active/default lane`,
         command: {
@@ -177,7 +183,7 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
       }
 
       if (entry.kind !== "dataset") {
-        if (entry.kind === "group") {
+        if (entry.kind === "group" || (entry.kind === "signal" && entry.isComplexBase)) {
           return buildSignalTreeChildren(entry, loadedDatasets);
         }
         return [];
@@ -189,7 +195,10 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
       const nextDatasets = toDeterministicDatasetOrder(datasets).map((dataset) => ({
         datasetPath: dataset.datasetPath,
         fileName: dataset.fileName,
-        signals: toDeterministicSignalOrder(dataset.signals)
+        signals: toDeterministicSignalOrder(dataset.signals),
+        complexSignalPaths: (dataset.complexSignalPaths ?? []).slice(),
+        complexSignalAccessors:
+          (dataset.complexSignalAccessors ?? COMPLEX_SIGNAL_ACCESSORS).slice()
       }));
       const changed =
         nextDatasets.length !== loadedDatasets.length ||
@@ -201,11 +210,27 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
           if (
             dataset.datasetPath !== previous.datasetPath ||
             dataset.fileName !== previous.fileName ||
-            dataset.signals.length !== previous.signals.length
+            dataset.signals.length !== previous.signals.length ||
+            (dataset.complexSignalPaths?.length ?? 0) !== (previous.complexSignalPaths?.length ?? 0) ||
+            (dataset.complexSignalAccessors?.length ?? 0) !==
+              (previous.complexSignalAccessors?.length ?? 0)
           ) {
             return true;
           }
-          return dataset.signals.some((signal, signalIndex) => signal !== previous.signals[signalIndex]);
+          if (dataset.signals.some((signal, signalIndex) => signal !== previous.signals[signalIndex])) {
+            return true;
+          }
+          if (
+            (dataset.complexSignalPaths ?? []).some(
+              (path, pathIndex) => path !== (previous.complexSignalPaths ?? [])[pathIndex]
+            )
+          ) {
+            return true;
+          }
+          return (dataset.complexSignalAccessors ?? []).some(
+            (accessor, accessorIndex) =>
+              accessor !== (previous.complexSignalAccessors ?? [])[accessorIndex]
+          );
         });
       if (!changed) {
         return;
@@ -225,12 +250,26 @@ export function createSignalTreeDataProvider(vscode: typeof VSCode): SignalTreeD
 }
 
 function buildSignalTreeChildren(
-  entry: SignalTreeDatasetEntry | SignalTreeGroupEntry,
+  entry: SignalTreeDatasetEntry | SignalTreeGroupEntry | SignalTreeSignalEntry,
   loadedDatasets: readonly SignalTreeDataset[]
 ): SignalTreeEntry[] {
   const dataset = loadedDatasets.find((candidate) => candidate.datasetPath === entry.datasetPath);
   if (!dataset) {
     return [];
+  }
+
+  if (entry.kind === "signal") {
+    if (!entry.isComplexBase) {
+      return [];
+    }
+    const accessors = dataset.complexSignalAccessors ?? COMPLEX_SIGNAL_ACCESSORS;
+    return accessors.map((accessor) => ({
+      kind: "signal",
+      signal: `${entry.signal}.${accessor}`,
+      label: accessor,
+      datasetPath: dataset.datasetPath,
+      fileName: dataset.fileName
+    }));
   }
 
   const signalPaths = toDeterministicSignalOrder(dataset.signals).map((signal) => ({
@@ -239,6 +278,7 @@ function buildSignalTreeChildren(
   }));
 
   const currentPath = entry.kind === "group" ? entry.path : [];
+  const complexSignalPaths = new Set(dataset.complexSignalPaths ?? []);
   const groups: SignalTreeGroupEntry[] = [];
   const groupSeen = new Set<string>();
   const signals: SignalTreeSignalEntry[] = [];
@@ -257,7 +297,8 @@ function buildSignalTreeChildren(
         signal: item.signal,
         label: nextSegment,
         datasetPath: dataset.datasetPath,
-        fileName: dataset.fileName
+        fileName: dataset.fileName,
+        ...(complexSignalPaths.has(item.signal) ? { isComplexBase: true } : {})
       });
       continue;
     }

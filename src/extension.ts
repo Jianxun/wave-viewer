@@ -6,6 +6,7 @@ import type * as VSCode from "vscode";
 import {
   COMPLEX_SIGNAL_ACCESSORS,
   createProtocolEnvelope,
+  parseComplexSignalReference,
   type Dataset
 } from "./core/dataset/types";
 import { exportPlotSpecV1 } from "./core/spec/exportSpec";
@@ -140,6 +141,24 @@ export type {
 
 const DEFAULT_LAYOUT_AUTOSAVE_DEBOUNCE_MS = 200;
 const DEFAULT_LAYOUT_EXTERNAL_EDIT_DEBOUNCE_MS = 80;
+
+export function resolveQuickAddSignal(signal: string, loadedDataset: LoadedDatasetRecord): string {
+  const trimmed = signal.trim();
+  if (trimmed.length === 0) {
+    return signal;
+  }
+
+  const { base, accessor } = parseComplexSignalReference(trimmed);
+  if (accessor) {
+    return trimmed;
+  }
+
+  if ((loadedDataset.complexSignalPaths ?? []).includes(base)) {
+    return `${base}.db20`;
+  }
+
+  return trimmed;
+}
 
 export function computeLayoutWatchTransition(
   previousLayoutUri: string | undefined,
@@ -559,7 +578,9 @@ export function activate(context: VSCode.ExtensionContext): void {
     const loadedDatasets = Array.from(loadedDatasetByPath.entries()).map(([datasetPath, loaded]) => ({
       datasetPath,
       fileName: path.basename(datasetPath),
-      signals: loaded.explorerSignals ?? loaded.dataset.columns.map((column) => column.name)
+      signals: loaded.explorerSignals ?? loaded.dataset.columns.map((column) => column.name),
+      complexSignalPaths: loaded.complexSignalPaths,
+      complexSignalAccessors: loaded.complexSignalAccessors
     }));
     signalTreeProvider.setLoadedDatasets(loadedDatasets);
   }
@@ -792,6 +813,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     if (!resolveQuickAddDoubleClick({ signal: selection.signal, datasetPath: selection.documentPath })) {
       return;
     }
+    const quickAddSignal = resolveQuickAddSignal(selection.signal, selection.loadedDataset);
 
     const targetViewer = viewerSessions.resolveTargetViewerSession(selection.documentPath);
     if (!targetViewer) {
@@ -802,9 +824,9 @@ export function activate(context: VSCode.ExtensionContext): void {
         mutate: (workspace, viewerState) =>
           applySidePanelSignalAction(workspace, {
             type: "add-to-plot",
-            signal: selection.signal
+            signal: quickAddSignal
           }, {
-            sourceId: toTraceSourceId(selection.documentPath, selection.signal),
+            sourceId: toTraceSourceId(selection.documentPath, quickAddSignal),
             axisId: viewerState.activeAxisByPlotId[workspace.activePlotId]
           })
       });
@@ -821,7 +843,7 @@ export function activate(context: VSCode.ExtensionContext): void {
     runResolvedSidePanelQuickAdd({
       documentPath: selection.documentPath,
       loadedDataset: selection.loadedDataset,
-      signal: selection.signal,
+      signal: quickAddSignal,
       quickAddTarget:
         activeAxisId === undefined
           ? undefined

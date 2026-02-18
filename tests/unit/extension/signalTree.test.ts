@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   SIGNAL_BROWSER_QUICK_ADD_COMMAND,
+  SignalTreeSignalEntry,
   createDoubleClickQuickAddResolver,
   createSignalTreeDataProvider,
   resolveSignalFromCommandArgument
 } from "../../../src/extension/signalTree";
+import { COMPLEX_SIGNAL_ACCESSORS } from "../../../src/core/dataset/types";
 
 describe("signal tree quick-add", () => {
   it("requires a second click on the same signal within threshold", () => {
@@ -175,6 +177,41 @@ describe("signal tree dataset registry entries", () => {
         fileName: "tb.spice.h5"
       }
     ]);
+  });
+
+  it("renders complex base signals with virtual accessor children", async () => {
+    const provider = createSignalTreeDataProvider(createVscodeShim() as never);
+
+    provider.setLoadedDatasets([
+      {
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5",
+        signals: ["sweep", "XOTA/V(D)"],
+        complexSignalPaths: ["XOTA/V(D)"]
+      }
+    ]);
+
+    const roots = (await provider.getChildren()) ?? [];
+    const datasetEntry = roots[0];
+    const level1 = (await provider.getChildren(datasetEntry)) ?? [];
+    const xotaEntry = level1[0];
+    const level2 = (await provider.getChildren(xotaEntry)) ?? [];
+    const complexBaseEntry = level2[0] as SignalTreeSignalEntry;
+    expect(complexBaseEntry.kind).toBe("signal");
+    expect(complexBaseEntry.signal).toBe("XOTA/V(D)");
+    expect(complexBaseEntry.isComplexBase).toBe(true);
+
+    const accessorChildren = (await provider.getChildren(complexBaseEntry)) ?? [];
+    expect(accessorChildren).toHaveLength(COMPLEX_SIGNAL_ACCESSORS.length);
+    expect(accessorChildren).toEqual(
+      COMPLEX_SIGNAL_ACCESSORS.map((accessor) => ({
+        kind: "signal",
+        signal: `XOTA/V(D).${accessor}`,
+        label: accessor,
+        datasetPath: "/workspace/examples/tb.spice.h5",
+        fileName: "tb.spice.h5"
+      }))
+    );
   });
 
   it("resolves signal + datasetPath from tree item command args", () => {
